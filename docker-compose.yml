@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16
+    container_name: bot_gaman_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Puerto 5433 en el host evita choque con PostgreSQL nativo de Windows en :5432
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot_pedidos
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    # El .env suele usar localhost:5433 para Alembic en Windows; dentro del contenedor debe ser `db`.
+    environment:
+      # Comillas: el carácter ! en la contraseña es válido en YAML solo dentro de comillas.
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    volumes:
+      - ./:/app
+      - bot_storage:/app/storage
+    command: python -m app.main
+
+volumes:
+  pg_data:
+  bot_storage:

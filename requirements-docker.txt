@@ -1,0 +1,8 @@
+# Imagen Docker: solo lo que usa el bot (python:3.11-slim).
+# Desarrollo local: sigue siendo `pip install -r requirements.txt` si quieres el entorno completo.
+python-telegram-bot==22.7
+python-dotenv==1.2.1
+pydantic-settings==2.13.1
+SQLAlchemy==2.0.46
+psycopg[binary]==3.3.2
+alembic==1.18.4
