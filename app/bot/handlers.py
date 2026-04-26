@@ -92,11 +92,8 @@ async def _upload_document_background(
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "Archivo subido a SharePoint ✅\\n"
-                f"Tipo: {tipo_documento}\\n"
-                f"Semana: {semana}\\n"
-                f"Cliente: {cliente}\\n"
-                f"Link: {result.get('webUrl') or 'N/D'}"
+                "Archivo guardado correctamente ✅\\n"
+                "Tu documento ya fue registrado."
             ),
             reply_markup=SELLER_MAIN_KEYBOARD,
         )
