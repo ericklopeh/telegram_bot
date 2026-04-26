@@ -121,6 +121,20 @@ class CaseRepository:
         return list(db.scalars(stmt).all())
 
     @staticmethod
+    def list_pending_revisions(db: Session, limit: int = 20) -> list[Case]:
+        pending = (C.ST_REV_RECIBIDO, C.ST_REV_EN_REVISION, C.ST_REV_CORRECCION)
+        stmt = (
+            select(Case)
+            .where(
+                Case.case_type == C.CASE_TYPE_REVISION,
+                Case.current_status.in_(pending),
+            )
+            .order_by(Case.updated_at.desc())
+            .limit(limit)
+        )
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
     def list_recent_cases_global(db: Session, limit: int = 10) -> list[Case]:
         stmt = select(Case).order_by(Case.updated_at.desc()).limit(limit)
         return list(db.scalars(stmt).all())
@@ -167,3 +181,16 @@ class CaseRepository:
         )
         rows = db.execute(stmt).all()
         return {status: count for status, count in rows}
+
+    @staticmethod
+    def list_cases_in_status_before(
+        db: Session,
+        statuses: tuple[str, ...] | list[str],
+        cutoff: datetime,
+    ) -> list[Case]:
+        stmt = (
+            select(Case)
+            .where(Case.current_status.in_(tuple(statuses)), Case.updated_at <= cutoff)
+            .order_by(Case.updated_at.asc())
+        )
+        return list(db.scalars(stmt).all())

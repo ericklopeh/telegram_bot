@@ -1,6 +1,7 @@
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -26,6 +27,13 @@ from app.models.case import Case
 from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
 from app.services.case_service import CaseService
+from app.services.microsoft_graph import GraphUploadError, upload_document_to_sharepoint
+from app.services.sharepoint_retry_queue import (
+    enqueue_failed_upload,
+    list_retry_items,
+    remove_retry_item,
+    update_retry_item,
+)
 from app.services.telegram_file_service import save_incoming_file
 from app.utils.case_display import (
     format_case_primary_label,
@@ -37,6 +45,7 @@ log = logging.getLogger(__name__)
 
 user_sessions: dict[int, dict] = {}
 last_compulsa_reminder: dict[str, datetime] = {}
+last_sla_alert: dict[str, datetime] = {}
 
 
 def _case_service() -> CaseService:
@@ -44,13 +53,19 @@ def _case_service() -> CaseService:
 
 
 def _is_admin(update: Update) -> bool:
-    """Modo pruebas: sin lista ADMIN_USER_IDS, cualquier usuario con identidad puede administrar."""
-    return update.effective_user is not None
+    user = update.effective_user
+    if not user:
+        return False
+    admins = get_settings().admin_user_ids_set
+    return True if not admins else user.id in admins
 
 
 def _is_seller(update: Update) -> bool:
-    """Modo pruebas: cualquier usuario con identidad puede usar flujos de vendedor."""
-    return update.effective_user is not None
+    user = update.effective_user
+    if not user:
+        return False
+    sellers = get_settings().seller_user_ids_set
+    return True if not sellers else user.id in sellers
 
 
 def _main_keyboard_for(update: Update) -> ReplyKeyboardMarkup:
@@ -82,6 +97,47 @@ def _actor_name(update: Update) -> str | None:
     if not user:
         return None
     return user.username or user.full_name
+
+
+def _parse_hhmm(value: str, fallback: time) -> time:
+    try:
+        hour_str, minute_str = value.strip().split(":", 1)
+        hour = int(hour_str)
+        minute = int(minute_str)
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return time(hour, minute)
+    except Exception:
+        pass
+    return fallback
+
+
+def _is_business_hours() -> bool:
+    settings = get_settings()
+    if not settings.business_hours_enabled:
+        return True
+    now_local = datetime.now(ZoneInfo(settings.display_timezone))
+    if now_local.weekday() > 4:
+        return False
+    current = now_local.time().replace(second=0, microsecond=0)
+    start = _parse_hhmm(settings.business_hours_start, time(9, 0))
+    end = _parse_hhmm(settings.business_hours_end, time(18, 30))
+    return start <= current <= end
+
+
+async def _enforce_business_hours(update: Update) -> bool:
+    if _is_admin(update):
+        return True
+    if _is_business_hours():
+        return True
+    settings = get_settings()
+    msg = (
+        "⏰ El bot está habilitado de lunes a viernes, "
+        f"de {settings.business_hours_start} a {settings.business_hours_end} "
+        f"({settings.display_timezone})."
+    )
+    if update.effective_message:
+        await update.effective_message.reply_text(msg, reply_markup=_main_keyboard_for(update))
+    return False
 
 
 def _pending_note(case: Case) -> str:
@@ -152,6 +208,37 @@ async def notificar_vendedor_estado(
     )
 
 
+async def notificar_admin_alertas(
+    context: ContextTypes.DEFAULT_TYPE,
+    case: Case,
+    evento: str,
+    detalle: str | None = None,
+) -> None:
+    settings = get_settings()
+    targets: set[int] = set(settings.admin_user_ids_set)
+    if settings.chat_id_admin_alerts:
+        targets.add(settings.chat_id_admin_alerts)
+    if not targets:
+        return
+
+    mensaje = (
+        f"🚨 {evento}\n\n"
+        f"{format_case_primary_label(case)}\n"
+        f"Tipo: {order_type_display(case.order_type)}\n"
+        f"Folio: {case.public_id}\n"
+        f"Vendedor: {case.seller_name or 'Sin vendedor'}\n"
+        f"Estado: {case.current_status}"
+    )
+    if detalle:
+        mensaje = f"{mensaje}\nDetalle: {detalle}"
+
+    for target in targets:
+        try:
+            await context.bot.send_message(chat_id=target, text=mensaje)
+        except Exception:
+            log.exception("Error enviando alerta admin", extra={"chat_id": target, "public_id": case.public_id})
+
+
 async def compulsa_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = get_settings()
     if not settings.chat_id_compulsas:
@@ -175,7 +262,92 @@ async def compulsa_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("Error enviando recordatorios de compulsa")
 
 
+async def sharepoint_retry_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = get_settings()
+    max_attempts = max(settings.sharepoint_retry_max_attempts, 1)
+    items = list_retry_items()
+    if not items:
+        return
+    for item in items:
+        try:
+            file_path = Path(item.file_path)
+            if not file_path.exists():
+                update_retry_item(item.id, attempts=item.attempts + 1, last_error="Archivo local no existe")
+                if item.attempts + 1 >= max_attempts:
+                    remove_retry_item(item.id)
+                continue
+            file_bytes = file_path.read_bytes()
+            result = upload_document_to_sharepoint(
+                vendedor=item.vendedor,
+                semana=item.semana,
+                cliente=item.cliente,
+                folio=item.folio,
+                tipo_documento=item.tipo_documento,
+                filename=item.filename,
+                file_bytes=file_bytes,
+            )
+            log.info(
+                "Retry SharePoint exitoso",
+                extra={
+                    "item_id": item.id,
+                    "vendedor": item.vendedor,
+                    "folio": item.folio,
+                    "cliente": item.cliente,
+                    "tipo_documento": item.tipo_documento,
+                    "ruta_final": result.get("folder_path"),
+                    "webUrl": result.get("webUrl"),
+                },
+            )
+            remove_retry_item(item.id)
+        except Exception as exc:
+            attempts = item.attempts + 1
+            update_retry_item(item.id, attempts=attempts, last_error=str(exc))
+            if attempts >= max_attempts:
+                remove_retry_item(item.id)
+            log.exception(
+                "Retry SharePoint falló",
+                extra={
+                    "item_id": item.id,
+                    "attempts": attempts,
+                    "max_attempts": max_attempts,
+                    "vendedor": item.vendedor,
+                    "folio": item.folio,
+                    "cliente": item.cliente,
+                    "tipo_documento": item.tipo_documento,
+                },
+            )
+
+
+async def sla_watchdog_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = get_settings()
+    interval = timedelta(minutes=max(settings.sla_alert_interval_minutes, 1))
+    now = datetime.utcnow()
+
+    sla_rules: list[tuple[str, tuple[str, ...], int]] = [
+        ("revision", (C.ST_REV_RECIBIDO, C.ST_REV_EN_REVISION, C.ST_REV_CORRECCION), settings.sla_revision_minutes),
+        ("autorizacion", (C.ST_PED_PREP_AUT,), settings.sla_autorizacion_minutes),
+        ("compulsa", (C.ST_PED_PEND_COMPULSA,), settings.sla_compulsa_minutes),
+    ]
+    try:
+        with session_scope() as db:
+            for stage_name, statuses, minutes in sla_rules:
+                cutoff = now - timedelta(minutes=max(minutes, 1))
+                overdue_cases = CaseRepository.list_cases_in_status_before(db, statuses, cutoff)
+                for case in overdue_cases:
+                    key = f"{stage_name}:{case.public_id}"
+                    last = last_sla_alert.get(key)
+                    if last and (now - last) < interval:
+                        continue
+                    detail = f"Etapa: {stage_name}. Superó SLA de {minutes} min."
+                    await notificar_admin_alertas(context, case, evento="SLA vencido", detalle=detail)
+                    last_sla_alert[key] = now
+    except Exception:
+        log.exception("Error en SLA watchdog")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _enforce_business_hours(update):
+        return
     if update.effective_chat:
         user_sessions[update.effective_chat.id] = {}
     await update.message.reply_text(
@@ -233,6 +405,8 @@ async def _resolve_group_reason(
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _enforce_business_hours(update):
+        return
     chat_id = update.effective_chat.id
     text = update.message.text.strip()
 
@@ -281,22 +455,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
             return
         session.clear()
-        session["state"] = "waiting_revision_resolution_folio"
+        session["state"] = "waiting_revision_resolution_pick"
         try:
             with session_scope() as db:
-                revs = CaseRepository.list_recent_revisions(db, limit=15)
+                revs = CaseRepository.list_pending_revisions(db, limit=20)
         except Exception:
             log.exception("Error cargando revisiones recientes")
             revs = []
         kb = dictamen_revision_keyboard(revs)
-        await update.message.reply_text(
-            "Elige la revisión (nombre y hora) o escribe el folio interno si lo tienes:",
-            reply_markup=kb,
-        )
-        await update.message.reply_text(
-            "También puedes escribir aquí el folio (ej. REVTMP-2026-0001).",
-            reply_markup=_main_keyboard_for(update),
-        )
+        if kb is None:
+            await update.message.reply_text(
+                "No hay revisiones pendientes por dictaminar.",
+                reply_markup=_main_keyboard_for(update),
+            )
+        else:
+            await update.message.reply_text(
+                "Elige la revisión pendiente de la lista:",
+                reply_markup=kb,
+            )
         return
 
     if text == "📊 Mi estatus":
@@ -410,28 +586,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         session["cliente"] = sanitize_name(text)
         session["state"] = "waiting_revision_file"
         await update.message.reply_text(
-            f"Cliente guardado: {session['cliente']}\nAhora adjunta la imagen o archivo de la revisión."
-        )
-        return
-
-    if state == "waiting_revision_resolution_folio":
-        folio = text.strip().upper()
-        try:
-            with session_scope() as db:
-                case = CaseRepository.get_by_public_id(db, folio)
-        except Exception:
-            log.exception("Error consultando folio de revisión")
-            await update.message.reply_text("Error consultando el folio.", reply_markup=_main_keyboard_for(update))
-            session.clear()
-            return
-        if not case or case.case_type != C.CASE_TYPE_REVISION:
-            await update.message.reply_text("No existe una revisión con ese folio.", reply_markup=_main_keyboard_for(update))
-            return
-        session["revision_case_public_id"] = folio
-        session["state"] = "waiting_revision_resolution_choice"
-        await update.message.reply_text(
-            "Selecciona el dictamen de revisión:",
-            reply_markup=revision_resolution_keyboard(),
+            f"Cliente guardado: {session['cliente']}\n"
+            "Ahora adjunta la imagen o archivo de la revisión."
         )
         return
 
@@ -474,6 +630,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _enforce_business_hours(update):
+        return
     chat_id = update.effective_chat.id
 
     if chat_id not in user_sessions:
@@ -517,6 +675,76 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     mime_type=mime,
                     folio=folio,
                 )
+            graph_result: dict | None = None
+            graph_error = False
+            try:
+                file_bytes = Path(path_str).read_bytes()
+                graph_result = upload_document_to_sharepoint(
+                    vendedor=seller or "SIN VENDEDOR",
+                    semana=get_settings().effective_semana_activa,
+                    cliente=cliente,
+                    folio=folio,
+                    tipo_documento="REVISION",
+                    filename=nombre,
+                    file_bytes=file_bytes,
+                )
+                log.info(
+                    "Revision subida a SharePoint",
+                    extra={
+                        "vendedor": seller or "SIN VENDEDOR",
+                        "folio": folio,
+                        "cliente": cliente,
+                        "tipo_documento": "REVISION",
+                        "ruta_final": graph_result.get("folder_path"),
+                        "webUrl": graph_result.get("webUrl"),
+                    },
+                )
+            except GraphUploadError:
+                graph_error = True
+                enqueue_failed_upload(
+                    file_path=path_str,
+                    vendedor=seller or "SIN VENDEDOR",
+                    semana=get_settings().effective_semana_activa,
+                    cliente=cliente,
+                    folio=folio,
+                    tipo_documento="REVISION",
+                    filename=nombre,
+                    error="GraphUploadError",
+                )
+                log.exception(
+                    "Error subiendo revision a SharePoint",
+                    extra={
+                        "vendedor": seller or "SIN VENDEDOR",
+                        "folio": folio,
+                        "cliente": cliente,
+                        "tipo_documento": "REVISION",
+                        "ruta_intentada": f"{get_settings().ms_root_folder}/{get_settings().effective_semana_activa}/"
+                        f"{seller or 'SIN VENDEDOR'}/{folio} - {cliente}/01_REVISIONES",
+                        "filename": nombre,
+                    },
+                )
+            except Exception:
+                graph_error = True
+                enqueue_failed_upload(
+                    file_path=path_str,
+                    vendedor=seller or "SIN VENDEDOR",
+                    semana=get_settings().effective_semana_activa,
+                    cliente=cliente,
+                    folio=folio,
+                    tipo_documento="REVISION",
+                    filename=nombre,
+                    error="Exception",
+                )
+                log.exception(
+                    "Error inesperado subiendo revision a SharePoint",
+                    extra={
+                        "vendedor": seller or "SIN VENDEDOR",
+                        "folio": folio,
+                        "cliente": cliente,
+                        "tipo_documento": "REVISION",
+                        "filename": nombre,
+                    },
+                )
         except Exception:
             log.exception("Error persistiendo revisión")
             await update.message.reply_text(
@@ -526,11 +754,27 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             session.clear()
             return
 
+        if graph_error:
+            await update.message.reply_text(
+                "Recibí el archivo, pero ocurrió un error al subirlo a SharePoint. "
+                "Se notificará a sistemas.",
+                reply_markup=_main_keyboard_for(update),
+            )
+            session.clear()
+            return
+
         await update.message.reply_text(
-            "Revisión recibida correctamente.\n\n"
-            f"{format_vendor_case_summary(case)}\n"
-            f"Semana: {get_settings().effective_semana_activa}",
+            "Archivo guardado correctamente ✅\n"
+            "Tipo: REVISION\n"
+            f"Semana: {get_settings().effective_semana_activa}\n"
+            f"Cliente: {cliente}\n"
+            f"Link: {graph_result.get('webUrl') if graph_result else 'N/D'}",
             reply_markup=_main_keyboard_for(update),
+        )
+        await notificar_admin_alertas(
+            context,
+            case,
+            evento="Nueva revisión registrada",
         )
         session.clear()
         return
@@ -600,6 +844,8 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
         seller = _actor_name(update)
+        graph_result: dict | None = None
+        graph_error = False
         try:
             with session_scope() as db:
                 case = CaseRepository.get_by_public_id(db, public_id)
@@ -639,6 +885,75 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 )
                 db.refresh(case)
                 present = DocumentRepository.get_active_types_for_case(db, case.id)
+            try:
+                file_bytes = Path(path_str).read_bytes()
+                graph_result = upload_document_to_sharepoint(
+                    vendedor=case.seller_name or seller or "SIN VENDEDOR",
+                    semana=case.week_code,
+                    cliente=case.client_name,
+                    folio=case.official_folio or case.public_id,
+                    tipo_documento="PEDIDO",
+                    filename=nombre,
+                    file_bytes=file_bytes,
+                )
+                log.info(
+                    "Documento pedido subido a SharePoint",
+                    extra={
+                        "vendedor": case.seller_name or seller or "SIN VENDEDOR",
+                        "folio": case.official_folio or case.public_id,
+                        "cliente": case.client_name,
+                        "tipo_documento": "PEDIDO",
+                        "ruta_final": graph_result.get("folder_path"),
+                        "webUrl": graph_result.get("webUrl"),
+                    },
+                )
+            except GraphUploadError:
+                graph_error = True
+                enqueue_failed_upload(
+                    file_path=path_str,
+                    vendedor=case.seller_name or seller or "SIN VENDEDOR",
+                    semana=case.week_code,
+                    cliente=case.client_name,
+                    folio=case.official_folio or case.public_id,
+                    tipo_documento="PEDIDO",
+                    filename=nombre,
+                    error="GraphUploadError",
+                )
+                log.exception(
+                    "Error subiendo pedido a SharePoint",
+                    extra={
+                        "vendedor": case.seller_name or seller or "SIN VENDEDOR",
+                        "folio": case.official_folio or case.public_id,
+                        "cliente": case.client_name,
+                        "tipo_documento": "PEDIDO",
+                        "ruta_intentada": f"{get_settings().ms_root_folder}/{case.week_code}/"
+                        f"{case.seller_name or seller or 'SIN VENDEDOR'}/"
+                        f"{case.official_folio or case.public_id} - {case.client_name}/02_PEDIDOS",
+                        "filename": nombre,
+                    },
+                )
+            except Exception:
+                graph_error = True
+                enqueue_failed_upload(
+                    file_path=path_str,
+                    vendedor=case.seller_name or seller or "SIN VENDEDOR",
+                    semana=case.week_code,
+                    cliente=case.client_name,
+                    folio=case.official_folio or case.public_id,
+                    tipo_documento="PEDIDO",
+                    filename=nombre,
+                    error="Exception",
+                )
+                log.exception(
+                    "Error inesperado subiendo pedido a SharePoint",
+                    extra={
+                        "vendedor": case.seller_name or seller or "SIN VENDEDOR",
+                        "folio": case.official_folio or case.public_id,
+                        "cliente": case.client_name,
+                        "tipo_documento": "PEDIDO",
+                        "filename": nombre,
+                    },
+                )
         except Exception:
             log.exception("Error guardando documento de pedido")
             await update.message.reply_text(
@@ -647,6 +962,22 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             session.clear()
             return
+
+        if graph_error:
+            await update.message.reply_text(
+                "Recibí el archivo, pero ocurrió un error al subirlo a SharePoint. "
+                "Se notificará a sistemas.",
+                reply_markup=_main_keyboard_for(update),
+            )
+        else:
+            await update.message.reply_text(
+                "Archivo guardado correctamente ✅\n"
+                "Tipo: PEDIDO\n"
+                f"Semana: {case.week_code}\n"
+                f"Cliente: {case.client_name}\n"
+                f"Link: {graph_result.get('webUrl') if graph_result else 'N/D'}",
+                reply_markup=_main_keyboard_for(update),
+            )
 
         session["pending_doc_type"] = None
         session["state"] = "waiting_pedido_pick_doc"
@@ -716,6 +1047,7 @@ async def _finalize_pedido(
             svc.finalize_pedido(db, case)
             db.refresh(case)
         await notificar_grupo_pedidos(context, case)
+        await notificar_admin_alertas(context, case, evento="Pedido enviado a autorización")
         await update.effective_message.reply_text(
             "✅ Pedido enviado al grupo.\n\n"
             f"{format_vendor_case_summary(case)}\n"
@@ -937,7 +1269,7 @@ async def handle_dictamen_revision_pick_callback(
     public_id = query.data.split("|", 1)[1]
     chat_id = update.effective_chat.id
     session = user_sessions.setdefault(chat_id, {})
-    if session.get("state") != "waiting_revision_resolution_folio":
+    if session.get("state") != "waiting_revision_resolution_pick":
         await query.answer("Abre primero «Dictaminar revisión» en el menú.", show_alert=True)
         return
     try:
@@ -987,6 +1319,9 @@ async def handle_status_pick_callback(update: Update, context: ContextTypes.DEFA
 async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query or not query.data:
+        return
+    if not await _enforce_business_hours(update):
+        await query.answer("Fuera de horario.", show_alert=True)
         return
     if query.data.startswith("st|"):
         await handle_status_pick_callback(update, context)

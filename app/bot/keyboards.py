@@ -59,12 +59,26 @@ def status_recent_cases_keyboard(cases: list[Case]) -> InlineKeyboardMarkup | No
 
 
 def dictamen_revision_keyboard(cases: list[Case]) -> InlineKeyboardMarkup | None:
-    """Admin: revisiones recientes para dictaminar (nombre · fecha/hora)."""
+    """Admin: revisiones pendientes con estado visual y vendedor."""
     if not cases:
         return None
+
+    def _short_seller(name: str | None) -> str:
+        raw = (name or "").strip()
+        if not raw:
+            return "Sin vendedor"
+        parts = [p for p in raw.split() if p]
+        if len(parts) == 1:
+            return parts[0]
+        return f"{parts[0]} {parts[-1][:1]}."
+
     rows: list[list[InlineKeyboardButton]] = []
     for c in cases:
-        label = f"📄 {format_vendor_button_label(c)}"
+        if c.current_status in (C.ST_REV_RECIBIDO, C.ST_REV_EN_REVISION, C.ST_REV_CORRECCION):
+            status_icon = "🟡"
+        else:
+            status_icon = "🟢"
+        label = f"{status_icon} C: {c.client_name} · V: {_short_seller(c.seller_name)}"
         if len(label) > 64:
             label = label[:63] + "…"
         rows.append([InlineKeyboardButton(label, callback_data=f"rd|{c.public_id}")])

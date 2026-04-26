@@ -80,6 +80,18 @@ Probar conexión (desde la raíz del proyecto):
 python scripts/test_db_connection.py
 ```
 
+## SharePoint (Microsoft Graph)
+
+La integración para subir archivos de revisión/pedido a SharePoint está documentada en:
+
+- `docs/graph_setup.md`
+
+Prueba standalone de Graph (sin Telegram):
+
+```bash
+python scripts/test_graph_upload.py
+```
+
 Si el contenedor `bot` ya está arriba:
 
 ```bash

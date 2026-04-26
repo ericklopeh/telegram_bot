@@ -39,10 +39,27 @@ class Settings(BaseSettings):
 
     chat_id_pedidos: int | None = Field(default=None, alias="CHAT_ID_PEDIDOS")
     chat_id_compulsas: int | None = Field(default=None, alias="CHAT_ID_COMPULSAS")
+    chat_id_admin_alerts: int | None = Field(default=None, alias="CHAT_ID_ADMIN_ALERTS")
     compulsa_reminder_minutes: int = Field(default=60, alias="COMPULSA_REMINDER_MINUTES")
     seller_user_ids: str = Field(default="", alias="SELLER_USER_IDS")
     admin_user_ids: str = Field(default="", alias="ADMIN_USER_IDS")
     display_timezone: str = Field(default="America/Mexico_City", alias="DISPLAY_TIMEZONE")
+    business_hours_enabled: bool = Field(default=False, alias="BUSINESS_HOURS_ENABLED")
+    business_hours_start: str = Field(default="09:00", alias="BUSINESS_HOURS_START")
+    business_hours_end: str = Field(default="18:30", alias="BUSINESS_HOURS_END")
+    ms_tenant_id: str = Field(default="", alias="MS_TENANT_ID")
+    ms_client_id: str = Field(default="", alias="MS_CLIENT_ID")
+    ms_client_secret: str = Field(default="", alias="MS_CLIENT_SECRET")
+    ms_site_hostname: str = Field(default="", alias="MS_SITE_HOSTNAME")
+    ms_site_path: str = Field(default="", alias="MS_SITE_PATH")
+    ms_drive_name: str = Field(default="", alias="MS_DRIVE_NAME")
+    ms_root_folder: str = Field(default="", alias="MS_ROOT_FOLDER")
+    sharepoint_retry_interval_minutes: int = Field(default=5, alias="SHAREPOINT_RETRY_INTERVAL_MINUTES")
+    sharepoint_retry_max_attempts: int = Field(default=8, alias="SHAREPOINT_RETRY_MAX_ATTEMPTS")
+    sla_alert_interval_minutes: int = Field(default=120, alias="SLA_ALERT_INTERVAL_MINUTES")
+    sla_revision_minutes: int = Field(default=240, alias="SLA_REVISION_MINUTES")
+    sla_autorizacion_minutes: int = Field(default=240, alias="SLA_AUTORIZACION_MINUTES")
+    sla_compulsa_minutes: int = Field(default=180, alias="SLA_COMPULSA_MINUTES")
 
     @property
     def sqlalchemy_database_uri(self) -> str:
