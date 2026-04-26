@@ -10,9 +10,15 @@ venv/
 .idea/
 storage/
 app/storage/
+!app/services/storage/
+!app/services/storage/__init__.py
+!app/services/storage/local.py
 *.log
 
 prueba_bot_pedidos/
 prueba_bot_revisiones/
 storage/
 app/storage/
+!app/services/storage/
+!app/services/storage/__init__.py
+!app/services/storage/local.py
