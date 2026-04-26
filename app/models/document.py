@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -25,6 +25,12 @@ class Document(Base):
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    upload_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="PENDING_UPLOAD", index=True
+    )
+    sharepoint_web_url: Mapped[str | None] = mapped_column(String(1500), nullable=True)
+    upload_error: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    upload_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     case = relationship("Case", back_populates="documents")
     ocr_results = relationship("OcrResult", back_populates="document", cascade="all, delete-orphan")

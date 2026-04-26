@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -15,6 +16,10 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 INVALID_NAME_CHARS = r'[~"#%&*:<>?/\\{|}]'
 SPACE_RE = re.compile(r"\s+")
+_CACHE_LOCK = threading.Lock()
+_CACHED_SITE_ID: str | None = None
+_CACHED_DRIVE_ID: str | None = None
+_FOLDER_CACHE: dict[str, str] = {}
 
 
 class GraphUploadError(RuntimeError):
@@ -138,29 +143,44 @@ def get_access_token() -> str:
 
 def get_site_id() -> str:
     settings = get_settings()
+    configured_site_id = settings.ms_site_id.strip()
+    if configured_site_id:
+        log.info("Using cached site_id")
+        return configured_site_id
+    global _CACHED_SITE_ID
+    if _CACHED_SITE_ID:
+        log.info("Using cached site_id")
+        return _CACHED_SITE_ID
     if not settings.ms_site_hostname or not settings.ms_site_path:
         raise GraphUploadError("Faltan MS_SITE_HOSTNAME/MS_SITE_PATH")
+    log.info("Fetching site_id from Graph")
     token = get_access_token()
     endpoint = f"{GRAPH_BASE}/sites/{settings.ms_site_hostname}:{settings.ms_site_path}"
     data = _request_json("GET", endpoint, token=token, expected_status=(200,))
     site_id = data.get("id", "")
     if not site_id:
         raise GraphUploadError("No se encontró site_id")
+    with _CACHE_LOCK:
+        _CACHED_SITE_ID = site_id
     log.info("Site ID encontrado")
     return site_id
 
 
 def get_drive_id() -> str:
     settings = get_settings()
+    configured_drive_id = settings.ms_drive_id.strip()
+    if configured_drive_id:
+        log.info("Using cached drive_id")
+        return configured_drive_id
+    global _CACHED_DRIVE_ID
+    if _CACHED_DRIVE_ID:
+        log.info("Using cached drive_id")
+        return _CACHED_DRIVE_ID
     if not settings.ms_drive_name:
         raise GraphUploadError("Falta MS_DRIVE_NAME")
+    log.info("Fetching drive_id from Graph")
     token = get_access_token()
-    site_id = _request_json(
-        "GET",
-        f"{GRAPH_BASE}/sites/{settings.ms_site_hostname}:{settings.ms_site_path}",
-        token=token,
-        expected_status=(200,),
-    ).get("id", "")
+    site_id = get_site_id()
     if not site_id:
         raise GraphUploadError("No se encontró site_id para buscar drives")
     drives_data = _request_json("GET", f"{GRAPH_BASE}/sites/{site_id}/drives", token=token, expected_status=(200,))
@@ -169,6 +189,8 @@ def get_drive_id() -> str:
         if drive.get("name") == settings.ms_drive_name:
             drive_id = drive.get("id", "")
             if drive_id:
+                with _CACHE_LOCK:
+                    _CACHED_DRIVE_ID = drive_id
                 log.info("Drive ID encontrado")
                 return drive_id
     for drive in drives:
@@ -183,23 +205,30 @@ def get_drive_id() -> str:
     raise GraphUploadError(f"No se encontró drive con name={settings.ms_drive_name!r}")
 
 
-def _ensure_child_folder(drive_id: str, parent_path: str, folder_name: str, *, token: str) -> str:
-    encoded_parent = parent_path.strip("/")
-    children_endpoint = f"{GRAPH_BASE}/drives/{drive_id}/root:/{encoded_parent}:/children"
+def _ensure_child_folder(drive_id: str, parent_id: str, parent_path: str, folder_name: str, *, token: str) -> tuple[str, str]:
+    children_endpoint = f"{GRAPH_BASE}/drives/{drive_id}/items/{parent_id}/children"
     folder_name_clean = sanitize_graph_name(folder_name)
     children = _request_json("GET", children_endpoint, token=token, expected_status=(200,))
     for item in children.get("value", []):
         if item.get("name") == folder_name_clean and "folder" in item:
-            log.info("Carpeta ya existente", extra={"folder_path": f"{encoded_parent}/{folder_name_clean}"})
-            return f"{encoded_parent}/{folder_name_clean}"
+            full_path = f"{parent_path}/{folder_name_clean}"
+            folder_id = item.get("id", "")
+            with _CACHE_LOCK:
+                _FOLDER_CACHE[full_path] = folder_id
+            log.info("Folder already exists", extra={"folder_path": full_path})
+            return full_path, folder_id
     payload = {
         "name": folder_name_clean,
         "folder": {},
         "@microsoft.graph.conflictBehavior": "replace",
     }
-    _request_json("POST", children_endpoint, token=token, json_payload=payload, expected_status=(201,))
-    log.info("Carpeta creada", extra={"folder_path": f"{encoded_parent}/{folder_name_clean}"})
-    return f"{encoded_parent}/{folder_name_clean}"
+    created = _request_json("POST", children_endpoint, token=token, json_payload=payload, expected_status=(201,))
+    full_path = f"{parent_path}/{folder_name_clean}"
+    folder_id = created.get("id", "")
+    with _CACHE_LOCK:
+        _FOLDER_CACHE[full_path] = folder_id
+    log.info("Created folder", extra={"folder_path": full_path})
+    return full_path, folder_id
 
 
 def ensure_folder_path(drive_id: str, folder_path: str) -> str:
@@ -207,25 +236,37 @@ def ensure_folder_path(drive_id: str, folder_path: str) -> str:
     sanitized_parts = [sanitize_graph_name(part) for part in folder_path.split("/") if part.strip()]
     if not sanitized_parts:
         raise GraphUploadError("folder_path vacío para ensure_folder_path")
+    full_target = "/".join(sanitized_parts)
+    cached_folder_id = _FOLDER_CACHE.get(full_target)
+    if cached_folder_id:
+        log.info("Folder cache hit", extra={"folder_path": full_target, "folder_id": cached_folder_id})
+        return full_target
+    log.info("Folder cache miss", extra={"folder_path": full_target})
 
     current_path = sanitized_parts[0]
-    # Verificar que el primer segmento exista en raíz o crearlo.
     root_children_endpoint = f"{GRAPH_BASE}/drives/{drive_id}/root/children"
     root_children = _request_json("GET", root_children_endpoint, token=token, expected_status=(200,))
-    found_root = False
+    current_id = ""
     for item in root_children.get("value", []):
         if item.get("name") == current_path and "folder" in item:
-            found_root = True
+            current_id = item.get("id", "")
+            with _CACHE_LOCK:
+                _FOLDER_CACHE[current_path] = current_id
+            log.info("Folder already exists", extra={"folder_path": current_path})
             break
-    if not found_root:
+    if not current_id:
         payload = {"name": current_path, "folder": {}, "@microsoft.graph.conflictBehavior": "replace"}
-        _request_json("POST", root_children_endpoint, token=token, json_payload=payload, expected_status=(201,))
-        log.info("Carpeta creada", extra={"folder_path": current_path})
-    else:
-        log.info("Carpeta ya existente", extra={"folder_path": current_path})
+        created = _request_json("POST", root_children_endpoint, token=token, json_payload=payload, expected_status=(201,))
+        current_id = created.get("id", "")
+        with _CACHE_LOCK:
+            _FOLDER_CACHE[current_path] = current_id
+        log.info("Created folder", extra={"folder_path": current_path})
 
     for part in sanitized_parts[1:]:
-        current_path = _ensure_child_folder(drive_id, current_path, part, token=token)
+        current_path, current_id = _ensure_child_folder(drive_id, current_id, current_path, part, token=token)
+    if current_id:
+        with _CACHE_LOCK:
+            _FOLDER_CACHE[current_path] = current_id
     return current_path
 
 
@@ -278,9 +319,11 @@ def ensure_case_subfolders(drive_id: str, case_root_folder: str) -> None:
 
 
 def build_sharepoint_case_folder_name(folio: str, cliente: str) -> str:
-    folio_or_tmp = normalize_folio_o_tmp(folio)
+    # Carpeta estable por cliente (dentro de semana + vendedor), para evitar
+    # crear una carpeta nueva por cada folio temporal/oficial.
+    _ = folio  # Mantener firma por compatibilidad con llamadas existentes.
     cliente_norm = normalize_cliente(cliente)
-    return sanitize_graph_name(f"{folio_or_tmp} - {cliente_norm}")
+    return sanitize_graph_name(cliente_norm)
 
 
 def build_sharepoint_final_folder(
@@ -334,32 +377,8 @@ def upload_document_to_sharepoint(
     )
     log.info("Ruta final SharePoint", extra={"folder_path": final_folder})
 
-    token = get_access_token()
-    site = _request_json(
-        "GET",
-        f"{GRAPH_BASE}/sites/{settings.ms_site_hostname}:{settings.ms_site_path}",
-        token=token,
-        expected_status=(200,),
-    )
-    site_id = site.get("id", "")
-    if not site_id:
-        raise GraphUploadError("No se encontró site_id")
-    log.info("Site ID encontrado")
-
-    drives = _request_json("GET", f"{GRAPH_BASE}/sites/{site_id}/drives", token=token, expected_status=(200,))
-    drive_id = ""
-    for drive in drives.get("value", []):
-        if drive.get("name") == settings.ms_drive_name:
-            drive_id = drive.get("id", "")
-            break
-    if not drive_id:
-        for drive in drives.get("value", []):
-            log.info(
-                "Drive disponible",
-                extra={"name": drive.get("name"), "id": drive.get("id"), "webUrl": drive.get("webUrl")},
-            )
-        raise GraphUploadError(f"No se encontró drive con name={settings.ms_drive_name!r}")
-    log.info("Drive ID encontrado")
+    site_id = get_site_id()
+    drive_id = get_drive_id()
 
     ensure_case_subfolders(drive_id, case_root_folder)
     result = upload_small_file(drive_id, final_folder, filename, file_bytes)

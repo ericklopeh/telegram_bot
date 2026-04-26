@@ -27,7 +27,7 @@ from app.models.case import Case
 from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
 from app.services.case_service import CaseService
-from app.services.microsoft_graph import GraphUploadError, upload_document_to_sharepoint
+from app.services.microsoft_graph import upload_document_to_sharepoint
 from app.services.sharepoint_retry_queue import (
     enqueue_failed_upload,
     list_retry_items,
@@ -50,6 +50,89 @@ last_sla_alert: dict[str, datetime] = {}
 
 def _case_service() -> CaseService:
     return CaseService(get_settings())
+
+
+async def _upload_document_background(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    document_id: int,
+    file_path: str,
+    vendedor: str,
+    semana: str,
+    cliente: str,
+    folio: str,
+    tipo_documento: str,
+    filename: str,
+) -> None:
+    try:
+        file_bytes = Path(file_path).read_bytes()
+        result = upload_document_to_sharepoint(
+            vendedor=vendedor,
+            semana=semana,
+            cliente=cliente,
+            folio=folio,
+            tipo_documento=tipo_documento,
+            filename=filename,
+            file_bytes=file_bytes,
+        )
+        with session_scope() as db:
+            DocumentRepository.set_upload_uploaded(db, document_id, result.get("webUrl"))
+        log.info(
+            "Documento subido a SharePoint",
+            extra={
+                "document_id": document_id,
+                "vendedor": vendedor,
+                "folio": folio,
+                "cliente": cliente,
+                "tipo_documento": tipo_documento,
+                "ruta_final": result.get("folder_path"),
+                "webUrl": result.get("webUrl"),
+            },
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "Archivo subido a SharePoint ✅\\n"
+                f"Tipo: {tipo_documento}\\n"
+                f"Semana: {semana}\\n"
+                f"Cliente: {cliente}\\n"
+                f"Link: {result.get('webUrl') or 'N/D'}"
+            ),
+            reply_markup=SELLER_MAIN_KEYBOARD,
+        )
+    except Exception as exc:
+        with session_scope() as db:
+            DocumentRepository.set_upload_failed(db, document_id, str(exc))
+        enqueue_failed_upload(
+            file_path=file_path,
+            vendedor=vendedor,
+            semana=semana,
+            cliente=cliente,
+            folio=folio,
+            tipo_documento=tipo_documento,
+            filename=filename,
+            document_id=document_id,
+            error=str(exc),
+        )
+        log.exception(
+            "Error subiendo documento a SharePoint en background",
+            extra={
+                "document_id": document_id,
+                "vendedor": vendedor,
+                "folio": folio,
+                "cliente": cliente,
+                "tipo_documento": tipo_documento,
+                "filename": filename,
+            },
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "No se pudo subir el archivo a SharePoint por ahora. "
+                "Se reintentará automáticamente."
+            ),
+            reply_markup=SELLER_MAIN_KEYBOARD,
+        )
 
 
 def _is_admin(update: Update) -> bool:
@@ -286,10 +369,14 @@ async def sharepoint_retry_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 filename=item.filename,
                 file_bytes=file_bytes,
             )
+            if item.document_id:
+                with session_scope() as db:
+                    DocumentRepository.set_upload_uploaded(db, item.document_id, result.get("webUrl"))
             log.info(
                 "Retry SharePoint exitoso",
                 extra={
                     "item_id": item.id,
+                    "document_id": item.document_id,
                     "vendedor": item.vendedor,
                     "folio": item.folio,
                     "cliente": item.cliente,
@@ -301,6 +388,9 @@ async def sharepoint_retry_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             remove_retry_item(item.id)
         except Exception as exc:
             attempts = item.attempts + 1
+            if item.document_id:
+                with session_scope() as db:
+                    DocumentRepository.set_upload_failed(db, item.document_id, str(exc))
             update_retry_item(item.id, attempts=attempts, last_error=str(exc))
             if attempts >= max_attempts:
                 remove_retry_item(item.id)
@@ -308,6 +398,7 @@ async def sharepoint_retry_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 "Retry SharePoint falló",
                 extra={
                     "item_id": item.id,
+                    "document_id": item.document_id,
                     "attempts": attempts,
                     "max_attempts": max_attempts,
                     "vendedor": item.vendedor,
@@ -675,76 +766,10 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     mime_type=mime,
                     folio=folio,
                 )
-            graph_result: dict | None = None
-            graph_error = False
-            try:
-                file_bytes = Path(path_str).read_bytes()
-                graph_result = upload_document_to_sharepoint(
-                    vendedor=seller or "SIN VENDEDOR",
-                    semana=get_settings().effective_semana_activa,
-                    cliente=cliente,
-                    folio=folio,
-                    tipo_documento="REVISION",
-                    filename=nombre,
-                    file_bytes=file_bytes,
-                )
-                log.info(
-                    "Revision subida a SharePoint",
-                    extra={
-                        "vendedor": seller or "SIN VENDEDOR",
-                        "folio": folio,
-                        "cliente": cliente,
-                        "tipo_documento": "REVISION",
-                        "ruta_final": graph_result.get("folder_path"),
-                        "webUrl": graph_result.get("webUrl"),
-                    },
-                )
-            except GraphUploadError:
-                graph_error = True
-                enqueue_failed_upload(
-                    file_path=path_str,
-                    vendedor=seller or "SIN VENDEDOR",
-                    semana=get_settings().effective_semana_activa,
-                    cliente=cliente,
-                    folio=folio,
-                    tipo_documento="REVISION",
-                    filename=nombre,
-                    error="GraphUploadError",
-                )
-                log.exception(
-                    "Error subiendo revision a SharePoint",
-                    extra={
-                        "vendedor": seller or "SIN VENDEDOR",
-                        "folio": folio,
-                        "cliente": cliente,
-                        "tipo_documento": "REVISION",
-                        "ruta_intentada": f"{get_settings().ms_root_folder}/{get_settings().effective_semana_activa}/"
-                        f"{seller or 'SIN VENDEDOR'}/{folio} - {cliente}/01_REVISIONES",
-                        "filename": nombre,
-                    },
-                )
-            except Exception:
-                graph_error = True
-                enqueue_failed_upload(
-                    file_path=path_str,
-                    vendedor=seller or "SIN VENDEDOR",
-                    semana=get_settings().effective_semana_activa,
-                    cliente=cliente,
-                    folio=folio,
-                    tipo_documento="REVISION",
-                    filename=nombre,
-                    error="Exception",
-                )
-                log.exception(
-                    "Error inesperado subiendo revision a SharePoint",
-                    extra={
-                        "vendedor": seller or "SIN VENDEDOR",
-                        "folio": folio,
-                        "cliente": cliente,
-                        "tipo_documento": "REVISION",
-                        "filename": nombre,
-                    },
-                )
+                document = DocumentRepository.get_active_document(db, case.id, C.DOC_REVISION_EVIDENCIA)
+                document_id = document.id if document else None
+                if document_id:
+                    DocumentRepository.set_upload_pending(db, document_id)
         except Exception:
             log.exception("Error persistiendo revisión")
             await update.message.reply_text(
@@ -754,22 +779,31 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             session.clear()
             return
 
-        if graph_error:
+        if not document_id:
             await update.message.reply_text(
-                "Recibí el archivo, pero ocurrió un error al subirlo a SharePoint. "
-                "Se notificará a sistemas.",
+                "Archivo recibido, pero no se pudo preparar la subida a SharePoint.",
                 reply_markup=_main_keyboard_for(update),
             )
             session.clear()
             return
 
         await update.message.reply_text(
-            "Archivo guardado correctamente ✅\n"
-            "Tipo: REVISION\n"
-            f"Semana: {get_settings().effective_semana_activa}\n"
-            f"Cliente: {cliente}\n"
-            f"Link: {graph_result.get('webUrl') if graph_result else 'N/D'}",
+            "Archivo recibido ✅ Se está subiendo a SharePoint...",
             reply_markup=_main_keyboard_for(update),
+        )
+        context.application.create_task(
+            _upload_document_background(
+                context,
+                chat_id,
+                document_id,
+                path_str,
+                seller or "SIN VENDEDOR",
+                get_settings().effective_semana_activa,
+                cliente,
+                folio,
+                "REVISION",
+                nombre,
+            )
         )
         await notificar_admin_alertas(
             context,
@@ -844,8 +878,6 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
         seller = _actor_name(update)
-        graph_result: dict | None = None
-        graph_error = False
         try:
             with session_scope() as db:
                 case = CaseRepository.get_by_public_id(db, public_id)
@@ -867,7 +899,7 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         "No se recibió un archivo válido (documento o foto).",
                     )
                     return
-                svc.register_pedido_document(
+                document = svc.register_pedido_document(
                     db,
                     case,
                     doc_type,
@@ -876,6 +908,8 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     orig,
                     mime,
                 )
+                document_id = document.id
+                DocumentRepository.set_upload_pending(db, document_id)
                 svc.transition_case_status(
                     db,
                     case,
@@ -885,75 +919,10 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 )
                 db.refresh(case)
                 present = DocumentRepository.get_active_types_for_case(db, case.id)
-            try:
-                file_bytes = Path(path_str).read_bytes()
-                graph_result = upload_document_to_sharepoint(
-                    vendedor=case.seller_name or seller or "SIN VENDEDOR",
-                    semana=case.week_code,
-                    cliente=case.client_name,
-                    folio=case.official_folio or case.public_id,
-                    tipo_documento="PEDIDO",
-                    filename=nombre,
-                    file_bytes=file_bytes,
-                )
-                log.info(
-                    "Documento pedido subido a SharePoint",
-                    extra={
-                        "vendedor": case.seller_name or seller or "SIN VENDEDOR",
-                        "folio": case.official_folio or case.public_id,
-                        "cliente": case.client_name,
-                        "tipo_documento": "PEDIDO",
-                        "ruta_final": graph_result.get("folder_path"),
-                        "webUrl": graph_result.get("webUrl"),
-                    },
-                )
-            except GraphUploadError:
-                graph_error = True
-                enqueue_failed_upload(
-                    file_path=path_str,
-                    vendedor=case.seller_name or seller or "SIN VENDEDOR",
-                    semana=case.week_code,
-                    cliente=case.client_name,
-                    folio=case.official_folio or case.public_id,
-                    tipo_documento="PEDIDO",
-                    filename=nombre,
-                    error="GraphUploadError",
-                )
-                log.exception(
-                    "Error subiendo pedido a SharePoint",
-                    extra={
-                        "vendedor": case.seller_name or seller or "SIN VENDEDOR",
-                        "folio": case.official_folio or case.public_id,
-                        "cliente": case.client_name,
-                        "tipo_documento": "PEDIDO",
-                        "ruta_intentada": f"{get_settings().ms_root_folder}/{case.week_code}/"
-                        f"{case.seller_name or seller or 'SIN VENDEDOR'}/"
-                        f"{case.official_folio or case.public_id} - {case.client_name}/02_PEDIDOS",
-                        "filename": nombre,
-                    },
-                )
-            except Exception:
-                graph_error = True
-                enqueue_failed_upload(
-                    file_path=path_str,
-                    vendedor=case.seller_name or seller or "SIN VENDEDOR",
-                    semana=case.week_code,
-                    cliente=case.client_name,
-                    folio=case.official_folio or case.public_id,
-                    tipo_documento="PEDIDO",
-                    filename=nombre,
-                    error="Exception",
-                )
-                log.exception(
-                    "Error inesperado subiendo pedido a SharePoint",
-                    extra={
-                        "vendedor": case.seller_name or seller or "SIN VENDEDOR",
-                        "folio": case.official_folio or case.public_id,
-                        "cliente": case.client_name,
-                        "tipo_documento": "PEDIDO",
-                        "filename": nombre,
-                    },
-                )
+                vendedor = case.seller_name or seller or "SIN VENDEDOR"
+                semana = case.week_code
+                cliente_case = case.client_name
+                folio = case.official_folio or case.public_id
         except Exception:
             log.exception("Error guardando documento de pedido")
             await update.message.reply_text(
@@ -963,21 +932,24 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             session.clear()
             return
 
-        if graph_error:
-            await update.message.reply_text(
-                "Recibí el archivo, pero ocurrió un error al subirlo a SharePoint. "
-                "Se notificará a sistemas.",
-                reply_markup=_main_keyboard_for(update),
+        await update.message.reply_text(
+            "Archivo recibido ✅ Se está subiendo a SharePoint...",
+            reply_markup=_main_keyboard_for(update),
+        )
+        context.application.create_task(
+            _upload_document_background(
+                context,
+                chat_id,
+                document_id,
+                path_str,
+                vendedor,
+                semana,
+                cliente_case,
+                folio,
+                "PEDIDO",
+                nombre,
             )
-        else:
-            await update.message.reply_text(
-                "Archivo guardado correctamente ✅\n"
-                "Tipo: PEDIDO\n"
-                f"Semana: {case.week_code}\n"
-                f"Cliente: {case.client_name}\n"
-                f"Link: {graph_result.get('webUrl') if graph_result else 'N/D'}",
-                reply_markup=_main_keyboard_for(update),
-            )
+        )
 
         session["pending_doc_type"] = None
         session["state"] = "waiting_pedido_pick_doc"

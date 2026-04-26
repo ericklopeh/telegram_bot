@@ -22,6 +22,7 @@ class RetryItem:
     folio: str
     tipo_documento: str
     filename: str
+    document_id: int | None
     attempts: int
     last_error: str | None
     created_at: str
@@ -64,6 +65,7 @@ def enqueue_failed_upload(
     folio: str,
     tipo_documento: str,
     filename: str,
+    document_id: int | None = None,
     error: str | None = None,
 ) -> str:
     with _LOCK:
@@ -80,6 +82,7 @@ def enqueue_failed_upload(
                 "folio": folio,
                 "tipo_documento": tipo_documento,
                 "filename": filename,
+                "document_id": document_id,
                 "attempts": 0,
                 "last_error": error,
                 "created_at": now,
@@ -106,6 +109,7 @@ def list_retry_items() -> list[RetryItem]:
                     folio=str(item["folio"]),
                     tipo_documento=str(item["tipo_documento"]),
                     filename=str(item["filename"]),
+                    document_id=int(item["document_id"]) if item.get("document_id") is not None else None,
                     attempts=int(item.get("attempts", 0)),
                     last_error=item.get("last_error"),
                     created_at=str(item.get("created_at", "")),

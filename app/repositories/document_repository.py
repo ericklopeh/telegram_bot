@@ -54,3 +54,39 @@ class DocumentRepository:
         db.add(doc)
         db.flush()
         return doc
+
+    @staticmethod
+    def get_active_document(db: Session, case_id: int, document_type: str) -> Document | None:
+        return db.scalar(
+            select(Document).where(
+                Document.case_id == case_id,
+                Document.document_type == document_type,
+                Document.is_active.is_(True),
+            )
+        )
+
+    @staticmethod
+    def set_upload_pending(db: Session, document_id: int) -> None:
+        doc = db.get(Document, document_id)
+        if not doc:
+            return
+        doc.upload_status = "PENDING_UPLOAD"
+        doc.upload_error = None
+
+    @staticmethod
+    def set_upload_uploaded(db: Session, document_id: int, web_url: str | None) -> None:
+        doc = db.get(Document, document_id)
+        if not doc:
+            return
+        doc.upload_status = "UPLOADED"
+        doc.sharepoint_web_url = web_url
+        doc.upload_error = None
+
+    @staticmethod
+    def set_upload_failed(db: Session, document_id: int, error: str) -> None:
+        doc = db.get(Document, document_id)
+        if not doc:
+            return
+        doc.upload_status = "UPLOAD_FAILED"
+        doc.upload_error = error
+        doc.upload_attempts = (doc.upload_attempts or 0) + 1

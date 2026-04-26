@@ -130,8 +130,8 @@ class CaseService:
         file_abs_path: str,
         original_filename: str | None,
         mime_type: str | None,
-    ) -> None:
-        DocumentRepository.add_version(
+    ):
+        return DocumentRepository.add_version(
             db,
             case.id,
             document_type,
