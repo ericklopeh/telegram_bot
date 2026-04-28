@@ -1,6 +1,12 @@
-from fastapi import APIRouter, Request
+from typing import Generator
+
+from fastapi import APIRouter, Request, Depends
 from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db_session
+from app.models.case import Case
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
@@ -17,34 +23,31 @@ def require_login(request: Request):
     return None
 
 
+def get_web_db() -> Generator[Session, None, None]:
+    db = get_db_session()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 @router.get("/casos")
-def listar_casos(request: Request):
+def listar_casos(
+    request: Request,
+    db: Session = Depends(get_web_db),
+):
     redirect = require_login(request)
     if redirect:
         return redirect
 
     usuario = get_current_user(request)
 
-    casos = [
-        {
-            "id": 1,
-            "public_id": "PED-00001",
-            "client_name": "CLIENTE DEMO 01",
-            "seller_name": "Vendedor Demo",
-            "case_type": "pedido",
-            "current_status": "Recibido",
-            "week_code": "SEM 17-2026",
-        },
-        {
-            "id": 2,
-            "public_id": "REV-00002",
-            "client_name": "CLIENTE DEMO 02",
-            "seller_name": "Vendedor Demo",
-            "case_type": "revision",
-            "current_status": "En revisión",
-            "week_code": "SEM 17-2026",
-        },
-    ]
+    query = db.query(Case)
+
+    if usuario["rol"] == "vendedor":
+        query = query.filter(Case.seller_name == usuario["nombre"])
+
+    casos = query.order_by(Case.created_at.desc()).limit(50).all()
 
     return templates.TemplateResponse(
         request=request,
