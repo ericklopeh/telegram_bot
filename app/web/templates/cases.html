@@ -27,8 +27,10 @@
                         <th>Tipo</th>
                         <th>Semana</th>
                         <th>Estatus</th>
+                        <th class="text-end">Acción</th>
                     </tr>
                 </thead>
+
                 <tbody>
                     {% for caso in casos %}
                     <tr>
@@ -42,10 +44,21 @@
                                 {{ caso.current_status }}
                             </span>
                         </td>
+                        <td class="text-end">
+                            <a href="/casos/{{ caso.id }}" class="btn btn-sm btn-outline-primary">
+                                Ver
+                            </a>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+
+            {% if not casos %}
+            <div class="p-4 text-muted">
+                No hay casos registrados todavía.
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -66,9 +79,21 @@
                 Tipo: {{ caso.case_type }}<br>
                 Semana: {{ caso.week_code }}
             </div>
+
+            <a href="/casos/{{ caso.id }}" class="btn btn-outline-primary btn-sm w-100 mt-3">
+                Ver detalle
+            </a>
         </div>
     </div>
     {% endfor %}
+
+    {% if not casos %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-muted">
+            No hay casos registrados todavía.
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 {% endblock %}

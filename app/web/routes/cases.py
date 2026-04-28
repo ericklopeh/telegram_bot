@@ -57,3 +57,33 @@ def listar_casos(
             "casos": casos,
         }
     )
+
+
+@router.get("/casos/{case_id}")
+def detalle_caso(
+    case_id: int,
+    request: Request,
+    db: Session = Depends(get_web_db),
+):
+    redirect = require_login(request)
+    if redirect:
+        return redirect
+
+    usuario = get_current_user(request)
+
+    caso = db.query(Case).filter(Case.id == case_id).first()
+
+    if not caso:
+        return RedirectResponse(url="/casos", status_code=302)
+
+    if usuario["rol"] == "vendedor" and caso.seller_name != usuario["nombre"]:
+        return RedirectResponse(url="/casos", status_code=302)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="case_detail.html",
+        context={
+            "usuario": usuario,
+            "caso": caso,
+        }
+    )
