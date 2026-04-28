@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">Revisión de talón</h2>
+        <p class="text-muted mb-0">
+            {{ caso.public_id }} · {{ caso.client_name }}
+        </p>
+    </div>
+
+    <a href="/casos/{{ caso.id }}" class="btn btn-outline-secondary mt-3 mt-md-0">
+        Volver al caso
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold">
+                Captura de datos del talón
+            </div>
+
+            <div class="card-body">
+                <form method="post" action="/casos/{{ caso.id }}/revision-talon">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Percepciones</label>
+                            <input
+                                class="form-control"
+                                type="number"
+                                step="0.01"
+                                name="percepciones"
+                                value="{{ form_data.percepciones }}"
+                            >
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Deducciones</label>
+                            <input
+                                class="form-control"
+                                type="number"
+                                step="0.01"
+                                name="deducciones"
+                                value="{{ form_data.deducciones }}"
+                            >
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Líquido</label>
+                            <input
+                                class="form-control"
+                                type="number"
+                                step="0.01"
+                                name="liquido"
+                                value="{{ form_data.liquido }}"
+                            >
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Extra a agregar</label>
+
+                            <div class="d-flex flex-wrap gap-2">
+                                <input type="radio" class="btn-check" name="extra" id="extra0" value="0"
+                                    {% if form_data.extra == 0 %}checked{% endif %}>
+                                <label class="btn btn-outline-primary" for="extra0">$0</label>
+
+                                <input type="radio" class="btn-check" name="extra" id="extra1500" value="1500"
+                                    {% if form_data.extra == 1500 %}checked{% endif %}>
+                                <label class="btn btn-outline-primary" for="extra1500">$1,500</label>
+
+                                <input type="radio" class="btn-check" name="extra" id="extra2000" value="2000"
+                                    {% if form_data.extra == 2000 %}checked{% endif %}>
+                                <label class="btn btn-outline-primary" for="extra2000">$2,000</label>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">¿Tiene programados?</label>
+                            <select class="form-select" name="tiene_programados" id="tieneProgramados">
+                                <option value="NO" {% if form_data.tiene_programados == "NO" %}selected{% endif %}>
+                                    No
+                                </option>
+                                <option value="SI" {% if form_data.tiene_programados == "SI" %}selected{% endif %}>
+                                    Sí
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Monto programados</label>
+                            <input
+                                class="form-control"
+                                type="number"
+                                step="0.01"
+                                name="monto_programados"
+                                id="montoProgramados"
+                                value="{{ form_data.monto_programados }}"
+                            >
+                        </div>
+
+                        <div class="col-12">
+                            <button class="btn btn-primary w-100" type="submit">
+                                Calcular liquidez
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold">
+                Resultado
+            </div>
+
+            <div class="card-body">
+                {% if resultado %}
+                    <p><strong>Total al 70%:</strong> ${{ "%.2f"|format(resultado.total_70) }}</p>
+                    <p><strong>Saldo al 70%:</strong> ${{ "%.2f"|format(resultado.saldo_70) }}</p>
+                    <p><strong>Extra agregado:</strong> ${{ "%.2f"|format(resultado.extra) }}</p>
+                    <p><strong>Programados:</strong> ${{ "%.2f"|format(resultado.programados) }}</p>
+
+                    <hr>
+
+                    <h4 class="fw-bold">
+                        Liquidez final: ${{ "%.2f"|format(resultado.liquidez_final) }}
+                    </h4>
+
+                    {% if resultado.resultado == "Apto" %}
+                        <span class="badge bg-success fs-6">Apto</span>
+                    {% else %}
+                        <span class="badge bg-danger fs-6">No apto</span>
+                    {% endif %}
+                {% else %}
+                    <p class="text-muted mb-0">
+                        Captura los datos del talón y presiona calcular.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const tieneProgramados = document.getElementById("tieneProgramados");
+const montoProgramados = document.getElementById("montoProgramados");
+
+function actualizarProgramados() {
+    if (!tieneProgramados || !montoProgramados) return;
+
+    if (tieneProgramados.value === "SI") {
+        montoProgramados.disabled = false;
+    } else {
+        montoProgramados.value = 0;
+        montoProgramados.disabled = true;
+    }
+}
+
+if (tieneProgramados) {
+    tieneProgramados.addEventListener("change", actualizarProgramados);
+    actualizarProgramados();
+}
+</script>
+
+{% endblock %}

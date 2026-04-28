@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
-from app.web.routes import dashboard, cases
+from app.web.routes import dashboard, cases, revision_talon
 
 
 web_app = FastAPI(title="Sistema Gaman Web")
@@ -92,3 +92,4 @@ def logout(request: Request):
 
 web_app.include_router(dashboard.router)
 web_app.include_router(cases.router)
+web_app.include_router(revision_talon.router)

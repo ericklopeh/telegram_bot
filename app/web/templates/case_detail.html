@@ -100,14 +100,21 @@
                                     <span class="badge bg-secondary">Reemplazado</span>
                                 {% endif %}
                             </div>
+
                             <div class="small text-muted">
                                 {{ doc.original_filename or doc.stored_filename }}
+                            </div>
+
+                            <div class="small text-muted font-monospace">
+                                {{ doc.file_path }}
                             </div>
                         </div>
                         {% endfor %}
                     </div>
                 {% else %}
-                    <p class="text-muted mb-0">Este caso todavía no tiene documentos registrados.</p>
+                    <p class="text-muted mb-0">
+                        Este caso todavía no tiene documentos registrados.
+                    </p>
                 {% endif %}
             </div>
         </div>
@@ -120,9 +127,9 @@
             </div>
 
             <div class="card-body d-grid gap-2">
-                <button class="btn btn-primary" disabled>
+                <a href="/casos/{{ caso.id }}/revision-talon" class="btn btn-primary">
                     Revisar talón
-                </button>
+                </a>
 
                 <button class="btn btn-outline-primary" disabled>
                     Generar autorización
@@ -154,7 +161,9 @@
                         {% endfor %}
                     </div>
                 {% else %}
-                    <p class="text-muted mb-0">Sin historial registrado todavía.</p>
+                    <p class="text-muted mb-0">
+                        Sin historial registrado todavía.
+                    </p>
                 {% endif %}
             </div>
         </div>
