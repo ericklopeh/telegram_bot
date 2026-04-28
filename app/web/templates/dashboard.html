@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">Dashboard</h2>
+        <p class="text-muted mb-0">
+            Resumen general de solicitudes, revisiones y pedidos.
+        </p>
+    </div>
+
+    <a href="/casos" class="btn btn-primary mt-3 mt-md-0">
+        Ver casos
+    </a>
+</div>
+
+<div class="row g-3">
+    <div class="col-6 col-md-3">
+        <div class="card shadow-sm border-0 stat-card">
+            <div class="card-body">
+                <div class="text-muted small">Total</div>
+                <div class="fs-3 fw-bold">{{ resumen.total }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="card shadow-sm border-0 stat-card">
+            <div class="card-body">
+                <div class="text-muted small">Recibidos</div>
+                <div class="fs-3 fw-bold">{{ resumen.recibidos }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="card shadow-sm border-0 stat-card">
+            <div class="card-body">
+                <div class="text-muted small">En revisión</div>
+                <div class="fs-3 fw-bold">{{ resumen.en_revision }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="card shadow-sm border-0 stat-card">
+            <div class="card-body">
+                <div class="text-muted small">Aprobados</div>
+                <div class="fs-3 fw-bold">{{ resumen.aprobados }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-body">
+        <h5 class="fw-bold">Flujo propuesto</h5>
+
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <span class="badge bg-secondary p-2">Recibido</span>
+            <span class="badge bg-primary p-2">En revisión</span>
+            <span class="badge bg-success p-2">Aprobado</span>
+            <span class="badge bg-info p-2">Autorización</span>
+            <span class="badge bg-warning text-dark p-2">Compulsa</span>
+            <span class="badge bg-dark p-2">Cerrado</span>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

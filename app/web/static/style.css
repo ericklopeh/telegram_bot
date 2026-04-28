@@ -1,0 +1,29 @@
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.login-bg {
+    background: linear-gradient(135deg, #111827, #1f2937);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 430px;
+    border-radius: 18px;
+}
+
+.card {
+    border-radius: 18px;
+}
+
+.btn {
+    border-radius: 12px;
+}
+
+.form-control {
+    border-radius: 12px;
+}
+
+.stat-card {
+    min-height: 120px;
+}
