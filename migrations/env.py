@@ -11,6 +11,7 @@ from app.models import (  # noqa: F401
     case_history,
     document,
     ocr_result,
+    talon_review,
 )
 
 config = context.config

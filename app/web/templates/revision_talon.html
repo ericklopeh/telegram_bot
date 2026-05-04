@@ -15,6 +15,86 @@
     </a>
 </div>
 
+<div class="row g-4 mb-4">
+    <!-- Card Documento -->
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-bold">Documento del talón</div>
+            <div class="card-body">
+                {% if documento %}
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <p class="mb-1"><strong>Archivo:</strong> {{ documento.original_filename }}</p>
+                            <p class="mb-1"><strong>Tipo:</strong> <span class="badge bg-secondary">{{ documento.document_type }}</span></p>
+                            <p class="mb-1 text-muted" style="font-size: 0.85rem;">Subido el {{ documento.uploaded_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        </div>
+                        {% if ocr_result %}
+                            <span class="badge {% if ocr_result.review_status == 'processed' %}bg-success{% elif ocr_result.review_status == 'error' %}bg-danger{% else %}bg-warning text-dark{% endif %}">OCR: {{ ocr_result.review_status }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">OCR: Sin procesar</span>
+                        {% endif %}
+                    </div>
+
+                    <form method="post" action="/casos/{{ caso.id }}/documentos/{{ documento.id }}/procesar-ocr" class="mt-3">
+                        <!-- Añadimos parametro de retorno para redirigir aquí de vuelta -->
+                        <input type="hidden" name="return_to" value="revision-talon">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-cpu"></i> Procesar OCR
+                        </button>
+                    </form>
+                {% else %}
+                    <p class="text-muted mb-0">Este caso no tiene talón cargado.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Datos OCR -->
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-bold">Datos detectados por OCR</div>
+            <div class="card-body">
+                {% if ocr_result and ocr_result.parsed_json and ocr_result.review_status == 'processed' %}
+                    {% set pj = ocr_result.parsed_json %}
+                    <div class="row g-2 mb-2" style="font-size: 0.9rem;">
+                        <div class="col-6 text-muted">Percepciones detectadas:</div>
+                        <div class="col-6 fw-bold text-success text-end">${{ "{:,.2f}".format(pj.get('percepciones') or pj.get('percepciones_total') or 0) }}</div>
+                        
+                        <div class="col-6 text-muted">Deducciones detectadas:</div>
+                        <div class="col-6 fw-bold text-danger text-end">${{ "{:,.2f}".format(pj.get('deducciones') or pj.get('deducciones_total') or 0) }}</div>
+                        
+                        <div class="col-6 text-muted">Líquido detectado:</div>
+                        <div class="col-6 fw-bold text-end">${{ "{:,.2f}".format(pj.get('liquido') or 0) }}</div>
+                    </div>
+
+                    {% if pj.get('capacity_income_total') is not none %}
+                    <hr class="my-2">
+                    <div class="row g-2" style="font-size: 0.9rem;">
+                        <div class="col-6 text-muted">Ingresos válidos:</div>
+                        <div class="col-6 fw-bold text-success text-end">${{ "{:,.2f}".format(pj.get('capacity_income_total', 0)) }}</div>
+                        
+                        <div class="col-6 text-muted">Total deducciones:</div>
+                        <div class="col-6 fw-bold text-danger text-end">${{ "{:,.2f}".format(pj.get('capacity_codes', {}).get('D', 0)) }}</div>
+                        
+                        <div class="col-6 text-muted">Saldo al 70%:</div>
+                        <div class="col-6 fw-bold text-end">${{ "{:,.2f}".format(pj.get('total_para_venta_70', 0)) }}</div>
+                        
+                        <div class="col-6 text-muted">Liquidez final detectada:</div>
+                        <div class="col-6 fw-bold text-primary text-end">${{ "{:,.2f}".format(pj.get('saldo_al_70', 0)) }}</div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="alert alert-info py-2 mt-3 mb-0" style="font-size: 0.8rem;">
+                        <i class="bi bi-info-circle"></i> Los datos OCR son sugeridos. Verifica y ajusta en el formulario antes de guardar.
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">No hay datos OCR procesados.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-4">
     <div class="col-12 col-lg-7">
         <div class="card shadow-sm border-0">
@@ -25,37 +105,78 @@
             <div class="card-body">
                 <form method="post" action="/casos/{{ caso.id }}/revision-talon">
                     <div class="row g-3">
-                        <div class="col-12 col-md-4">
-                            <label class="form-label">Percepciones</label>
-                            <input
-                                class="form-control"
-                                type="number"
-                                step="0.01"
-                                name="percepciones"
-                                value="{{ form_data.percepciones }}"
-                            >
-                        </div>
+                        <!-- Conceptos Fijos OCR -->
+                        <div class="col-12 mt-2">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold mb-0">Campos de Revisión (Detectados por OCR)</h6>
+                                <span class="badge bg-info text-dark">Edición interactiva</span>
+                            </div>
+                            
+                            {% if review_fields %}
+                            <div class="row g-2 mb-3">
+                                {% for key in ["E4", "E3", "Q", "CP", "7", "CT", "7B", "E9", "SG", "O1", "D", "DC"] %}
+                                <div class="col-4 col-md-3">
+                                    <label class="form-label small text-muted mb-1">{{ key }}</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" 
+                                               class="form-control text-end rf-input {% if key in ['D', 'DC'] %}text-danger{% else %}text-success{% endif %}" 
+                                               name="rf_{{ key }}" 
+                                               id="rf_{{ key }}" 
+                                               step="0.01" 
+                                               value="{{ '{:.2f}'.format(review_fields[key]) }}">
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- Resumen Dinámico -->
+                            <div class="card bg-light border-0 mb-3">
+                                <div class="card-body py-2">
+                                    <div class="row g-2 small text-center fw-bold">
+                                        <div class="col-3">
+                                            <div class="text-muted">Ingresos Válidos</div>
+                                            <div class="text-success" id="resumen_ingresos">$0.00</div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="text-muted">Descuentos</div>
+                                            <div class="text-danger" id="resumen_descuentos">$0.00</div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="text-muted">Válido al 70%</div>
+                                            <div class="text-primary" id="resumen_70">$0.00</div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="text-muted">Liquidez Final</div>
+                                            <div class="text-dark fs-6" id="resumen_liquidez">$0.00</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" name="percepciones" value="0" id="percepcionesInput">
+                            <input type="hidden" name="deducciones" value="0" id="deduccionesInput">
+                            <input type="hidden" name="liquido" value="0" id="liquidoInput">
 
-                        <div class="col-12 col-md-4">
-                            <label class="form-label">Deducciones</label>
-                            <input
-                                class="form-control"
-                                type="number"
-                                step="0.01"
-                                name="deducciones"
-                                value="{{ form_data.deducciones }}"
-                            >
-                        </div>
-
-                        <div class="col-12 col-md-4">
-                            <label class="form-label">Líquido</label>
-                            <input
-                                class="form-control"
-                                type="number"
-                                step="0.01"
-                                name="liquido"
-                                value="{{ form_data.liquido }}"
-                            >
+                            {% else %}
+                            <div class="alert alert-secondary small text-center mb-3">
+                                No se ha procesado OCR para este documento o no hay campos de revisión.
+                            </div>
+                            
+                            <!-- Flujo manual antiguo si no hay OCR -->
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Percepciones</label>
+                                <input class="form-control" type="number" step="0.01" name="percepciones" id="percepcionesInput" value="{{ form_data.percepciones }}">
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Deducciones</label>
+                                <input class="form-control text-danger" type="number" step="0.01" name="deducciones" value="{{ form_data.deducciones }}">
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Líquido</label>
+                                <input class="form-control" type="number" step="0.01" name="liquido" value="{{ form_data.liquido }}">
+                            </div>
+                            {% endif %}
                         </div>
 
                         <div class="col-12">
@@ -112,6 +233,41 @@
     </div>
 
     <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-eye"></i> Vista previa del talón</span>
+                {% if preview_url %}
+                <a href="{{ preview_url }}" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Abrir en pestaña nueva">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body p-0 text-center bg-light" style="min-height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom-left-radius: var(--bs-card-border-radius); border-bottom-right-radius: var(--bs-card-border-radius);">
+                {% if preview_url and documento %}
+                    {% set ext = documento.original_filename.split('.')[-1].lower() if documento.original_filename else '' %}
+                    {% set is_pdf = (ext == 'pdf' or 'pdf' in (documento.mime_type or '')) %}
+                    {% set is_img = ext in ['jpg', 'jpeg', 'png'] or 'image' in (documento.mime_type or '') %}
+                    
+                    {% if is_pdf %}
+                        <iframe src="{{ preview_url }}#toolbar=0" style="width: 100%; height: 500px; border: none;"></iframe>
+                    {% elif is_img %}
+                        <img src="{{ preview_url }}" alt="Vista previa" style="max-width: 100%; max-height: 500px; object-fit: contain;">
+                    {% else %}
+                        <div class="p-4">
+                            <i class="bi bi-file-earmark-text text-secondary mb-2 d-block" style="font-size: 3rem;"></i>
+                            <p class="mb-3 text-muted">Formato no soportado para vista previa en línea.</p>
+                            <a href="{{ preview_url }}" target="_blank" class="btn btn-primary btn-sm">Abrir documento</a>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-muted p-4">
+                        <i class="bi bi-file-earmark-x mb-2 d-block" style="font-size: 2rem;"></i>
+                        Este caso no tiene talón cargado.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white fw-bold">
                 Resultado
@@ -163,6 +319,63 @@ function actualizarProgramados() {
 if (tieneProgramados) {
     tieneProgramados.addEventListener("change", actualizarProgramados);
     actualizarProgramados();
+}
+
+// Lógica de campos fijos
+const rfInputs = document.querySelectorAll('.rf-input');
+const extraInput = document.getElementById('extraInput') || document.querySelector('input[name="extra"]');
+
+const resIngresos = document.getElementById('resumen_ingresos');
+const resDescuentos = document.getElementById('resumen_descuentos');
+const res70 = document.getElementById('resumen_70');
+const resLiquidez = document.getElementById('resumen_liquidez');
+
+const valPercepciones = document.getElementById('percepcionesInput');
+const valDeducciones = document.getElementById('deduccionesInput');
+const valLiquido = document.getElementById('liquidoInput');
+
+function recalcularRevisiones() {
+    if (!resIngresos) return; // Si no hay campos, salir
+    
+    let ingresos = 0;
+    let descuentos = 0;
+    
+    rfInputs.forEach(input => {
+        const val = parseFloat(input.value) || 0;
+        const name = input.name;
+        if (name === 'rf_D' || name === 'rf_DC') {
+            descuentos += val;
+        } else {
+            ingresos += val;
+        }
+    });
+    
+    const extra = parseFloat(extraInput ? extraInput.value : 0) || 0;
+    const prog = (tieneProgramados && tieneProgramados.value === "SI" && montoProgramados) ? (parseFloat(montoProgramados.value) || 0) : 0;
+    
+    const total70 = ingresos * 0.70;
+    const saldo70 = total70 - descuentos;
+    const finalLiquidez = saldo70 + extra - prog;
+    
+    // UI resúmenes
+    resIngresos.innerText = "$" + ingresos.toFixed(2);
+    resDescuentos.innerText = "-$" + descuentos.toFixed(2);
+    res70.innerText = "$" + saldo70.toFixed(2);
+    resLiquidez.innerText = "$" + finalLiquidez.toFixed(2);
+    
+    // Inputs ocultos que viajan por el form de seguridad (en caso de que el backend no lea rf_)
+    if(valPercepciones) valPercepciones.value = ingresos.toFixed(2);
+    if(valDeducciones) valDeducciones.value = descuentos.toFixed(2);
+    if(valLiquido) valLiquido.value = finalLiquidez.toFixed(2);
+}
+
+if (rfInputs.length > 0) {
+    rfInputs.forEach(input => input.addEventListener("input", recalcularRevisiones));
+    if(extraInput) extraInput.addEventListener("input", recalcularRevisiones);
+    if(montoProgramados) montoProgramados.addEventListener("input", recalcularRevisiones);
+    if(tieneProgramados) tieneProgramados.addEventListener("change", recalcularRevisiones);
+    
+    recalcularRevisiones();
 }
 </script>
 

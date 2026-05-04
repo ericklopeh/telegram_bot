@@ -22,3 +22,8 @@ app/storage/
 !app/services/storage/
 !app/services/storage/__init__.py
 !app/services/storage/local.py
+
+# Evidence and test files
+**/EVIDENCIAS/
+**/logo-nightrise.png
+*.pyc

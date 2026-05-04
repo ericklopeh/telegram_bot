@@ -41,3 +41,6 @@ class Case(Base):
     authorization_jobs = relationship(
         "AuthorizationJob", back_populates="case", cascade="all, delete-orphan"
     )
+    talon_reviews = relationship(
+        "TalonReview", back_populates="case", cascade="all, delete-orphan"
+    )

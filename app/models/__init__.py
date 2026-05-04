@@ -3,6 +3,7 @@ from app.models.case import Case
 from app.models.case_history import CaseHistory
 from app.models.document import Document
 from app.models.ocr_result import OcrResult
+from app.models.talon_review import TalonReview
 
 __all__ = [
     "AuthorizationJob",
@@ -10,4 +11,5 @@ __all__ = [
     "CaseHistory",
     "Document",
     "OcrResult",
+    "TalonReview",
 ]

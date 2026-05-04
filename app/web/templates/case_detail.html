@@ -111,17 +111,136 @@
                                 Subido el {{ doc.uploaded_at.strftime('%d/%m/%Y %H:%M') }}
                             </div>
 
-                            <div class="small mt-2">
-                                {% if doc.sharepoint_web_url %}
-                                    <a href="{{ doc.sharepoint_web_url }}" target="_blank" class="text-decoration-none">
-                                        Abrir en SharePoint
-                                    </a>
-                                {% else %}
-                                    <span class="text-muted font-monospace" style="font-size: 0.8em;">
-                                        Archivo local: {{ doc.file_path }}
-                                    </span>
+                            <div class="small mt-2 d-flex justify-content-between align-items-end">
+                                <div>
+                                    {% if doc.sharepoint_web_url %}
+                                        <a href="{{ doc.sharepoint_web_url }}" target="_blank" class="text-decoration-none">
+                                            Abrir en SharePoint
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted font-monospace" style="font-size: 0.8em;">
+                                            Archivo local: {{ doc.file_path }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+
+                                {% if doc.document_type in ['talon', 'revision_evidencia', 'revision', 'talón'] %}
+                                <div>
+                                    <form action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/procesar-ocr" method="POST" class="m-0">
+                                        <button type="submit" class="btn btn-sm btn-outline-dark">
+                                            Procesar OCR
+                                        </button>
+                                    </form>
+                                </div>
                                 {% endif %}
                             </div>
+
+                            {% if doc.ocr_results %}
+                            <div class="mt-3 p-2 bg-light border rounded small">
+                                <strong class="text-dark">Resultados OCR</strong>
+                                <ul class="list-unstyled mb-0 mt-1">
+                                {% for ocr in doc.ocr_results %}
+                                    <li class="mb-2 pb-2 border-bottom">
+                                        <span class="badge {% if ocr.review_status == 'processed' %}bg-success{% elif ocr.review_status == 'error' %}bg-danger{% elif ocr.review_status == 'pending' %}bg-warning text-dark{% else %}bg-info{% endif %}">
+                                            {{ ocr.review_status }}
+                                        </span>
+                                        <span class="text-muted ms-2">{{ ocr.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                                        
+                                        {% if ocr.parsed_json and ocr.review_status == 'processed' %}
+                                        <div class="mt-2 p-2 bg-white border rounded shadow-sm">
+                                            <div class="row g-1">
+                                                <div class="col-5 text-muted">Percepciones:</div>
+                                                <div class="col-7 fw-bold text-success text-end">
+                                                    {% if ocr.parsed_json.get('percepciones_total') %}${{ "{:,.2f}".format(ocr.parsed_json.get('percepciones_total')) }}{% else %}N/A{% endif %}
+                                                </div>
+                                                <div class="col-5 text-muted">Deducciones:</div>
+                                                <div class="col-7 fw-bold text-danger text-end">
+                                                    {% if ocr.parsed_json.get('deducciones_total') %}${{ "{:,.2f}".format(ocr.parsed_json.get('deducciones_total')) }}{% else %}N/A{% endif %}
+                                                </div>
+                                                <div class="col-12"><hr class="my-1"></div>
+                                                <div class="col-5 text-muted">Líquido:</div>
+                                                <div class="col-7 fw-bold text-end">
+                                                    {% if ocr.parsed_json.get('liquido') %}${{ "{:,.2f}".format(ocr.parsed_json.get('liquido')) }}{% else %}N/A{% endif %}
+                                                </div>
+                                            </div>
+
+                                            {% if ocr.parsed_json.get('capacity_codes') %}
+                                            <div class="mt-3 border-top pt-2">
+                                                <div class="fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-calculator"></i> Capacidad de pago detectada por OCR</div>
+                                                <div class="row g-1" style="font-size: 0.7rem;">
+                                                    <div class="col-6">
+                                                        <div class="text-muted border-bottom mb-1">Ingresos Base</div>
+                                                        {% for k, v in ocr.parsed_json.get('capacity_codes', {}).items() %}
+                                                            {% if k != 'D' and k != 'DC' and v > 0 %}
+                                                            <div class="d-flex justify-content-between">
+                                                                <span>{{ k }}</span>
+                                                                <span>${{ "{:,.2f}".format(v) }}</span>
+                                                            </div>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        <div class="d-flex justify-content-between fw-bold mt-1 border-top border-secondary pt-1">
+                                                            <span>Ingresos Válidos</span>
+                                                            <span class="text-success">${{ "{:,.2f}".format(ocr.parsed_json.get('capacity_income_total', 0)) }}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-6 border-start ps-2">
+                                                        <div class="text-muted border-bottom mb-1">Cálculo de Venta</div>
+                                                        <div class="d-flex justify-content-between">
+                                                            <span>Total Deds (D)</span>
+                                                            <span class="text-danger">-${{ "{:,.2f}".format(ocr.parsed_json.get('capacity_codes', {}).get('D', 0)) }}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between">
+                                                            <span>Saldo Real</span>
+                                                            <span class="fw-bold">${{ "{:,.2f}".format(ocr.parsed_json.get('saldo', 0)) }}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between mt-1 pt-1 border-top text-muted">
+                                                            <span>Válidos al 70%</span>
+                                                            <span>${{ "{:,.2f}".format(ocr.parsed_json.get('total_para_venta_70', 0)) }}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between fw-bold mt-1 border-top border-secondary pt-1">
+                                                            <span>Liquidez Final</span>
+                                                            <span class="text-primary">${{ "{:,.2f}".format(ocr.parsed_json.get('saldo_al_70', 0)) }}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <details class="mt-2">
+                                                    <summary class="text-muted" style="cursor:pointer; font-size: 0.7rem;">Ver todos los conceptos</summary>
+                                                    <div class="mt-1">
+                                                        <div class="text-success fw-bold" style="font-size:0.65rem">PERCEPCIONES:</div>
+                                                        {% for item in ocr.parsed_json.get('income_items', []) %}
+                                                        <div class="d-flex justify-content-between text-muted" style="font-size:0.65rem">
+                                                            <span>{{ item.code }} - {{ item.description[:20] }}...</span>
+                                                            <span>${{ "{:,.2f}".format(item.amount) }}</span>
+                                                        </div>
+                                                        {% endfor %}
+                                                        <div class="text-danger fw-bold mt-1" style="font-size:0.65rem">DEDUCCIONES:</div>
+                                                        {% for item in ocr.parsed_json.get('deduction_items', []) %}
+                                                        <div class="d-flex justify-content-between text-muted" style="font-size:0.65rem">
+                                                            <span>{{ item.code }} - {{ item.description[:20] }}...</span>
+                                                            <span>${{ "{:,.2f}".format(item.amount) }}</span>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                </details>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        {% elif ocr.parsed_json %}
+                                        <pre class="mt-1 mb-0 bg-white p-1 border text-secondary" style="font-size: 0.7rem; max-height: 100px; overflow-y: auto;">{{ ocr.parsed_json | tojson(indent=2) }}</pre>
+                                        {% endif %}
+
+                                        {% if ocr.raw_text %}
+                                        <details class="mt-2">
+                                            <summary class="text-muted" style="cursor:pointer; font-size: 0.75rem;">Ver texto extraído</summary>
+                                            <div class="mt-1 text-muted font-monospace bg-white border p-1" style="font-size: 0.7rem; max-height: 150px; overflow-y: auto; white-space: pre-wrap;">{{ ocr.raw_text }}</div>
+                                        </details>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -156,6 +275,33 @@
                 <button class="btn btn-outline-secondary" disabled>
                     Cambiar estatus
                 </button>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mt-4 border-warning">
+            <div class="card-header bg-warning text-dark fw-bold">
+                <i class="bi bi-bug"></i> Subir documento de prueba
+            </div>
+            <div class="card-body">
+                <form action="/casos/{{ caso.id }}/upload-document" method="POST" enctype="multipart/form-data">
+                    <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">Tipo de documento</label>
+                        <select name="document_type" class="form-select form-select-sm" required>
+                            <option value="talon">Talón</option>
+                            <option value="pedido">Pedido</option>
+                            <option value="orden_descuento">Orden de Descuento</option>
+                            <option value="caratula">Carátula Bancaria</option>
+                            <option value="revision_evidencia">Evidencia de Revisión</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Archivo local</label>
+                        <input type="file" name="file" class="form-control form-control-sm" required>
+                    </div>
+                    <button type="submit" class="btn btn-warning btn-sm w-100 fw-bold">
+                        Subir documento
+                    </button>
+                </form>
             </div>
         </div>
 
