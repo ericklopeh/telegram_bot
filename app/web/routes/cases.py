@@ -80,11 +80,20 @@ def detalle_caso(
         return RedirectResponse(url="/casos", status_code=302)
 
     from app.models.talon_review import TalonReview
+    from app.models.document import Document
+
     ultima_revision = (
         db.query(TalonReview)
         .filter(TalonReview.case_id == caso.id)
         .order_by(TalonReview.created_at.desc())
         .first()
+    )
+
+    documentos = (
+        db.query(Document)
+        .filter(Document.case_id == caso.id, Document.is_active == True)
+        .order_by(Document.uploaded_at.desc())
+        .all()
     )
 
     return templates.TemplateResponse(
@@ -94,5 +103,6 @@ def detalle_caso(
             "usuario": usuario,
             "caso": caso,
             "ultima_revision": ultima_revision,
+            "documentos": documentos,
         }
     )

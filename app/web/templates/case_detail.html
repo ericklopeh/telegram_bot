@@ -84,29 +84,43 @@
 
         <div class="card shadow-sm border-0 mt-4">
             <div class="card-header bg-white fw-bold">
-                Documentos
+                Documentos del caso
             </div>
 
             <div class="card-body">
-                {% if caso.documents %}
+                {% if documentos %}
                     <div class="list-group">
-                        {% for doc in caso.documents %}
+                        {% for doc in documentos %}
                         <div class="list-group-item">
-                            <div class="d-flex justify-content-between">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
                                 <strong>{{ doc.document_type }}</strong>
-                                {% if doc.is_active %}
-                                    <span class="badge bg-success">Activo</span>
+                                {% if doc.upload_status == 'UPLOADED' %}
+                                    <span class="badge bg-success">Subido</span>
+                                {% elif doc.upload_status == 'PENDING_UPLOAD' %}
+                                    <span class="badge bg-warning text-dark">Pendiente</span>
                                 {% else %}
-                                    <span class="badge bg-secondary">Reemplazado</span>
+                                    <span class="badge bg-danger">Error</span>
                                 {% endif %}
                             </div>
 
-                            <div class="small text-muted">
+                            <div class="small text-muted mb-1">
                                 {{ doc.original_filename or doc.stored_filename }}
                             </div>
 
-                            <div class="small text-muted font-monospace">
-                                {{ doc.file_path }}
+                            <div class="small text-muted mb-2">
+                                Subido el {{ doc.uploaded_at.strftime('%d/%m/%Y %H:%M') }}
+                            </div>
+
+                            <div class="small mt-2">
+                                {% if doc.sharepoint_web_url %}
+                                    <a href="{{ doc.sharepoint_web_url }}" target="_blank" class="text-decoration-none">
+                                        Abrir en SharePoint
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted font-monospace" style="font-size: 0.8em;">
+                                        Archivo local: {{ doc.file_path }}
+                                    </span>
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
