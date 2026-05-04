@@ -5,9 +5,10 @@ from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from decimal import Decimal
 from app.db.session import get_db_session
 from app.models.case import Case
-from app.web.services.revision_talon_calculator import calcular_revision_talon
+from app.web.services.talon_review_service import guardar_revision_talon
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
@@ -71,12 +72,12 @@ def revision_talon_get(
 def revision_talon_post(
     case_id: int,
     request: Request,
-    percepciones: float = Form(0),
-    deducciones: float = Form(0),
-    liquido: float = Form(0),
-    extra: float = Form(0),
+    percepciones: Decimal = Form(Decimal("0")),
+    deducciones: Decimal = Form(Decimal("0")),
+    liquido: Decimal = Form(Decimal("0")),
+    extra: Decimal = Form(Decimal("0")),
     tiene_programados: str = Form("NO"),
-    monto_programados: float = Form(0),
+    monto_programados: Decimal = Form(Decimal("0")),
     db: Session = Depends(get_web_db),
 ):
     redirect = require_login(request)
@@ -91,30 +92,16 @@ def revision_talon_post(
 
     tiene_programados_bool = tiene_programados == "SI"
 
-    resultado = calcular_revision_talon(
+    guardar_revision_talon(
+        db=db,
+        case=caso,
         percepciones=percepciones,
         deducciones=deducciones,
+        liquido=liquido,
         extra=extra,
         tiene_programados=tiene_programados_bool,
         monto_programados=monto_programados,
+        usuario_nombre=usuario.get("nombre", "web_user")
     )
 
-    form_data = {
-        "percepciones": percepciones,
-        "deducciones": deducciones,
-        "liquido": liquido,
-        "extra": extra,
-        "tiene_programados": tiene_programados,
-        "monto_programados": monto_programados,
-    }
-
-    return templates.TemplateResponse(
-        request=request,
-        name="revision_talon.html",
-        context={
-            "usuario": usuario,
-            "caso": caso,
-            "resultado": resultado,
-            "form_data": form_data,
-        },
-    )
+    return RedirectResponse(url=f"/casos/{case_id}", status_code=302)

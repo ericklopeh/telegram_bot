@@ -79,11 +79,20 @@ def detalle_caso(
     if usuario["rol"] == "vendedor" and caso.seller_name != usuario["nombre"]:
         return RedirectResponse(url="/casos", status_code=302)
 
+    from app.models.talon_review import TalonReview
+    ultima_revision = (
+        db.query(TalonReview)
+        .filter(TalonReview.case_id == caso.id)
+        .order_by(TalonReview.created_at.desc())
+        .first()
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
         context={
             "usuario": usuario,
             "caso": caso,
+            "ultima_revision": ultima_revision,
         }
     )

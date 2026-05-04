@@ -145,6 +145,53 @@
             </div>
         </div>
 
+        {% if ultima_revision %}
+        <div class="card shadow-sm border-0 mt-4">
+            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                <span>Última revisión de talón</span>
+                {% if ultima_revision.resultado == 'APTO' %}
+                    <span class="badge bg-success">APTO</span>
+                {% else %}
+                    <span class="badge bg-danger">NO APTO</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row g-2 small">
+                    <div class="col-6 text-muted">Percepciones</div>
+                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.percepciones) }}</div>
+                    
+                    <div class="col-6 text-muted">Deducciones</div>
+                    <div class="col-6 text-end text-danger">-${{ "{:,.2f}".format(ultima_revision.deducciones) }}</div>
+                    
+                    <div class="col-6 text-muted">Líquido</div>
+                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.liquido or 0) }}</div>
+                    
+                    <div class="col-12"><hr class="my-1"></div>
+                    
+                    <div class="col-6 text-muted">Total al 70%</div>
+                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.total_70) }}</div>
+                    
+                    <div class="col-6 text-muted">Saldo al 70%</div>
+                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.saldo_70) }}</div>
+                    
+                    <div class="col-6 text-muted">Extra</div>
+                    <div class="col-6 text-end text-success">+${{ "{:,.2f}".format(ultima_revision.extra) }}</div>
+                    
+                    <div class="col-6 text-muted">Programados</div>
+                    <div class="col-6 text-end text-danger">-${{ "{:,.2f}".format(ultima_revision.monto_programados) }}</div>
+                    
+                    <div class="col-12"><hr class="my-1"></div>
+                    
+                    <div class="col-6 fw-bold">Liquidez Final</div>
+                    <div class="col-6 text-end fw-bold">${{ "{:,.2f}".format(ultima_revision.liquidez_final) }}</div>
+                </div>
+                <div class="text-muted mt-3" style="font-size: 0.75rem;">
+                    Calculado el {{ ultima_revision.created_at.strftime('%d/%m/%Y %H:%M') }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card shadow-sm border-0 mt-4">
             <div class="card-header bg-white fw-bold">
                 Historial
