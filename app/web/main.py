@@ -4,14 +4,18 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
+from app.config import get_settings
 from app.web.routes import dashboard, cases, revision_talon
 
 
 web_app = FastAPI(title="Sistema Gaman Web")
+settings = get_settings()
 
 web_app.add_middleware(
     SessionMiddleware,
-    secret_key="CAMBIA_ESTA_CLAVE_DEMO_GAMAN_2026"
+    secret_key=settings.web_session_secret,
+    same_site="lax",
+    https_only=False,
 )
 
 web_app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
@@ -58,9 +62,11 @@ def login_post(
             )
 
         request.session["usuario"] = {
+            "id": usuario.id,
+            "user_id": usuario.id,
             "username": usuario.username,
             "nombre": usuario.nombre,
-            "rol": usuario.role,
+            "rol": getattr(usuario.role, "value", usuario.role),
         }
 
     return RedirectResponse(url="/dashboard", status_code=302)

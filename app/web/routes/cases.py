@@ -10,20 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
 from app.models.case import Case
+from app.web.auth import get_current_user, require_login
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
-
-
-def get_current_user(request: Request):
-    return request.session.get("usuario")
-
-
-def require_login(request: Request):
-    usuario = get_current_user(request)
-    if not usuario:
-        return RedirectResponse(url="/login", status_code=302)
-    return None
 
 
 def get_web_db() -> Generator[Session, None, None]:
@@ -39,11 +29,11 @@ def listar_casos(
     request: Request,
     db: Session = Depends(get_web_db),
 ):
-    redirect = require_login(request)
+    redirect = require_login(request, db)
     if redirect:
         return redirect
 
-    usuario = get_current_user(request)
+    usuario = get_current_user(request, db)
 
     query = db.query(Case)
 
@@ -68,11 +58,11 @@ def detalle_caso(
     request: Request,
     db: Session = Depends(get_web_db),
 ):
-    redirect = require_login(request)
+    redirect = require_login(request, db)
     if redirect:
         return redirect
 
-    usuario = get_current_user(request)
+    usuario = get_current_user(request, db)
 
     caso = db.query(Case).filter(Case.id == case_id).first()
 
@@ -119,11 +109,11 @@ def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_web_db),
 ):
-    redirect = require_login(request)
+    redirect = require_login(request, db)
     if redirect:
         return redirect
 
-    usuario = get_current_user(request)
+    usuario = get_current_user(request, db)
     caso = db.query(Case).filter(Case.id == case_id).first()
 
     if not caso:
@@ -186,11 +176,11 @@ def procesar_ocr_route(
     return_to: str = Form(None),
     db: Session = Depends(get_web_db),
 ):
-    redirect = require_login(request)
+    redirect = require_login(request, db)
     if redirect:
         return redirect
 
-    usuario = get_current_user(request)
+    usuario = get_current_user(request, db)
     
     caso = db.query(Case).filter(Case.id == case_id).first()
     if not caso:
@@ -239,7 +229,7 @@ def ver_documento_route(
     request: Request,
     db: Session = Depends(get_web_db)
 ):
-    redirect = require_login(request)
+    redirect = require_login(request, db)
     if redirect:
         return redirect
 

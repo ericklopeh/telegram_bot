@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # SQLAlchemy / Alembic (obligatoria). Preferir postgresql+psycopg:// (psycopg3). Host `db` en Compose; `localhost` si el cliente corre en Windows contra el puerto publicado.
     database_url: str = Field(..., alias="DATABASE_URL")
+    web_session_secret: str = Field(default="CAMBIA_ESTA_CLAVE_DEMO_GAMAN_2026", alias="WEB_SESSION_SECRET")
 
     # Usadas por docker-compose para el servicio `db` (deben coincidir con usuario/clave/base en DATABASE_URL).
     postgres_db: str = Field(default="bot_gaman", alias="POSTGRES_DB")

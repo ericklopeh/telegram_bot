@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.models.user import User
+from app.models.user import User, UserRole
 
 
 class UserRepository:
@@ -15,6 +15,30 @@ class UserRepository:
     @staticmethod
     def get_by_telegram_id(db: Session, telegram_id: int) -> User | None:
         return db.query(User).filter(User.telegram_id == telegram_id).first()
+
+    @staticmethod
+    def get_active_by_telegram_id(db: Session, telegram_id: int) -> User | None:
+        return (
+            db.query(User)
+            .filter(
+                User.telegram_id == telegram_id,
+                User.is_active.is_(True),
+            )
+            .first()
+        )
+
+    @staticmethod
+    def list_active_admins_with_telegram_id(db: Session) -> list[User]:
+        admin_roles = [UserRole.ADMIN.value, UserRole.SISTEMAS.value]
+        return (
+            db.query(User)
+            .filter(
+                User.telegram_id.isnot(None),
+                User.is_active.is_(True),
+                User.role.in_(admin_roles),
+            )
+            .all()
+        )
 
     @staticmethod
     def create(db: Session, user: User) -> User:

@@ -24,8 +24,10 @@ from app.db.session import session_scope
 from app.domain import constants as C
 from app.domain.constants import checklist_lines, doc_type_label
 from app.models.case import Case
+from app.models.user import User, UserRole
 from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.user_repository import UserRepository
 from app.services.case_service import CaseService
 from app.services.microsoft_graph import upload_document_to_sharepoint
 from app.services.sharepoint_retry_queue import (
@@ -137,20 +139,46 @@ async def _upload_document_background(
         )
 
 
+def _get_active_bot_user(update: Update) -> User | None:
+    telegram_user = update.effective_user
+    if not telegram_user:
+        return None
+
+    try:
+        with session_scope() as db:
+            usuario = UserRepository.get_active_by_telegram_id(db, telegram_user.id)
+            if usuario:
+                return usuario
+
+            inactive_or_missing = UserRepository.get_by_telegram_id(db, telegram_user.id)
+            if inactive_or_missing:
+                log.warning(
+                    "Usuario Telegram inactivo",
+                    extra={"telegram_id": telegram_user.id, "username": inactive_or_missing.username},
+                )
+                return None
+
+            log.warning("Usuario Telegram no autorizado", extra={"telegram_id": telegram_user.id})
+            return None
+    except Exception:
+        log.exception("Error validando usuario Telegram", extra={"telegram_id": telegram_user.id})
+        return None
+
+
 def _is_admin(update: Update) -> bool:
-    user = update.effective_user
-    if not user:
+    usuario = _get_active_bot_user(update)
+    if not usuario:
         return False
-    admins = get_settings().admin_user_ids_set
-    return True if not admins else user.id in admins
+    role = getattr(usuario.role, "value", usuario.role)
+    return role in {UserRole.ADMIN.value, UserRole.SISTEMAS.value}
 
 
 def _is_seller(update: Update) -> bool:
-    user = update.effective_user
-    if not user:
+    usuario = _get_active_bot_user(update)
+    if not usuario:
         return False
-    sellers = get_settings().seller_user_ids_set
-    return True if not sellers else user.id in sellers
+    role = getattr(usuario.role, "value", usuario.role)
+    return role == UserRole.VENDEDOR.value
 
 
 def _main_keyboard_for(update: Update) -> ReplyKeyboardMarkup:
@@ -299,11 +327,16 @@ async def notificar_admin_alertas(
     evento: str,
     detalle: str | None = None,
 ) -> None:
-    settings = get_settings()
-    targets: set[int] = set(settings.admin_user_ids_set)
-    if settings.chat_id_admin_alerts:
-        targets.add(settings.chat_id_admin_alerts)
+    try:
+        with session_scope() as db:
+            admins = UserRepository.list_active_admins_with_telegram_id(db)
+            targets: set[int] = {admin.telegram_id for admin in admins if admin.telegram_id is not None}
+    except Exception:
+        log.exception("Error consultando admins activos para alerta", extra={"public_id": case.public_id})
+        return
+
     if not targets:
+        log.warning("Alerta admin sin admins configurados", extra={"public_id": case.public_id, "evento": evento})
         return
 
     mensaje = (
