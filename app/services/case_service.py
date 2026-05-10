@@ -175,6 +175,24 @@ class CaseService:
         CaseRepository.save(db, case)
         return case
 
+    def group_action_requires_reason(self, action: str) -> str | None:
+        reason_required = {
+            "ped_rechazar": C.ST_PED_RECHAZADO,
+            "ped_corregir": C.ST_PED_CORRECCION,
+            "com_noprocede": C.ST_PED_RECHAZADO,
+        }
+        return reason_required.get(action)
+
+    def group_action_transition(self, action: str) -> tuple[str, str] | None:
+        action_map = {
+            "ped_aprobar": (C.ST_PED_EN_COMPULSA, "Aprobado en pedidos"),
+            "com_ok": (C.ST_PED_COMPULSA_OK, "Compulsa OK"),
+            "com_pendiente": (C.ST_PED_PEND_COMPULSA, "Pendiente de compulsa"),
+            "com_compra": (C.ST_PED_COMPRA, "Compra realizada"),
+            "com_editar": (C.ST_PED_EN_COMPULSA, "Compulsa reabierta para edición"),
+        }
+        return action_map.get(action)
+
     def transition_pedido_status(self, db: Session, case: Case, new_status: str, notes: str | None = None) -> Case:
         old = case.current_status
         case.current_status = new_status

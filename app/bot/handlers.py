@@ -1078,34 +1078,25 @@ async def handle_group_callbacks(update: Update, context: ContextTypes.DEFAULT_T
         return
     action, case_id = data.split("|", 1)
     actor = _actor_name(update)
+    svc = _case_service()
 
-    reason_required = {
-        "ped_rechazar": C.ST_PED_RECHAZADO,
-        "ped_corregir": C.ST_PED_CORRECCION,
-        "com_noprocede": C.ST_PED_RECHAZADO,
-    }
-    if action in reason_required:
+    pending_status = svc.group_action_requires_reason(action)
+    if pending_status:
         session = _get_session(update, context)
         session["state"] = "waiting_group_reason"
         session["pending_case_id"] = case_id
-        session["pending_status"] = reason_required[action]
+        session["pending_status"] = pending_status
         await query.message.reply_text(
             "Escribe el motivo para esta acción (obligatorio):",
             reply_markup=_main_keyboard_for(update),
         )
         return
 
-    action_map = {
-        "ped_aprobar": (C.ST_PED_EN_COMPULSA, "Aprobado en pedidos"),
-        "com_ok": (C.ST_PED_COMPULSA_OK, "Compulsa OK"),
-        "com_pendiente": (C.ST_PED_PEND_COMPULSA, "Pendiente de compulsa"),
-        "com_compra": (C.ST_PED_COMPRA, "Compra realizada"),
-        "com_editar": (C.ST_PED_EN_COMPULSA, "Compulsa reabierta para edición"),
-    }
-    if action not in action_map:
+    transition = svc.group_action_transition(action)
+    if not transition:
         return
 
-    new_status, note = action_map[action]
+    new_status, note = transition
     try:
         with session_scope() as db:
             case = CaseRepository.get_by_public_id(db, case_id)
