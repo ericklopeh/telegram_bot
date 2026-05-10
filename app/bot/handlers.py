@@ -29,7 +29,6 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.user_repository import UserRepository
 from app.services.case_service import CaseService
 from app.services.document_service import DocumentService, StoredIncomingFile
-from app.services.microsoft_graph import upload_document_to_sharepoint
 from app.services.notification_service import (
     notificar_admin_alertas,
     notificar_grupo_compulsas,
@@ -38,8 +37,9 @@ from app.services.notification_service import (
     run_compulsa_reminder_job,
     run_sla_watchdog_job,
 )
+from app.services.microsoft_graph import upload_document_to_sharepoint
+from app.services.sharepoint_document_service import SharePointDocumentService, SharePointUploadPayload
 from app.services.sharepoint_retry_queue import (
-    enqueue_failed_upload,
     list_retry_items,
     remove_retry_item,
     update_retry_item,
@@ -79,31 +79,19 @@ async def _upload_document_background(
     tipo_documento: str,
     filename: str,
 ) -> None:
+    payload = SharePointUploadPayload(
+        document_id=document_id,
+        file_path=file_path,
+        vendedor=vendedor,
+        semana=semana,
+        cliente=cliente,
+        folio=folio,
+        tipo_documento=tipo_documento,
+        filename=filename,
+    )
+    service = SharePointDocumentService()
     try:
-        file_bytes = Path(file_path).read_bytes()
-        result = upload_document_to_sharepoint(
-            vendedor=vendedor,
-            semana=semana,
-            cliente=cliente,
-            folio=folio,
-            tipo_documento=tipo_documento,
-            filename=filename,
-            file_bytes=file_bytes,
-        )
-        with session_scope() as db:
-            DocumentRepository.set_upload_uploaded(db, document_id, result.get("webUrl"))
-        log.info(
-            "Documento subido a SharePoint",
-            extra={
-                "document_id": document_id,
-                "vendedor": vendedor,
-                "folio": folio,
-                "cliente": cliente,
-                "tipo_documento": tipo_documento,
-                "ruta_final": result.get("folder_path"),
-                "webUrl": result.get("webUrl"),
-            },
-        )
+        service.upload_document(payload)
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
@@ -112,31 +100,7 @@ async def _upload_document_background(
             ),
             reply_markup=SELLER_MAIN_KEYBOARD,
         )
-    except Exception as exc:
-        with session_scope() as db:
-            DocumentRepository.set_upload_failed(db, document_id, str(exc))
-        enqueue_failed_upload(
-            file_path=file_path,
-            vendedor=vendedor,
-            semana=semana,
-            cliente=cliente,
-            folio=folio,
-            tipo_documento=tipo_documento,
-            filename=filename,
-            document_id=document_id,
-            error=str(exc),
-        )
-        log.exception(
-            "Error subiendo documento a SharePoint en background",
-            extra={
-                "document_id": document_id,
-                "vendedor": vendedor,
-                "folio": folio,
-                "cliente": cliente,
-                "tipo_documento": tipo_documento,
-                "file_name_info": filename,
-            },
-        )
+    except Exception:
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
