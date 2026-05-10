@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -34,7 +34,8 @@ from app.services.notification_service import (
     notificar_grupo_compulsas,
     notificar_grupo_pedidos,
     notificar_vendedor_estado,
-    pending_note,
+    run_compulsa_reminder_job,
+    run_sla_watchdog_job,
 )
 from app.services.sharepoint_retry_queue import (
     enqueue_failed_upload,
@@ -50,10 +51,6 @@ from app.utils.case_display import (
 from app.utils.naming import sanitize_name
 
 log = logging.getLogger(__name__)
-
-last_compulsa_reminder: dict[str, datetime] = {}
-last_sla_alert: dict[str, datetime] = {}
-
 
 def _get_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> dict:
     if getattr(context, "chat_data", None) is not None:
@@ -260,26 +257,7 @@ async def _enforce_business_hours(update: Update) -> bool:
 
 
 async def compulsa_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    settings = get_settings()
-    if not settings.chat_id_compulsas:
-        return
-    threshold = timedelta(minutes=max(settings.compulsa_reminder_minutes, 1))
-    now = datetime.utcnow()
-    try:
-        with session_scope() as db:
-            pending_cases = CaseRepository.get_pendiente_compulsa(db)
-            for case in pending_cases:
-                last_sent = last_compulsa_reminder.get(case.public_id)
-                if last_sent and (now - last_sent) < threshold:
-                    continue
-                await context.bot.send_message(
-                    chat_id=settings.chat_id_compulsas,
-                    text=f"⏰ {pending_note(case)}",
-                    reply_markup=keyboard_compulsas(case.public_id),
-                )
-                last_compulsa_reminder[case.public_id] = now
-    except Exception:
-        log.exception("Error enviando recordatorios de compulsa")
+    await run_compulsa_reminder_job(context)
 
 
 async def sharepoint_retry_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -347,30 +325,7 @@ async def sharepoint_retry_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def sla_watchdog_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    settings = get_settings()
-    interval = timedelta(minutes=max(settings.sla_alert_interval_minutes, 1))
-    now = datetime.utcnow()
-
-    sla_rules: list[tuple[str, tuple[str, ...], int]] = [
-        ("revision", (C.ST_REV_RECIBIDO, C.ST_REV_EN_REVISION, C.ST_REV_CORRECCION), settings.sla_revision_minutes),
-        ("autorizacion", (C.ST_PED_PREP_AUT,), settings.sla_autorizacion_minutes),
-        ("compulsa", (C.ST_PED_PEND_COMPULSA,), settings.sla_compulsa_minutes),
-    ]
-    try:
-        with session_scope() as db:
-            for stage_name, statuses, minutes in sla_rules:
-                cutoff = now - timedelta(minutes=max(minutes, 1))
-                overdue_cases = CaseRepository.list_cases_in_status_before(db, statuses, cutoff)
-                for case in overdue_cases:
-                    key = f"{stage_name}:{case.public_id}"
-                    last = last_sla_alert.get(key)
-                    if last and (now - last) < interval:
-                        continue
-                    detail = f"Etapa: {stage_name}. Superó SLA de {minutes} min."
-                    await notificar_admin_alertas(context, case, evento="SLA vencido", detalle=detail)
-                    last_sla_alert[key] = now
-    except Exception:
-        log.exception("Error en SLA watchdog")
+    await run_sla_watchdog_job(context)
 
 
 async def admin_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from telegram.ext import ContextTypes
 
@@ -10,7 +11,9 @@ from app.bot.keyboards import (
 )
 from app.config import get_settings
 from app.db.session import session_scope
+from app.domain import constants as C
 from app.models.case import Case
+from app.repositories.case_repository import CaseRepository
 from app.repositories.user_repository import UserRepository
 from app.utils.case_display import (
     format_case_primary_label,
@@ -18,6 +21,9 @@ from app.utils.case_display import (
 )
 
 log = logging.getLogger(__name__)
+
+last_compulsa_reminder: dict[str, datetime] = {}
+last_sla_alert: dict[str, datetime] = {}
 
 
 def pending_note(case: Case) -> str:
@@ -122,3 +128,53 @@ async def notificar_admin_alertas(
             await context.bot.send_message(chat_id=target, text=mensaje)
         except Exception:
             log.exception("Error enviando alerta admin", extra={"chat_id": target, "public_id": case.public_id})
+
+
+async def run_compulsa_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = get_settings()
+    if not settings.chat_id_compulsas:
+        return
+    threshold = timedelta(minutes=max(settings.compulsa_reminder_minutes, 1))
+    now = datetime.utcnow()
+    try:
+        with session_scope() as db:
+            pending_cases = CaseRepository.get_pendiente_compulsa(db)
+            for case in pending_cases:
+                last_sent = last_compulsa_reminder.get(case.public_id)
+                if last_sent and (now - last_sent) < threshold:
+                    continue
+                await context.bot.send_message(
+                    chat_id=settings.chat_id_compulsas,
+                    text=f"⏰ {pending_note(case)}",
+                    reply_markup=keyboard_compulsas(case.public_id),
+                )
+                last_compulsa_reminder[case.public_id] = now
+    except Exception:
+        log.exception("Error enviando recordatorios de compulsa")
+
+
+async def run_sla_watchdog_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = get_settings()
+    interval = timedelta(minutes=max(settings.sla_alert_interval_minutes, 1))
+    now = datetime.utcnow()
+
+    sla_rules: list[tuple[str, tuple[str, ...], int]] = [
+        ("revision", (C.ST_REV_RECIBIDO, C.ST_REV_EN_REVISION, C.ST_REV_CORRECCION), settings.sla_revision_minutes),
+        ("autorizacion", (C.ST_PED_PREP_AUT,), settings.sla_autorizacion_minutes),
+        ("compulsa", (C.ST_PED_PEND_COMPULSA,), settings.sla_compulsa_minutes),
+    ]
+    try:
+        with session_scope() as db:
+            for stage_name, statuses, minutes in sla_rules:
+                cutoff = now - timedelta(minutes=max(minutes, 1))
+                overdue_cases = CaseRepository.list_cases_in_status_before(db, statuses, cutoff)
+                for case in overdue_cases:
+                    key = f"{stage_name}:{case.public_id}"
+                    last = last_sla_alert.get(key)
+                    if last and (now - last) < interval:
+                        continue
+                    detail = f"Etapa: {stage_name}. Superó SLA de {minutes} min."
+                    await notificar_admin_alertas(context, case, evento="SLA vencido", detalle=detail)
+                    last_sla_alert[key] = now
+    except Exception:
+        log.exception("Error en SLA watchdog")
