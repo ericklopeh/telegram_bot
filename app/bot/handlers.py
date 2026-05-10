@@ -43,9 +43,14 @@ from app.utils.naming import sanitize_name
 
 log = logging.getLogger(__name__)
 
-user_sessions: dict[int, dict] = {}
 last_compulsa_reminder: dict[str, datetime] = {}
 last_sla_alert: dict[str, datetime] = {}
+
+
+def _get_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> dict:
+    if getattr(context, "chat_data", None) is not None:
+        return context.chat_data
+    return {}
 
 
 def _case_service() -> CaseService:
@@ -119,7 +124,7 @@ async def _upload_document_background(
                 "folio": folio,
                 "cliente": cliente,
                 "tipo_documento": tipo_documento,
-                "filename": filename,
+                "file_name_info": filename,
             },
         )
         await context.bot.send_message(
@@ -433,11 +438,40 @@ async def sla_watchdog_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("Error en SLA watchdog")
 
 
+async def admin_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        await update.message.reply_text("No tienes permisos de administrador.")
+        return
+
+    try:
+        from app.db.session import session_scope
+        from app.models.bot_chat_data import BotChatData
+
+        with session_scope() as db:
+            rows = db.query(BotChatData).all()
+        
+        if not rows:
+            await update.message.reply_text("📭 No hay sesiones activas en PostgreSQL.")
+            return
+
+        lines = ["📊 *Sesiones activas en BD:*"]
+        for r in rows:
+            state = r.data.get("state", "N/A")
+            flow = r.data.get("flow", "N/A")
+            lines.append(f"• Chat ID: `{r.chat_id}` | Flujo: `{flow}` | Estado: `{state}`")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    except Exception as e:
+        log.exception("Error consultando sesiones en BD")
+        await update.message.reply_text("Error consultando sesiones.")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _enforce_business_hours(update):
         return
     if update.effective_chat:
-        user_sessions[update.effective_chat.id] = {}
+        session = _get_session(update, context)
+        session.clear()
     await update.message.reply_text(
         "Hola. Selecciona una opción:",
         reply_markup=_main_keyboard_for(update),
@@ -498,10 +532,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     chat_id = update.effective_chat.id
     text = update.message.text.strip()
 
-    if chat_id not in user_sessions:
-        user_sessions[chat_id] = {}
-
-    session = user_sessions[chat_id]
+    session = _get_session(update, context)
     state = session.get("state")
 
     is_admin = _is_admin(update)
@@ -722,14 +753,13 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     chat_id = update.effective_chat.id
 
-    if chat_id not in user_sessions:
+    session = _get_session(update, context)
+    if not session:
         await update.message.reply_text(
             "Primero selecciona una opción del menú.",
             reply_markup=_main_keyboard_for(update),
         )
         return
-
-    session = user_sessions[chat_id]
     state = session.get("state")
 
     if state == "waiting_revision_file":
@@ -973,9 +1003,7 @@ async def handle_revision_callback(update: Update, context: ContextTypes.DEFAULT
     data = query.data or ""
     if not data.startswith("rv|"):
         return
-    if chat_id not in user_sessions:
-        user_sessions[chat_id] = {}
-    session = user_sessions[chat_id]
+    session = _get_session(update, context)
     if session.get("state") != "waiting_revision_resolution_choice":
         await query.answer("Flujo de revisión no activo.", show_alert=True)
         return
@@ -1041,15 +1069,14 @@ async def handle_pedido_doc_callback(update: Update, context: ContextTypes.DEFAU
     if not data.startswith("pd|"):
         return
 
-    if chat_id not in user_sessions:
+    session = _get_session(update, context)
+    if not session:
         await query.answer("Sesión expirada.", show_alert=True)
         try:
             await query.edit_message_text("Sesión expirada. Usa el menú de nuevo.")
         except Exception:
             pass
         return
-
-    session = user_sessions[chat_id]
     parts = data.split("|")
     if len(parts) < 2:
         await query.answer()
@@ -1170,7 +1197,7 @@ async def handle_group_callbacks(update: Update, context: ContextTypes.DEFAULT_T
         "com_noprocede": C.ST_PED_RECHAZADO,
     }
     if action in reason_required:
-        session = user_sessions.setdefault(update.effective_chat.id, {})
+        session = _get_session(update, context)
         session["state"] = "waiting_group_reason"
         session["pending_case_id"] = case_id
         session["pending_status"] = reason_required[action]
@@ -1237,7 +1264,7 @@ async def handle_dictamen_revision_pick_callback(
         return
     public_id = query.data.split("|", 1)[1]
     chat_id = update.effective_chat.id
-    session = user_sessions.setdefault(chat_id, {})
+    session = _get_session(update, context)
     if session.get("state") != "waiting_revision_resolution_pick":
         await query.answer("Abre primero «Dictaminar revisión» en el menú.", show_alert=True)
         return

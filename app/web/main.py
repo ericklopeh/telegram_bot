@@ -41,45 +41,27 @@ def login_post(
     username: str = Form(...),
     password: str = Form(...)
 ):
-    usuarios_demo = {
-        "admin": {
-            "password": "Admin2026!",
-            "nombre": "Administrador",
-            "rol": "admin"
-        },
-        "jefe": {
-            "password": "Jefe2026!",
-            "nombre": "Gerencia",
-            "rol": "jefe"
-        },
-        "autorizaciones": {
-            "password": "Auto2026!",
-            "nombre": "Autorizaciones",
-            "rol": "autorizaciones"
-        },
-        "vendedor": {
-            "password": "Vend2026!",
-            "nombre": "Vendedor Demo",
-            "rol": "vendedor"
-        },
-    }
+    from app.db.session import session_scope
+    from app.repositories.user_repository import UserRepository
+    from app.services.auth_service import AuthService
 
-    usuario = usuarios_demo.get(username)
+    with session_scope() as db:
+        usuario = UserRepository.get_by_username(db, username)
 
-    if not usuario or usuario["password"] != password:
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={
-                "error": "Usuario o contraseña incorrectos",
-            }
-        )
+        if not usuario or not AuthService.verify_password(password, usuario.hashed_password) or not usuario.is_active:
+            return templates.TemplateResponse(
+                request=request,
+                name="login.html",
+                context={
+                    "error": "Usuario o contraseña incorrectos",
+                }
+            )
 
-    request.session["usuario"] = {
-        "username": username,
-        "nombre": usuario["nombre"],
-        "rol": usuario["rol"],
-    }
+        request.session["usuario"] = {
+            "username": usuario.username,
+            "nombre": usuario.nombre,
+            "rol": usuario.role,
+        }
 
     return RedirectResponse(url="/dashboard", status_code=302)
 

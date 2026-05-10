@@ -13,6 +13,7 @@ from telegram.ext import (
 )
 
 from app.bot.handlers import (
+    admin_sessions,
     compulsa_reminder_job,
     error_handler,
     handle_callbacks,
@@ -22,6 +23,7 @@ from app.bot.handlers import (
     sla_watchdog_job,
     start,
 )
+from app.bot.persistence import PostgresPersistence
 from app.config import get_settings
 from app.utils.logging_config import configure_logging
 
@@ -46,9 +48,10 @@ def main() -> None:
         Path(settings.effective_pedidos_path).mkdir(parents=True, exist_ok=True)
         Path(settings.effective_revisiones_path).mkdir(parents=True, exist_ok=True)
 
-        app = ApplicationBuilder().token(token).build()
+        app = ApplicationBuilder().token(token).persistence(PostgresPersistence()).build()
         app.add_error_handler(error_handler)
         app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("sessions", admin_sessions))
         app.add_handler(CallbackQueryHandler(handle_callbacks))
         app.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, handle_files))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
