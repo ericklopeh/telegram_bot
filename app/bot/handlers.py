@@ -28,7 +28,7 @@ from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.user_repository import UserRepository
 from app.services.case_service import CaseService
-from app.services.document_service import DocumentService
+from app.services.document_service import DocumentService, StoredIncomingFile
 from app.services.microsoft_graph import upload_document_to_sharepoint
 from app.services.notification_service import (
     notificar_admin_alertas,
@@ -761,14 +761,10 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     await update.message.reply_text("No se recibió imagen válida.", reply_markup=_main_keyboard_for(update))
                     return
                 svc = _case_service()
-                svc.register_pedido_document(
+                doc_svc.register_revision_dictamen_upload(
                     db,
                     case,
-                    C.DOC_REVISION_DICTAMEN,
-                    nombre,
-                    path_str,
-                    orig,
-                    mime,
+                    StoredIncomingFile(nombre, path_str, orig, mime),
                 )
                 svc.transition_case_status(
                     db,
@@ -823,17 +819,13 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         "No se recibió un archivo válido (documento o foto).",
                     )
                     return
-                document = svc.register_pedido_document(
+                document, present = doc_svc.register_pedido_document_upload(
                     db,
                     case,
                     doc_type,
-                    nombre,
-                    path_str,
-                    orig,
-                    mime,
+                    StoredIncomingFile(nombre, path_str, orig, mime),
                 )
                 document_id = document.id
-                DocumentRepository.set_upload_pending(db, document_id)
                 svc.transition_case_status(
                     db,
                     case,
@@ -842,7 +834,6 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     action_user=seller,
                 )
                 db.refresh(case)
-                present = DocumentRepository.get_active_types_for_case(db, case.id)
                 vendedor = case.seller_name or seller or "SIN VENDEDOR"
                 semana = case.week_code
                 cliente_case = case.client_name
