@@ -28,6 +28,7 @@ from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.user_repository import UserRepository
 from app.services.case_service import CaseService
+from app.services.document_service import DocumentService
 from app.services.microsoft_graph import upload_document_to_sharepoint
 from app.services.notification_service import (
     notificar_admin_alertas,
@@ -60,6 +61,10 @@ def _get_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> dict:
 
 def _case_service() -> CaseService:
     return CaseService(get_settings())
+
+
+def _document_service() -> DocumentService:
+    return DocumentService()
 
 
 async def _upload_document_background(
@@ -659,11 +664,12 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             with session_scope() as db:
                 folio = CaseRepository.next_revision_temp_folio(db)
             svc = _case_service()
+            doc_svc = _document_service()
             _root, evidencias = svc.ensure_revision_directories(folio, cliente)
             nombre, path_str, orig, mime = await save_incoming_file(
                 update,
                 evidencias,
-                prefijo=f"{folio} {cliente} - REVISION",
+                prefijo=doc_svc.revision_evidence_prefix(folio, cliente),
             )
             if not nombre:
                 await update.message.reply_text(
@@ -744,11 +750,12 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     await update.message.reply_text("Caso no encontrado.", reply_markup=_main_keyboard_for(update))
                     session.clear()
                     return
-                revision_path = Path(case.folder_path) / "REVISION"
+                doc_svc = _document_service()
+                revision_path = doc_svc.revision_dictamen_dir(case)
                 nombre, path_str, orig, mime = await save_incoming_file(
                     update,
                     revision_path,
-                    prefijo=f"{case.public_id} {case.client_name} - DICTAMEN",
+                    prefijo=doc_svc.revision_dictamen_prefix(case),
                 )
                 if not nombre:
                     await update.message.reply_text("No se recibió imagen válida.", reply_markup=_main_keyboard_for(update))
@@ -803,9 +810,9 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     session.clear()
                     return
                 svc = _case_service()
-                evidencias = Path(case.folder_path) / "EVIDENCIAS"
-                tipo_limpio = "MUEBLE" if case.order_type == C.ORDER_TYPE_MUEBLE else "PRESTAMO"
-                prefijo = f"{case.official_folio} {cliente} - {tipo_limpio} - {doc_type_label(doc_type)}"
+                doc_svc = _document_service()
+                evidencias = doc_svc.pedido_evidencias_dir(case)
+                prefijo = doc_svc.pedido_document_prefix(case, cliente, doc_type)
                 nombre, path_str, orig, mime = await save_incoming_file(
                     update,
                     evidencias,
