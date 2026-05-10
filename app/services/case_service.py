@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.domain import constants as C
+from app.domain.constants import checklist_lines
 from app.models.case import Case
 from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
@@ -29,6 +30,9 @@ class CaseService:
         self.storage.ensure_dir(root / "EVIDENCIAS")
         self.storage.ensure_dir(root / "REVISION")
         return root, root / "EVIDENCIAS"
+
+    def get_case_by_public_id(self, db: Session, public_id: str) -> Case | None:
+        return CaseRepository.get_by_public_id(db, public_id)
 
     def create_revision_case(
         self,
@@ -147,6 +151,15 @@ class CaseService:
         present = DocumentRepository.get_active_types_for_case(db, case.id)
         required = set(C.required_doc_types_for_order(case.order_type))
         return required.issubset(present)
+
+    def get_pedido_checklist(self, db: Session, case: Case) -> str:
+        present = DocumentRepository.get_active_types_for_case(db, case.id)
+        return checklist_lines(case.order_type or "", present)
+
+    def finalize_pedido_if_complete(self, db: Session, case: Case) -> tuple[bool, Case, str | None]:
+        if not self.pedido_has_all_documents(db, case):
+            return False, case, self.get_pedido_checklist(db, case)
+        return True, self.finalize_pedido(db, case), None
 
     def finalize_pedido(self, db: Session, case: Case) -> Case:
         old = case.current_status

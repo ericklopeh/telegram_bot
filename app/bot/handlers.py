@@ -917,21 +917,19 @@ async def _finalize_pedido(
 ) -> None:
     try:
         with session_scope() as db:
-            case = CaseRepository.get_by_public_id(db, session["case_public_id"])
+            svc = _case_service()
+            case = svc.get_case_by_public_id(db, session["case_public_id"])
             if not case:
                 await update.effective_message.reply_text("Caso no encontrado.", reply_markup=_main_keyboard_for(update))
                 session.clear()
                 return
-            svc = _case_service()
-            if not svc.pedido_has_all_documents(db, case):
-                present = DocumentRepository.get_active_types_for_case(db, case.id)
-                checklist = checklist_lines(case.order_type or "", present)
+            completed, case, checklist = svc.finalize_pedido_if_complete(db, case)
+            if not completed:
                 await update.effective_message.reply_text(
                     f"Aún no se puede enviar. Completa:\n{checklist}",
                     reply_markup=pedido_document_keyboard(case.order_type or session.get("order_type", "")),
                 )
                 return
-            svc.finalize_pedido(db, case)
             db.refresh(case)
         await notificar_grupo_pedidos(context, case)
         await notificar_admin_alertas(context, case, evento="Pedido enviado a autorización")
