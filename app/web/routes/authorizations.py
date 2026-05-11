@@ -1,7 +1,8 @@
 import logging
+import re
 import urllib.parse
 
-from fastapi import APIRouter, Depends, Request, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
@@ -31,14 +32,68 @@ def get_web_db():
         db.close()
 
 
+def _schedule_generated_document_tasks(
+    *,
+    background_tasks: BackgroundTasks,
+    case: Case,
+    docs: list,
+    case_id: int,
+) -> None:
+    from app.services.notification_service import notify_snte_generation_from_web
+
+    background_tasks.add_task(notify_snte_generation_from_web, case_id)
+
+    sp_service = SharePointDocumentService()
+    for doc in docs:
+        payload = SharePointUploadPayload(
+            document_id=doc.id,
+            file_path=doc.file_path,
+            vendedor=case.seller_name or "SIN VENDEDOR",
+            semana=case.week_code,
+            cliente=case.client_name,
+            folio=case.official_folio or case.temp_folio or case.public_id,
+            tipo_documento=doc.document_type,
+            filename=doc.stored_filename,
+        )
+        background_tasks.add_task(sp_service.upload_document, payload)
+
+
+def _persist_generated_status(
+    *,
+    db: Session,
+    case: Case,
+    case_id: int,
+    action_user: str,
+    notes: str,
+    log_message: str,
+) -> None:
+    from app.config import get_settings
+    from app.domain import constants as C
+    from app.services.case_service import CaseService
+
+    case_svc = CaseService(get_settings())
+    case_svc.transition_case_status(
+        db,
+        case,
+        C.ST_PED_AUT_GENERADA,
+        notes=notes,
+        action_user=action_user,
+    )
+    db.commit()
+    db.refresh(case)
+    log.info(
+        log_message,
+        extra={"case_id": case_id, "new_status": C.ST_PED_AUT_GENERADA},
+    )
+
+
 @router.post("/casos/{case_id}/generar-autorizacion")
 async def generar_autorizacion(
     case_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_web_db)
+    db: Session = Depends(get_web_db),
 ):
-    # Proteger por roles
     redirect = require_roles(request, db, _ROLES_AUT)
     if redirect:
         return redirect
@@ -57,112 +112,111 @@ async def generar_autorizacion(
 
     try:
         docs = auth_service.generate_for_case(case_id, form_data, action_user)
-        
-        # 1. Transicionar estatus del caso
-        from app.services.case_service import CaseService
-        from app.config import get_settings
-        from app.domain import constants as C
-        
-        case_svc = CaseService(get_settings())
-        case_svc.transition_case_status(
-            db, 
-            case, 
-            C.ST_PED_AUT_GENERADA, 
-            notes="Autorización SNTE generada", 
-            action_user=action_user
+        log.info(
+            "Documentos de autorizacion SNTE generados",
+            extra={"case_id": case_id, "docs": [doc.id for doc in docs]},
         )
-
-        # 2. Notificar por Telegram vía background_tasks
-        from app.services.notification_service import notify_snte_generation_from_web
-        background_tasks.add_task(notify_snte_generation_from_web, case_id)
-
-        # 3. Subir a SharePoint vía background_tasks
-        sp_service = SharePointDocumentService()
-        for doc in docs:
-            payload = SharePointUploadPayload(
-                document_id=doc.id,
-                file_path=doc.file_path,
-                vendedor=case.seller_name or "SIN VENDEDOR",
-                semana=case.week_code,
-                cliente=case.client_name,
-                folio=case.official_folio or case.temp_folio or case.public_id,
-                tipo_documento=doc.document_type,
-                filename=doc.stored_filename
-            )
-            background_tasks.add_task(sp_service.upload_document, payload)
-
-        msg = urllib.parse.quote("Autorización generada. La subida a SharePoint se procesará en segundo plano.")
-        return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
-
     except TemplateNotFoundError as e:
         db.rollback()
         msg = urllib.parse.quote(str(e))
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
     except Exception as e:
         db.rollback()
-        log.exception("Error generando autorización SNTE", extra={"case_id": case_id})
-        msg = urllib.parse.quote(f"Error generando autorización: {str(e)}")
+        log.exception(
+            "Error generando autorizacion SNTE antes de persistir estatus",
+            extra={"case_id": case_id},
+        )
+        msg = urllib.parse.quote(f"Error generando autorizacion: {str(e)}")
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
+    try:
+        _persist_generated_status(
+            db=db,
+            case=case,
+            case_id=case_id,
+            action_user=action_user,
+            notes="Autorizacion SNTE generada",
+            log_message="Estatus de caso persistido tras generar autorizacion SNTE",
+        )
+    except Exception as e:
+        db.rollback()
+        log.exception(
+            "Documentos SNTE generados, pero fallo la persistencia del estatus",
+            extra={"case_id": case_id},
+        )
+        msg = urllib.parse.quote(
+            f"Documentos generados, pero no se pudo actualizar el estatus: {str(e)}"
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
-# ---------------------------------------------------------------------------
-# Refinanciamiento
-# ---------------------------------------------------------------------------
+    try:
+        _schedule_generated_document_tasks(
+            background_tasks=background_tasks,
+            case=case,
+            docs=docs,
+            case_id=case_id,
+        )
+    except Exception as e:
+        log.exception(
+            "Estatus SNTE persistido, pero fallo la programacion de tareas en segundo plano",
+            extra={"case_id": case_id},
+        )
+        msg = urllib.parse.quote(
+            f"Autorizacion generada y estatus actualizado, pero fallaron tareas en segundo plano: {str(e)}"
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    msg = urllib.parse.quote(
+        "Autorizacion generada. La subida a SharePoint se procesara en segundo plano."
+    )
+    return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
+
 
 def _build_refi_payload(form: dict) -> dict:
-    """Construye el payload normalizado para RefinanciamientoService.
-
-    Acepta hasta 5 productos y 5 saldos a reestructurar.
-
-    Campos esperados del formulario HTML:
-      Datos agremiado:
-        nombre, rfc, categoria, domicilio, tel_part, tel_celular, correo,
-        fecha_venta (DD/MM/YYYY)
-      Productos (N = 1..5):
-        prod_{N}_nombre, prod_{N}_codigo, prod_{N}_trans, prod_{N}_precio
-      Saldos a reestructurar (N = 1..5):
-        refi_folio_{N}, refi_descuento_{N}, refi_saldo_{N}
-      Datos de descuento:
-        folio, semana, monto_total, monto_vta_nueva,
-        qna_inicial (QQ-AAAA), plazo_qnas, descuento_qna
-      Observaciones:
-        observaciones
-    """
+    """Construye el payload normalizado para RefinanciamientoService."""
     payload: dict = {}
 
-    # ── Datos del agremiado ──────────────────────────────────────────────
-    for campo in ("nombre", "rfc", "categoria", "domicilio",
-                  "tel_part", "tel_celular", "correo", "fecha_venta"):
+    for campo in (
+        "nombre",
+        "rfc",
+        "categoria",
+        "domicilio",
+        "tel_part",
+        "tel_celular",
+        "correo",
+        "fecha_venta",
+    ):
         payload[campo] = form.get(campo, "").strip()
 
-    # ── Productos (hasta 5) ──────────────────────────────────────────────
     for i in range(1, 6):
         for sub in ("nombre", "codigo", "trans", "precio"):
             key = f"prod_{i}_{sub}"
             payload[key] = form.get(key, "").strip()
 
-    # ── Saldos a reestructurar (hasta 5) ────────────────────────────────
     for i in range(1, 6):
         for sub in ("folio", "descuento", "saldo"):
             key = f"refi_{sub}_{i}"
             payload[key] = form.get(key, "").strip()
 
-    # ── Datos de descuento / crédito ─────────────────────────────────────
-    for campo in ("folio", "semana", "monto_total", "monto_vta_nueva",
-                  "qna_inicial", "plazo_qnas", "descuento_qna"):
+    for campo in (
+        "folio",
+        "semana",
+        "monto_total",
+        "monto_vta_nueva",
+        "qna_inicial",
+        "plazo_qnas",
+        "descuento_qna",
+    ):
         payload[campo] = form.get(campo, "").strip()
 
-    # ── Observaciones ─────────────────────────────────────────────────────
     payload["observaciones"] = form.get("observaciones", "").strip()
-
     return payload
 
 
 def _validate_refi_payload(form_data: dict) -> list[str]:
-    """Devuelve lista de errores de validación (vacía = OK)."""
+    """Devuelve lista de errores de validacion. Lista vacia significa OK."""
     errors: list[str] = []
 
-    # Campos obligatorios del agremiado
     if not form_data.get("nombre"):
         errors.append("El nombre del cliente es obligatorio.")
     if not form_data.get("folio"):
@@ -174,7 +228,6 @@ def _validate_refi_payload(form_data: dict) -> list[str]:
     if not form_data.get("fecha_venta"):
         errors.append("La fecha de venta es obligatoria.")
 
-    # Al menos 1 producto con nombre
     tiene_producto = any(
         form_data.get(f"prod_{i}_nombre", "").strip()
         for i in range(1, 6)
@@ -182,7 +235,6 @@ def _validate_refi_payload(form_data: dict) -> list[str]:
     if not tiene_producto:
         errors.append("Debe capturar al menos 1 producto.")
 
-    # Al menos 1 saldo a reestructurar con folio
     tiene_saldo = any(
         form_data.get(f"refi_folio_{i}", "").strip()
         for i in range(1, 6)
@@ -190,13 +242,10 @@ def _validate_refi_payload(form_data: dict) -> list[str]:
     if not tiene_saldo:
         errors.append("Debe capturar al menos 1 folio a reestructurar.")
 
-    # Validar formato qna_inicial QQ-AAAA
-    import re
     qna = form_data.get("qna_inicial", "")
     if qna and not re.fullmatch(r"\d{2}-\d{4}", qna):
-        errors.append("Quincena inicial inválida. Use formato QQ-AAAA (ej: 10-2026).")
+        errors.append("Quincena inicial invalida. Use formato QQ-AAAA (ej: 10-2026).")
 
-    # Validar plazo numérico
     plazo = form_data.get("plazo_qnas", "")
     if plazo:
         try:
@@ -204,7 +253,7 @@ def _validate_refi_payload(form_data: dict) -> list[str]:
             if p <= 0:
                 errors.append("El plazo debe ser mayor a 0.")
         except ValueError:
-            errors.append("El plazo debe ser un número entero.")
+            errors.append("El plazo debe ser un numero entero.")
 
     return errors
 
@@ -217,8 +266,6 @@ async def generar_refinanciamiento(
     db: Session = Depends(get_web_db),
 ) -> RedirectResponse:
     """Genera el Excel de refinanciamiento y el PDF Orden SNTE para un caso."""
-
-    # ── Autenticación y autorización ─────────────────────────────────────
     redirect = require_roles(request, db, _ROLES_AUT)
     if redirect:
         return redirect
@@ -226,94 +273,102 @@ async def generar_refinanciamiento(
     user = get_current_user(request, db)
     action_user = user.get("nombre", "web_user") if user else "web_user"
 
-    # ── Verificar que el caso existe ─────────────────────────────────────
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         return RedirectResponse(url="/casos", status_code=302)
 
-    # ── Leer y normalizar form data ───────────────────────────────────────
     raw_form = await request.form()
     form_data = _build_refi_payload(dict(raw_form))
 
     log.info(
-        "Iniciando generación de refinanciamiento",
+        "Iniciando generacion de refinanciamiento",
         extra={"case_id": case_id, "action_user": action_user},
     )
 
-    # ── Validaciones previas al servicio ─────────────────────────────────
     validation_errors = _validate_refi_payload(form_data)
     if validation_errors:
         msg = urllib.parse.quote(" | ".join(validation_errors))
         log.warning(
-            "Payload de refinanciamiento inválido",
+            "Payload de refinanciamiento invalido",
             extra={"case_id": case_id, "errors": validation_errors},
         )
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     try:
-        # ── Generar documentos ────────────────────────────────────────────
         refi_service = RefinanciamientoService(db)
         docs = refi_service.generate_for_case(case_id, form_data, action_user)
-        # El servicio ya hace db.commit() internamente.
-
-        # ── Transicionar estatus del caso ─────────────────────────────────
-        from app.config import get_settings
-        from app.domain import constants as C
-        from app.services.case_service import CaseService
-
-        case_svc = CaseService(get_settings())
-        case_svc.transition_case_status(
-            db,
-            case,
-            C.ST_PED_AUT_GENERADA,
-            notes="Refinanciamiento SNTE generado",
-            action_user=action_user,
-        )
-
-        # ── Notificación Telegram (background) ───────────────────────────
-        from app.services.notification_service import notify_snte_generation_from_web
-        background_tasks.add_task(notify_snte_generation_from_web, case_id)
-
-        # ── Subir a SharePoint vía background_tasks ───────────────────────
-        sp_service = SharePointDocumentService()
-        for doc in docs:
-            payload = SharePointUploadPayload(
-                document_id=doc.id,
-                file_path=doc.file_path,
-                vendedor=case.seller_name or "SIN VENDEDOR",
-                semana=case.week_code,
-                cliente=case.client_name,
-                folio=case.official_folio or case.temp_folio or case.public_id,
-                tipo_documento=doc.document_type,
-                filename=doc.stored_filename,
-            )
-            background_tasks.add_task(sp_service.upload_document, payload)
-
         log.info(
-            "Refinanciamiento generado correctamente",
-            extra={"case_id": case_id, "docs": [d.id for d in docs]},
+            "Documentos de refinanciamiento generados",
+            extra={"case_id": case_id, "docs": [doc.id for doc in docs]},
         )
-
-        msg = urllib.parse.quote(
-            "Refinanciamiento generado. La subida a SharePoint se procesará en segundo plano."
-        )
-        return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
-
-
     except (TemplateNotFoundError, RefiTemplateNotFoundError) as e:
         db.rollback()
-        log.warning("Plantilla no encontrada al generar refinanciamiento", extra={"case_id": case_id, "error": str(e)})
+        log.warning(
+            "Plantilla no encontrada al generar refinanciamiento",
+            extra={"case_id": case_id, "error": str(e)},
+        )
         msg = urllib.parse.quote(str(e))
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
-
     except ValueError as e:
         db.rollback()
-        log.warning("Validación fallida al generar refinanciamiento", extra={"case_id": case_id, "error": str(e)})
-        msg = urllib.parse.quote(f"Error de validación: {str(e)}")
+        log.warning(
+            "Validacion fallida al generar refinanciamiento",
+            extra={"case_id": case_id, "error": str(e)},
+        )
+        msg = urllib.parse.quote(f"Error de validacion: {str(e)}")
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
-
     except Exception as e:
         db.rollback()
-        log.exception("Error inesperado generando refinanciamiento", extra={"case_id": case_id})
+        log.exception(
+            "Error inesperado generando refinanciamiento antes de persistir estatus",
+            extra={"case_id": case_id},
+        )
         msg = urllib.parse.quote(f"Error generando refinanciamiento: {str(e)}")
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    try:
+        _persist_generated_status(
+            db=db,
+            case=case,
+            case_id=case_id,
+            action_user=action_user,
+            notes="Refinanciamiento SNTE generado",
+            log_message="Estatus de caso persistido tras generar refinanciamiento",
+        )
+    except Exception as e:
+        db.rollback()
+        log.exception(
+            "Documentos de refinanciamiento generados, pero fallo la persistencia del estatus",
+            extra={"case_id": case_id},
+        )
+        msg = urllib.parse.quote(
+            f"Refinanciamiento generado, pero no se pudo actualizar el estatus: {str(e)}"
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    try:
+        _schedule_generated_document_tasks(
+            background_tasks=background_tasks,
+            case=case,
+            docs=docs,
+            case_id=case_id,
+        )
+    except Exception as e:
+        log.exception(
+            "Estatus de refinanciamiento persistido, pero fallo la programacion de tareas en segundo plano",
+            extra={"case_id": case_id},
+        )
+        msg = urllib.parse.quote(
+            f"Refinanciamiento generado y estatus actualizado, pero fallaron tareas en segundo plano: {str(e)}"
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    log.info(
+        "Refinanciamiento generado correctamente",
+        extra={"case_id": case_id, "docs": [doc.id for doc in docs]},
+    )
+
+    msg = urllib.parse.quote(
+        "Refinanciamiento generado. La subida a SharePoint se procesara en segundo plano."
+    )
+    return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
