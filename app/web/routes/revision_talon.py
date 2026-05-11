@@ -51,6 +51,8 @@ def revision_talon_get(
     ).order_by(desc(Document.uploaded_at)).first()
 
     ocr_result = None
+    preview_url = None
+    review_fields = []
     form_data = {
         "percepciones": 0,
         "deducciones": 0,
@@ -86,7 +88,7 @@ def revision_talon_get(
             form_data["deducciones"] = deducciones or 0
             form_data["liquido"] = liquido or 0
 
-            review_fields = pj.get('review_fields')
+            review_fields = pj.get('review_fields') or []
 
     return templates.TemplateResponse(
         request=request,
