@@ -1,6 +1,7 @@
 import logging
 import sys
 import traceback
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form
 from fastapi.exceptions import RequestValidationError
@@ -15,9 +16,22 @@ from app.web.paths import STATIC_DIR, TEMPLATES_DIR
 from app.web.routes import dashboard, cases, revision_talon, authorizations
 
 _log = logging.getLogger(__name__)
-
-web_app = FastAPI(title="Sistema Gaman Web")
 settings = get_settings()
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    paths = [getattr(r, "path", None) for r in app.routes]
+    paths = [p for p in paths if p]
+    _log.warning(
+        "Arranque web Sistema Gaman: /ping en rutas=%s. Si /ping da 404 en el navegador, no estás "
+        "ejecutando esta versión del código (reinicia `web` o mata otro proceso en el puerto 8000).",
+        "/ping" in paths,
+    )
+    yield
+
+
+web_app = FastAPI(title="Sistema Gaman Web", lifespan=_lifespan)
 
 web_app.add_middleware(
     SessionMiddleware,
