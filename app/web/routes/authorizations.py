@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
 from app.db.session import get_db_session
+from app.domain import constants as C
 from app.models.case import Case
 from app.models.user import UserRole
+from app.repositories.document_repository import DocumentRepository
 from app.services.authorization_service import AuthorizationService, TemplateNotFoundError
 from app.services.refinanciamiento_service import (
     RefinanciamientoService,
@@ -39,6 +41,33 @@ def get_web_db():
         yield db
     finally:
         db.close()
+
+
+def _redirect_if_active_document_exists(
+    *,
+    db: Session,
+    case_id: int,
+    document_type: str,
+    label: str,
+    route: str,
+) -> RedirectResponse | None:
+    existing_doc = DocumentRepository.get_active_document(db, case_id, document_type)
+    if not existing_doc:
+        return None
+
+    log.warning(
+        "Generacion bloqueada por documento activo existente",
+        extra={
+            "case_id": case_id,
+            "document_id": existing_doc.id,
+            "document_type": document_type,
+            "route": route,
+        },
+    )
+    msg = urllib.parse.quote(
+        f"Ya existe {label} activa para este caso. La regeneracion se habilitara en un flujo posterior."
+    )
+    return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
 
 def _schedule_generated_document_tasks(
@@ -232,6 +261,16 @@ async def generar_autorizacion(
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         return RedirectResponse(url="/casos", status_code=302)
+
+    duplicate_redirect = _redirect_if_active_document_exists(
+        db=db,
+        case_id=case_id,
+        document_type=C.DOC_AUTORIZACION_SNTE,
+        label="una autorizacion SNTE",
+        route="generar_autorizacion",
+    )
+    if duplicate_redirect:
+        return duplicate_redirect
 
     form = await request.form()
     form_data = dict(form)
@@ -427,6 +466,16 @@ async def generar_refinanciamiento(
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         return RedirectResponse(url="/casos", status_code=302)
+
+    duplicate_redirect = _redirect_if_active_document_exists(
+        db=db,
+        case_id=case_id,
+        document_type=C.DOC_AUTORIZACION_REFI,
+        label="una autorizacion de refinanciamiento",
+        route="generar_refinanciamiento",
+    )
+    if duplicate_redirect:
+        return duplicate_redirect
 
     raw_form = await request.form()
     form_data = _build_refi_payload(dict(raw_form))
