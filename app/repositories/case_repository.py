@@ -49,6 +49,10 @@ class CaseRepository:
         return db.scalar(select(Case).where(Case.public_id == public_id))
 
     @staticmethod
+    def get_by_id(db: Session, case_id: int) -> Case | None:
+        return db.get(Case, case_id)
+
+    @staticmethod
     def search_for_seller(
         db: Session,
         seller_chat_id: int,
