@@ -65,6 +65,33 @@ def _calcular_qna_final(qna_inicial: str, plazo: int) -> str:
     return f"{(total % 24) + 1:02d}-{total // 24}"
 
 
+def _parse_money(value: str | None) -> float | None:
+    """Convierte un string de monto a float. Acepta '$', comas y espacios.
+    Retorna None si está vacío o no es numérico.
+    """
+    if not value:
+        return None
+    cleaned = str(value).strip().replace("$", "").replace(",", "").strip()
+    if not cleaned:
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        log.warning("_parse_money: valor no numérico ignorado: %r", value)
+        return None
+
+
+def _parse_int(value: str | None) -> int | None:
+    """Convierte un string a int. Retorna None si está vacío o no es numérico."""
+    if not value:
+        return None
+    try:
+        return int(float(str(value).strip()))
+    except ValueError:
+        log.warning("_parse_int: valor no numérico ignorado: %r", value)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Servicio principal
 # ---------------------------------------------------------------------------
@@ -106,13 +133,12 @@ class RefinanciamientoService:
         qna_inicial = form_data.get("qna_inicial", "").strip()
 
         # Monto total: capturado o suma de precios de productos
-        monto_total_raw = form_data.get("monto_total")
-        monto_total = float(monto_total_raw) if monto_total_raw else 0.0
+        monto_total = _parse_money(form_data.get("monto_total")) or 0.0
         if monto_total == 0.0:
             for i in range(1, 6):
-                pv = form_data.get(f"prod_{i}_precio")
+                pv = _parse_money(form_data.get(f"prod_{i}_precio"))
                 if pv:
-                    monto_total += float(pv)
+                    monto_total += pv
 
         qna_final = _calcular_qna_final(qna_inicial, plazo)
 
@@ -193,56 +219,55 @@ class RefinanciamientoService:
             row = 3 + i  # filas 4, 5, 6, 7, 8
             nombre = form_data.get(f"prod_{i}_nombre", "").strip()
             codigo = form_data.get(f"prod_{i}_codigo", "").strip()
-            trans_raw = form_data.get(f"prod_{i}_trans")
-            precio_raw = form_data.get(f"prod_{i}_precio")
+            trans_v = _parse_money(form_data.get(f"prod_{i}_trans"))
+            precio_v = _parse_money(form_data.get(f"prod_{i}_precio"))
 
             if nombre:
                 escribir(f"A{row}", nombre, centrar=False)
             if codigo:
                 escribir(f"B{row}", codigo, centrar=False)
-            if trans_raw:
-                escribir_money(f"C{row}", float(trans_raw))
-            if precio_raw:
-                escribir_money(f"E{row}", float(precio_raw))
+            if trans_v is not None:
+                escribir_money(f"C{row}", trans_v)
+            if precio_v is not None:
+                escribir_money(f"E{row}", precio_v)
 
             # Tipo de venta: siempre REFINANCIADA cuando hay producto
-            if nombre or precio_raw:
+            if nombre or precio_v is not None:
                 escribir(f"G{row}", "REFINANCIADA")
 
         # ── Saldos a reestructurar (filas 14-18 → hasta 5 saldos) ──────
         for i in range(1, 6):
             row = 13 + i  # filas 14, 15, 16, 17, 18
             folio_refi = form_data.get(f"refi_folio_{i}", "").strip()
-            desc_refi = form_data.get(f"refi_descuento_{i}")
-            saldo_refi = form_data.get(f"refi_saldo_{i}")
+            desc_v = _parse_money(form_data.get(f"refi_descuento_{i}"))
+            saldo_v = _parse_money(form_data.get(f"refi_saldo_{i}"))
 
             if folio_refi:
                 _escribir_seguro(ws, f"C{row}", folio_refi, font=estilo, alignment=alineacion, number_format=fmt_text)
-            if desc_refi:
-                escribir_money(f"E{row}", float(desc_refi))
-            if saldo_refi:
-                escribir_money(f"F{row}", float(saldo_refi))
+            if desc_v is not None:
+                escribir_money(f"E{row}", desc_v)
+            if saldo_v is not None:
+                escribir_money(f"F{row}", saldo_v)
 
         # ── Monto venta nueva ────────────────────────────────────────────
-        monto_vta_nueva = form_data.get("monto_vta_nueva")
-        if monto_vta_nueva:
-            escribir_money("F22", float(monto_vta_nueva))
+        monto_vta_nueva = _parse_money(form_data.get("monto_vta_nueva"))
+        if monto_vta_nueva is not None:
+            escribir_money("F22", monto_vta_nueva)
 
         # ── Datos de descuento / crédito ─────────────────────────────────
         escribir("D23", folio)
-        semana_raw = form_data.get("semana", "")
-        if semana_raw:
-            try:
-                _escribir_seguro(ws, "F23", int(semana_raw), font=estilo, alignment=alineacion, number_format=fmt_int)
-            except ValueError:
-                escribir("F23", semana_raw)
+        semana_v = _parse_int(form_data.get("semana"))
+        if semana_v is not None:
+            _escribir_seguro(ws, "F23", semana_v, font=estilo, alignment=alineacion, number_format=fmt_int)
+        elif form_data.get("semana"):
+            escribir("F23", form_data["semana"])
 
         if monto_total:
             escribir_money("C25", monto_total)
 
-        descuento_qna_raw = form_data.get("descuento_qna")
-        if descuento_qna_raw:
-            escribir_money("E25", float(descuento_qna_raw))
+        descuento_qna_v = _parse_money(form_data.get("descuento_qna"))
+        if descuento_qna_v is not None:
+            escribir_money("E25", descuento_qna_v)
 
         _escribir_seguro(ws, "F25", qna_inicial, font=estilo, alignment=alineacion, number_format=fmt_text)
         _escribir_seguro(ws, "F26", plazo, font=estilo, alignment=alineacion, number_format=fmt_int)

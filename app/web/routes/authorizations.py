@@ -158,6 +158,57 @@ def _build_refi_payload(form: dict) -> dict:
     return payload
 
 
+def _validate_refi_payload(form_data: dict) -> list[str]:
+    """Devuelve lista de errores de validación (vacía = OK)."""
+    errors: list[str] = []
+
+    # Campos obligatorios del agremiado
+    if not form_data.get("nombre"):
+        errors.append("El nombre del cliente es obligatorio.")
+    if not form_data.get("folio"):
+        errors.append("El folio es obligatorio.")
+    if not form_data.get("qna_inicial"):
+        errors.append("La quincena inicial es obligatoria.")
+    if not form_data.get("plazo_qnas"):
+        errors.append("El plazo es obligatorio.")
+    if not form_data.get("fecha_venta"):
+        errors.append("La fecha de venta es obligatoria.")
+
+    # Al menos 1 producto con nombre
+    tiene_producto = any(
+        form_data.get(f"prod_{i}_nombre", "").strip()
+        for i in range(1, 6)
+    )
+    if not tiene_producto:
+        errors.append("Debe capturar al menos 1 producto.")
+
+    # Al menos 1 saldo a reestructurar con folio
+    tiene_saldo = any(
+        form_data.get(f"refi_folio_{i}", "").strip()
+        for i in range(1, 6)
+    )
+    if not tiene_saldo:
+        errors.append("Debe capturar al menos 1 folio a reestructurar.")
+
+    # Validar formato qna_inicial QQ-AAAA
+    import re
+    qna = form_data.get("qna_inicial", "")
+    if qna and not re.fullmatch(r"\d{2}-\d{4}", qna):
+        errors.append("Quincena inicial inválida. Use formato QQ-AAAA (ej: 10-2026).")
+
+    # Validar plazo numérico
+    plazo = form_data.get("plazo_qnas", "")
+    if plazo:
+        try:
+            p = int(plazo)
+            if p <= 0:
+                errors.append("El plazo debe ser mayor a 0.")
+        except ValueError:
+            errors.append("El plazo debe ser un número entero.")
+
+    return errors
+
+
 @router.post("/casos/{case_id}/generar-refinanciamiento")
 async def generar_refinanciamiento(
     case_id: int,
@@ -188,6 +239,16 @@ async def generar_refinanciamiento(
         "Iniciando generación de refinanciamiento",
         extra={"case_id": case_id, "action_user": action_user},
     )
+
+    # ── Validaciones previas al servicio ─────────────────────────────────
+    validation_errors = _validate_refi_payload(form_data)
+    if validation_errors:
+        msg = urllib.parse.quote(" | ".join(validation_errors))
+        log.warning(
+            "Payload de refinanciamiento inválido",
+            extra={"case_id": case_id, "errors": validation_errors},
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     try:
         # ── Generar documentos ────────────────────────────────────────────
