@@ -89,6 +89,10 @@ def detalle_caso(
         .all()
     )
 
+    from app.domain import constants as C
+    has_snte_authorization = any(d.document_type == C.DOC_AUTORIZACION_SNTE for d in documentos)
+    has_snte_order_pdf = any(d.document_type == C.DOC_ORDEN_SNTE_PDF for d in documentos)
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -97,6 +101,8 @@ def detalle_caso(
             "caso": caso,
             "ultima_revision": ultima_revision,
             "documentos": documentos,
+            "has_snte_authorization": has_snte_authorization,
+            "has_snte_order_pdf": has_snte_order_pdf,
         }
     )
 

@@ -288,9 +288,15 @@
 
                 {% if usuario.rol in ['admin', 'sistemas', 'autorizacion'] %}
                     {% if caso.current_status == 'En preparación de autorización' %}
-                    <button type="button" class="btn btn-outline-primary fw-bold text-start ps-3 shadow-sm border-primary" style="background-color: #f8fbff;" data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
-                        <i class="bi bi-file-earmark-excel me-2 text-success"></i> Generar autorización SNTE
-                    </button>
+                        {% if has_snte_authorization or has_snte_order_pdf %}
+                        <button type="button" class="btn btn-warning fw-bold text-start ps-3 shadow-sm border-warning" data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
+                            <i class="bi bi-arrow-clockwise me-2 text-dark"></i> Regenerar autorización SNTE
+                        </button>
+                        {% else %}
+                        <button type="button" class="btn btn-outline-primary fw-bold text-start ps-3 shadow-sm border-primary" style="background-color: #f8fbff;" data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
+                            <i class="bi bi-file-earmark-excel me-2 text-success"></i> Generar autorización SNTE
+                        </button>
+                        {% endif %}
                     {% else %}
                     <button class="btn btn-outline-secondary text-start ps-3" disabled title="Solo disponible en 'En preparación de autorización'">
                         <i class="bi bi-file-earmark-excel me-2"></i> Generar autorización SNTE (Requiere estatus correcto)
@@ -421,6 +427,11 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
+            {% if has_snte_authorization or has_snte_order_pdf %}
+            <div class="alert alert-warning small mb-4 fw-bold shadow-sm">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i> Ya existe una autorización generada. Si continúas, la versión anterior será archivada y reemplazada por la nueva.
+            </div>
+            {% endif %}
             <div class="alert alert-info small mb-4">
                 Por favor, captura los datos faltantes para generar la Hoja de Sindicato y el Excel de autorización. Estos datos se utilizarán temporalmente para el documento y no se guardarán en la base de datos por ahora.
             </div>
