@@ -39,6 +39,30 @@ services:
       - bot_storage:/app/storage
     command: python -m app.main
 
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: bot_gaman_web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    ports:
+      # 8000 en el host → panel en http://localhost:8000 (si el puerto está libre)
+      - "8000:8000"
+    volumes:
+      - ./:/app
+      - bot_storage:/app/storage
+    command: >
+      python -m uvicorn app.web.main:web_app
+      --host 0.0.0.0
+      --port 8000
+
 volumes:
   pg_data:
   bot_storage:

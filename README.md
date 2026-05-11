@@ -131,6 +131,19 @@ docker compose up --build -d db
 docker compose up --build -d bot
 ```
 
+### Servicio web (dashboard) en Docker
+
+Incluye el contenedor **`web`** (FastAPI + uvicorn). Requiere el mismo `.env` que el bot (incluye `TELEGRAM_BOT_TOKEN` y variables de Postgres; `DATABASE_URL` con `localhost` en el `.env` solo afecta a herramientas en el host: dentro del contenedor Compose **fuerza** `db:5432`).
+
+```bash
+docker compose up --build -d db
+docker compose up --build -d web
+```
+
+Panel: **http://localhost:8000** (redirige a `/login`). Si el puerto 8000 del host está ocupado, cambia en `docker-compose.yml` el mapeo a `"8001:8000"` y abre **http://localhost:8001**.
+
+Migraciones (`alembic upgrade head`) siguen haciéndose desde tu máquina contra `localhost:5433` o con `docker compose exec bot alembic ...` si añades el CLI al contenedor del bot.
+
 ## Cómo probar (manual)
 
 1. Migraciones aplicadas y Postgres arriba.
