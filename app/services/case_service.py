@@ -11,6 +11,7 @@ from app.models.case import Case
 from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.history_repository import HistoryRepository
+from app.services.document_service import DocumentService
 from app.services.storage.local import LocalStorageBackend
 
 log = logging.getLogger(__name__)
@@ -205,6 +206,8 @@ class CaseService:
             )
         validate_case_status_transition(case, case.current_status, new_status)
         old = case.current_status
+        if new_status == C.ST_PED_EN_COMPULSA and old != new_status:
+            DocumentService().validate_active_documents_for_compulsa(db, case)
         case.current_status = new_status
         case.visible_status = C.visible_status_for_pedido(new_status)
         HistoryRepository.append(db, case.id, old, new_status, notes=notes)
@@ -221,6 +224,12 @@ class CaseService:
     ) -> Case:
         validate_case_status_transition(case, case.current_status, new_status)
         old = case.current_status
+        if (
+            case.case_type == C.CASE_TYPE_PEDIDO
+            and new_status == C.ST_PED_EN_COMPULSA
+            and old != new_status
+        ):
+            DocumentService().validate_active_documents_for_compulsa(db, case)
         case.current_status = new_status
         if case.case_type == C.CASE_TYPE_PEDIDO:
             case.visible_status = C.visible_status_for_pedido(new_status)
