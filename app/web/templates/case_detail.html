@@ -110,13 +110,15 @@
                         {% for doc in documentos %}
                         <div class="list-group-item">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong>{{ doc.document_type }}</strong>
+                                <strong>{{ doc_type_label(doc.document_type) }}</strong>
                                 {% if doc.upload_status == 'UPLOADED' %}
                                     <span class="badge bg-success">Subido</span>
                                 {% elif doc.upload_status == 'PENDING_UPLOAD' %}
                                     <span class="badge bg-warning text-dark">Pendiente</span>
+                                {% elif doc.upload_status == 'UPLOAD_FAILED' %}
+                                    <span class="badge bg-danger" title="{{ doc.upload_error or 'Error al subir' }}">Error</span>
                                 {% else %}
-                                    <span class="badge bg-danger">Error</span>
+                                    <span class="badge bg-secondary">{{ doc.upload_status }}</span>
                                 {% endif %}
                             </div>
 

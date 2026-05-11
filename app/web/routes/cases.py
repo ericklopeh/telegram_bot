@@ -90,8 +90,10 @@ def detalle_caso(
     )
 
     from app.domain import constants as C
+    from app.domain.constants import doc_type_label
     has_snte_authorization = any(d.document_type == C.DOC_AUTORIZACION_SNTE for d in documentos)
     has_snte_order_pdf = any(d.document_type == C.DOC_ORDEN_SNTE_PDF for d in documentos)
+    has_refi_authorization = any(d.document_type == C.DOC_AUTORIZACION_REFI for d in documentos)
 
     from app.models.authorization_job import AuthorizationJob
     authorization_jobs = (
@@ -109,8 +111,10 @@ def detalle_caso(
             "caso": caso,
             "ultima_revision": ultima_revision,
             "documentos": documentos,
+            "doc_type_label": doc_type_label,
             "has_snte_authorization": has_snte_authorization,
             "has_snte_order_pdf": has_snte_order_pdf,
+            "has_refi_authorization": has_refi_authorization,
             "authorization_jobs": authorization_jobs,
         }
     )
