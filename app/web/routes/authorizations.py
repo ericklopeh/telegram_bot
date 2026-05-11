@@ -52,6 +52,26 @@ async def generar_autorizacion(
     try:
         docs = auth_service.generate_for_case(case_id, form_data, action_user)
         
+        # 1. Transicionar estatus del caso
+        from app.services.case_service import CaseService
+        from app.config import get_settings
+        from app.domain import constants as C
+        
+        case_svc = CaseService(get_settings())
+        case_svc.transition_case_status(
+            db, 
+            case, 
+            C.ST_PED_AUT_GENERADA, 
+            notes="Autorización SNTE generada", 
+            action_user=action_user
+        )
+
+        # 2. Notificar por Telegram vía background_tasks
+        from app.services.notification_service import notify_snte_generation_from_web
+        background_tasks.add_task(notify_snte_generation_from_web, case_id)
+
+        # 3. Subir a SharePoint vía background_tasks
+        
         sp_service = SharePointDocumentService()
         for doc in docs:
             payload = SharePointUploadPayload(

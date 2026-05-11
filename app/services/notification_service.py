@@ -178,3 +178,56 @@ async def run_sla_watchdog_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                     last_sla_alert[key] = now
     except Exception:
         log.exception("Error en SLA watchdog")
+
+async def notify_snte_generation_from_web(case_id: int) -> None:
+    try:
+        from telegram import Bot
+        from app.db.session import session_scope
+        from app.repositories.case_repository import CaseRepository
+        from app.models.user import User, UserRole
+
+        settings = get_settings()
+        if not settings.telegram_bot_token:
+            log.warning("No telegram_bot_token configurado, ignorando notificación web.")
+            return
+
+        bot = Bot(token=settings.telegram_bot_token)
+
+        with session_scope() as db:
+            case = CaseRepository.get_by_id(db, case_id)
+            if not case:
+                log.warning("Caso no encontrado para notificar generación", extra={"case_id": case_id})
+                return
+
+            # Notificar Vendedor
+            if case.seller_telegram_chat_id:
+                try:
+                    msg_vendedor = "✅ Tu autorización SNTE fue generada y está en proceso de carga a SharePoint."
+                    await bot.send_message(chat_id=case.seller_telegram_chat_id, text=msg_vendedor)
+                except Exception:
+                    log.exception("Error notificando vendedor desde web", extra={"chat_id": case.seller_telegram_chat_id})
+            else:
+                log.info("Vendedor sin telegram_chat_id, ignorando notificación", extra={"case_id": case_id})
+
+            # Notificar Admins / Sistemas / Autorizacion
+            admin_roles = [UserRole.ADMIN.value, UserRole.SISTEMAS.value, UserRole.AUTORIZACION.value]
+            admins = db.query(User).filter(
+                User.telegram_id.isnot(None),
+                User.is_active.is_(True),
+                User.role.in_(admin_roles),
+            ).all()
+
+            targets = {a.telegram_id for a in admins if a.telegram_id}
+            
+            if targets:
+                msg_admin = f"📄 Autorización SNTE generada para el folio {case.public_id} - {case.client_name}."
+                for target in targets:
+                    try:
+                        await bot.send_message(chat_id=target, text=msg_admin)
+                    except Exception:
+                        log.exception("Error notificando admin desde web", extra={"chat_id": target, "case_id": case_id})
+            else:
+                log.info("No hay admins/sistemas/autorizacion activos para notificar", extra={"case_id": case_id})
+
+    except Exception:
+        log.exception("Error general en notify_snte_generation_from_web", extra={"case_id": case_id})
