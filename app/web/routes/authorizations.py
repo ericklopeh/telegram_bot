@@ -21,7 +21,7 @@ def get_web_db():
 
 
 @router.post("/casos/{case_id}/generar-autorizacion")
-def generar_autorizacion(
+async def generar_autorizacion(
     case_id: int,
     request: Request,
     db: Session = Depends(get_web_db)
@@ -42,11 +42,14 @@ def generar_autorizacion(
     if not case:
         return RedirectResponse(url="/casos", status_code=302)
 
+    form = await request.form()
+    form_data = dict(form)
+
     auth_service = AuthorizationService(db)
 
     try:
-        doc = auth_service.generate_for_case(case_id, action_user)
-        msg = urllib.parse.quote("Autorización generada exitosamente.")
+        docs = auth_service.generate_for_case(case_id, form_data, action_user)
+        msg = urllib.parse.quote("Autorización y Orden SNTE generadas exitosamente.")
         return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
 
     except TemplateNotFoundError as e:
