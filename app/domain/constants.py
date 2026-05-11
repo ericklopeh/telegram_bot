@@ -25,6 +25,7 @@ DOC_ORDEN_DESCUENTO = "orden_descuento"
 DOC_CARATULA_BANCARIA = "caratula_bancaria"
 DOC_REVISION_EVIDENCIA = "revision_evidencia"
 DOC_REVISION_DICTAMEN = "revision_dictamen"
+DOC_AUTORIZACION_SNTE = "autorizacion_snte"
 
 # Estados internos — revisión
 ST_REV_RECIBIDO = "Recibido"
@@ -38,6 +39,7 @@ ST_REV_CERRADO = "Cerrado"
 # Estados internos — pedido
 ST_PED_RECIBIDO = "Recibido"
 ST_PED_PREP_AUT = "En preparación de autorización"
+ST_PED_AUT_GENERADA = "Autorización generada"
 ST_PED_CORRECCION = "Corrección solicitada"
 ST_PED_APROBADO = "Aprobado en pedido"
 ST_PED_EN_COMPULSA = "En compulsa"
@@ -70,6 +72,7 @@ def doc_type_label(doc_type: str) -> str:
         DOC_CARATULA_BANCARIA: "Carátula bancaria",
         DOC_REVISION_EVIDENCIA: "Evidencia de revisión",
         DOC_REVISION_DICTAMEN: "Evidencia dictamen revisión",
+        DOC_AUTORIZACION_SNTE: "Autorización SNTE",
     }.get(doc_type, doc_type)
 
 
