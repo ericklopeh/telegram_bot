@@ -44,3 +44,7 @@ class Case(Base):
     talon_reviews = relationship(
         "TalonReview", back_populates="case", cascade="all, delete-orphan"
     )
+    events = relationship(
+        "CaseEvent", back_populates="case", cascade="all, delete-orphan",
+        order_by="CaseEvent.created_at",
+    )

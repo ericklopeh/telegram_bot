@@ -2,6 +2,7 @@ from app.models.authorization_job import AuthorizationJob
 from app.models.bot_chat_data import BotChatData
 from app.models.user import User, UserRole
 from app.models.case import Case
+from app.models.case_event import CaseEvent
 from app.models.case_history import CaseHistory
 from app.models.document import Document
 from app.models.ocr_result import OcrResult
@@ -13,6 +14,7 @@ __all__ = [
     "User",
     "UserRole",
     "Case",
+    "CaseEvent",
     "CaseHistory",
     "Document",
     "OcrResult",
