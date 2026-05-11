@@ -1,15 +1,19 @@
+import logging
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.domain import constants as C
+from app.domain.case_status_transitions import validate_case_status_transition
 from app.domain.constants import checklist_lines
 from app.models.case import Case
 from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.history_repository import HistoryRepository
 from app.services.storage.local import LocalStorageBackend
+
+log = logging.getLogger(__name__)
 
 
 class CaseService:
@@ -195,6 +199,11 @@ class CaseService:
         return action_map.get(action)
 
     def transition_pedido_status(self, db: Session, case: Case, new_status: str, notes: str | None = None) -> Case:
+        if case.case_type != C.CASE_TYPE_PEDIDO:
+            raise ValueError(
+                f"transition_pedido_status solo aplica a casos pedido (caso id={case.id}, tipo={case.case_type!r})."
+            )
+        validate_case_status_transition(case, case.current_status, new_status)
         old = case.current_status
         case.current_status = new_status
         case.visible_status = C.visible_status_for_pedido(new_status)
@@ -210,6 +219,7 @@ class CaseService:
         notes: str | None = None,
         action_user: str | None = None,
     ) -> Case:
+        validate_case_status_transition(case, case.current_status, new_status)
         old = case.current_status
         case.current_status = new_status
         if case.case_type == C.CASE_TYPE_PEDIDO:
