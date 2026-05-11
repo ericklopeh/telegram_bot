@@ -1,15 +1,19 @@
 import os
 import re
 import traceback
-import pytesseract
 from PIL import Image
 from pathlib import Path
 from sqlalchemy.orm import Session
 from app.models.document import Document
 from app.models.ocr_result import OcrResult
 
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
+
 TESSERACT_EXE = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
-if TESSERACT_EXE.exists():
+if pytesseract is not None and TESSERACT_EXE.exists():
     pytesseract.pytesseract.tesseract_cmd = str(TESSERACT_EXE)
 
 def extract_talon_fields(raw_text: str) -> dict:
@@ -180,6 +184,11 @@ def process_ocr_document(db: Session, document_id: int, action_user: str | None 
     db.add(ocr_result)
     
     try:
+        if pytesseract is None:
+            raise RuntimeError(
+                "pytesseract no esta instalado. Instala pytesseract y Tesseract OCR para procesar documentos."
+            )
+
         if not document.file_path or not os.path.exists(document.file_path):
             raise FileNotFoundError(f"El archivo {document.file_path} no existe en disco.")
             
