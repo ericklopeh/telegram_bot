@@ -1,10 +1,22 @@
+import logging
 from collections.abc import Iterable
 
 from fastapi import Request
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
+from app.models.user import UserRole
 from app.repositories.user_repository import UserRepository
+
+log = logging.getLogger(__name__)
+
+# Roles reutilizados en rutas sensibles (valores persistidos en BD, ver UserRole).
+ROLES_ADMIN_SISTEMAS: tuple[str, ...] = (UserRole.ADMIN.value, UserRole.SISTEMAS.value)
+ROLES_AUTORIZACION_SNTE: tuple[str, ...] = (
+    UserRole.ADMIN.value,
+    UserRole.SISTEMAS.value,
+    UserRole.AUTORIZACION.value,
+)
 
 
 def _session_user_payload(usuario) -> dict:
@@ -58,6 +70,15 @@ def require_roles(request: Request, db: Session, roles: Iterable[str]):
 
     allowed_roles = set(roles)
     if usuario.get("rol") not in allowed_roles:
+        log.warning(
+            "Acceso web denegado: rol no autorizado para la ruta",
+            extra={
+                "path": str(request.url.path),
+                "user_id": usuario.get("id"),
+                "rol": usuario.get("rol"),
+                "allowed_roles": sorted(allowed_roles),
+            },
+        )
         return RedirectResponse(url="/dashboard", status_code=302)
 
     return None

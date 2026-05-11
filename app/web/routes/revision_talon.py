@@ -1,18 +1,21 @@
-from typing import Generator, List
+from decimal import Decimal
+import logging
+from typing import Generator
 
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from decimal import Decimal
 from app.db.session import get_db_session
 from app.models.case import Case
 from app.web.services.talon_review_service import guardar_revision_talon
-from app.web.auth import get_current_user, require_login
+from app.web.auth import ROLES_ADMIN_SISTEMAS, get_current_user, require_login, require_roles
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
+
+log = logging.getLogger(__name__)
 
 
 def get_web_db() -> Generator[Session, None, None]:
@@ -34,6 +37,10 @@ def revision_talon_get(
     db: Session = Depends(get_web_db),
 ):
     redirect = require_login(request, db)
+    if redirect:
+        return redirect
+
+    redirect = require_roles(request, db, ROLES_ADMIN_SISTEMAS)
     if redirect:
         return redirect
 
@@ -120,6 +127,10 @@ async def revision_talon_post(
     db: Session = Depends(get_web_db),
 ):
     redirect = require_login(request, db)
+    if redirect:
+        return redirect
+
+    redirect = require_roles(request, db, ROLES_ADMIN_SISTEMAS)
     if redirect:
         return redirect
 

@@ -9,7 +9,6 @@ from starlette.responses import RedirectResponse
 from app.db.session import get_db_session
 from app.domain import constants as C
 from app.models.case import Case
-from app.models.user import UserRole
 from app.repositories.document_repository import DocumentRepository
 from app.services.authorization_service import AuthorizationService, TemplateNotFoundError
 from app.services.refinanciamiento_service import (
@@ -26,13 +25,11 @@ from app.services.case_event_service import (
     log_status_change,
 )
 from app.services.sharepoint_document_service import SharePointDocumentService, SharePointUploadPayload
-from app.web.auth import get_current_user, require_roles
+from app.web.auth import get_current_user, require_roles, ROLES_AUTORIZACION_SNTE
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_ROLES_AUT = [UserRole.ADMIN.value, UserRole.SISTEMAS.value, UserRole.AUTORIZACION.value]
 
 
 def get_web_db():
@@ -249,7 +246,7 @@ async def generar_autorizacion(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_web_db),
 ):
-    redirect = require_roles(request, db, _ROLES_AUT)
+    redirect = require_roles(request, db, ROLES_AUTORIZACION_SNTE)
     if redirect:
         return redirect
 
@@ -454,7 +451,7 @@ async def generar_refinanciamiento(
     db: Session = Depends(get_web_db),
 ) -> RedirectResponse:
     """Genera el Excel de refinanciamiento y el PDF Orden SNTE para un caso."""
-    redirect = require_roles(request, db, _ROLES_AUT)
+    redirect = require_roles(request, db, ROLES_AUTORIZACION_SNTE)
     if redirect:
         return redirect
 

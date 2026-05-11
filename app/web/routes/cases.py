@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import uuid
@@ -12,10 +13,18 @@ from app.db.session import get_db_session
 from app.domain import constants as C
 from app.domain.constants import doc_type_label
 from app.models.case import Case
-from app.web.auth import get_current_user, require_login
+from app.models.user import UserRole
+from app.web.auth import (
+    ROLES_ADMIN_SISTEMAS,
+    get_current_user,
+    require_login,
+    require_roles,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/web/templates")
+
+log = logging.getLogger(__name__)
 
 
 def get_web_db() -> Generator[Session, None, None]:
@@ -24,6 +33,16 @@ def get_web_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def _can_upload_document_web(usuario: dict, caso: Case) -> bool:
+    """Vendedor solo su caso; admin/sistemas cualquier caso."""
+    rol = usuario.get("rol")
+    if rol in ROLES_ADMIN_SISTEMAS:
+        return True
+    if rol == UserRole.VENDEDOR.value:
+        return caso.seller_name == usuario.get("nombre")
+    return False
 
 
 @router.get("/casos")
@@ -156,6 +175,17 @@ def upload_document(
     if not caso:
         return RedirectResponse(url="/casos", status_code=302)
 
+    if not _can_upload_document_web(usuario, caso):
+        log.warning(
+            "Subida de documento rechazada: rol no autorizado o caso no propio del vendedor",
+            extra={
+                "case_id": case_id,
+                "user_id": usuario.get("id"),
+                "rol": usuario.get("rol"),
+            },
+        )
+        return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
+
     # Validar que sea uno de los tipos permitidos
     allowed_types = {
         "talon",
@@ -223,9 +253,11 @@ def procesar_ocr_route(
     if redirect:
         return redirect
 
+    redirect = require_roles(request, db, ROLES_ADMIN_SISTEMAS)
+    if redirect:
+        return redirect
+
     usuario = get_current_user(request, db)
-    
-    caso = db.query(Case).filter(Case.id == case_id).first()
     if not caso:
         return RedirectResponse(url="/casos", status_code=302)
         
@@ -284,7 +316,18 @@ def ver_documento_route(
         
     if not doc.file_path or not os.path.exists(doc.file_path):
         raise HTTPException(status_code=404, detail="El archivo físico no existe en el servidor")
-        
+
+    usuario = get_current_user(request, db)
+    caso = db.query(Case).filter(Case.id == doc.case_id).first()
+    if not caso:
+        raise HTTPException(status_code=404, detail="Caso no encontrado en base de datos")
+    if usuario.get("rol") == UserRole.VENDEDOR.value and caso.seller_name != usuario.get("nombre"):
+        log.warning(
+            "Vista de documento denegada: vendedor sin titularidad del caso",
+            extra={"document_id": document_id, "case_id": caso.id, "user_id": usuario.get("id")},
+        )
+        raise HTTPException(status_code=403, detail="No autorizado")
+
     mime_type = doc.mime_type
     if not mime_type:
         mime_type, _ = mimetypes.guess_type(doc.file_path)
