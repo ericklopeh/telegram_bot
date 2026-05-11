@@ -329,11 +329,9 @@
                     <div class="mb-2">
                         <label class="form-label small text-muted mb-1">Tipo de documento</label>
                         <select name="document_type" class="form-select form-select-sm" required>
-                            <option value="talon">Talón</option>
-                            <option value="pedido">Pedido</option>
-                            <option value="orden_descuento">Orden de Descuento</option>
-                            <option value="caratula">Carátula Bancaria</option>
-                            <option value="revision_evidencia">Evidencia de Revisión</option>
+                            {% for value, label in upload_document_types %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="mb-3">

@@ -9,6 +9,8 @@ from starlette.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
+from app.domain import constants as C
+from app.domain.constants import doc_type_label
 from app.models.case import Case
 from app.web.auth import get_current_user, require_login
 
@@ -89,11 +91,16 @@ def detalle_caso(
         .all()
     )
 
-    from app.domain import constants as C
-    from app.domain.constants import doc_type_label
     has_snte_authorization = any(d.document_type == C.DOC_AUTORIZACION_SNTE for d in documentos)
     has_snte_order_pdf = any(d.document_type == C.DOC_ORDEN_SNTE_PDF for d in documentos)
     has_refi_authorization = any(d.document_type == C.DOC_AUTORIZACION_REFI for d in documentos)
+    upload_document_types = [
+        ("talon", "Talón"),
+        (C.DOC_PEDIDO, doc_type_label(C.DOC_PEDIDO)),
+        (C.DOC_ORDEN_DESCUENTO, doc_type_label(C.DOC_ORDEN_DESCUENTO)),
+        (C.DOC_CARATULA_BANCARIA, doc_type_label(C.DOC_CARATULA_BANCARIA)),
+        (C.DOC_REVISION_EVIDENCIA, doc_type_label(C.DOC_REVISION_EVIDENCIA)),
+    ]
 
     from app.models.authorization_job import AuthorizationJob
     authorization_jobs = (
@@ -116,6 +123,7 @@ def detalle_caso(
             "has_snte_order_pdf": has_snte_order_pdf,
             "has_refi_authorization": has_refi_authorization,
             "authorization_jobs": authorization_jobs,
+            "upload_document_types": upload_document_types,
         }
     )
 
@@ -139,7 +147,13 @@ def upload_document(
         return RedirectResponse(url="/casos", status_code=302)
 
     # Validar que sea uno de los tipos permitidos
-    allowed_types = ["talon", "pedido", "orden_descuento", "caratula", "revision_evidencia"]
+    allowed_types = {
+        "talon",
+        C.DOC_PEDIDO,
+        C.DOC_ORDEN_DESCUENTO,
+        C.DOC_CARATULA_BANCARIA,
+        C.DOC_REVISION_EVIDENCIA,
+    }
     if document_type not in allowed_types:
         return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
 

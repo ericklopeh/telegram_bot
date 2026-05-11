@@ -149,6 +149,7 @@ class CaseService:
         if not case.order_type:
             return False
         present = DocumentRepository.get_active_types_for_case(db, case.id)
+        present = {C.normalize_doc_type(dt) for dt in present}
         required = set(C.required_doc_types_for_order(case.order_type))
         return required.issubset(present)
 

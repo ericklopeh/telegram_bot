@@ -23,6 +23,8 @@ def order_type_from_telegram_label(text: str) -> str:
 DOC_PEDIDO = "pedido"
 DOC_ORDEN_DESCUENTO = "orden_descuento"
 DOC_CARATULA_BANCARIA = "caratula_bancaria"
+# TODO: migrar documentos legacy con document_type="caratula" a DOC_CARATULA_BANCARIA.
+DOC_CARATULA_BANCARIA_LEGACY = "caratula"
 DOC_REVISION_EVIDENCIA = "revision_evidencia"
 DOC_REVISION_DICTAMEN = "revision_dictamen"
 DOC_AUTORIZACION_SNTE = "autorizacion_snte"
@@ -67,7 +69,14 @@ def required_doc_types_for_order(order_type: str) -> list[str]:
     return [DOC_PEDIDO, DOC_ORDEN_DESCUENTO, DOC_CARATULA_BANCARIA]
 
 
+def normalize_doc_type(doc_type: str) -> str:
+    if doc_type == DOC_CARATULA_BANCARIA_LEGACY:
+        return DOC_CARATULA_BANCARIA
+    return doc_type
+
+
 def doc_type_label(doc_type: str) -> str:
+    doc_type = normalize_doc_type(doc_type)
     return {
         DOC_PEDIDO: "Pedido",
         DOC_ORDEN_DESCUENTO: "Orden de descuento",
@@ -81,9 +90,10 @@ def doc_type_label(doc_type: str) -> str:
 
 
 def checklist_lines(order_type: str, present: set[str]) -> str:
+    normalized_present = {normalize_doc_type(dt) for dt in present}
     lines: list[str] = []
     for dt in required_doc_types_for_order(order_type):
-        mark = "✅" if dt in present else "❌"
+        mark = "✅" if dt in normalized_present else "❌"
         lines.append(f"{mark} {doc_type_label(dt)}")
     return "\n".join(lines)
 
