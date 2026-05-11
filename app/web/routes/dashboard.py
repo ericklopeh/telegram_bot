@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Generator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import exists, func, not_, select
 from sqlalchemy.orm import Session
@@ -32,6 +32,18 @@ _CERRADOS_OPERATIVOS = (
 _MAX_CHECKLIST_SCAN = 150
 _PENDING_LIMIT_PER_SOURCE = 12
 _PENDING_TABLE_LIMIT = 30
+
+_PENDING_FILTERS = frozenset(
+    {
+        "all",
+        "prep_aut",
+        "compulsa",
+        "sp_pending",
+        "sp_failed",
+        "correction",
+        "missing_docs",
+    }
+)
 
 
 def get_web_db() -> Generator[Session, None, None]:
@@ -67,6 +79,13 @@ def _count_pedidos_checklist_incompleto(db: Session, usuario: dict, case_svc: Ca
     return incomplete, capped
 
 
+def _normalize_pending_filter(raw: str | None) -> str:
+    if not raw:
+        return "all"
+    k = raw.strip().lower()
+    return k if k in _PENDING_FILTERS else "all"
+
+
 def _track_pending(
     tracked: dict[int, tuple[Case, list[str]]],
     case: Case,
@@ -79,24 +98,45 @@ def _track_pending(
         problems.append(problema)
 
 
-def _build_pending_table(db: Session, usuario: dict, *, limit: int = _PENDING_TABLE_LIMIT) -> list[dict]:
+def _build_pending_table(
+    db: Session,
+    usuario: dict,
+    *,
+    filter_key: str = "all",
+    limit: int = _PENDING_TABLE_LIMIT,
+) -> list[dict]:
     """Casos con pendientes operativos (deduplicados), ordenados por última actualización."""
+    fk = filter_key if filter_key in _PENDING_FILTERS else "all"
     settings = get_settings()
     case_svc = CaseService(settings)
     tracked: dict[int, tuple[Case, list[str]]] = {}
     base = _cases_query(db, usuario)
     cap = _PENDING_LIMIT_PER_SOURCE
 
-    status_labels: tuple[tuple[str, str], ...] = (
-        (C.ST_PED_PREP_AUT, "En preparación de autorización"),
+    status_prep = ((C.ST_PED_PREP_AUT, "En preparación de autorización"),)
+    status_compulsa = (
         (C.ST_PED_EN_COMPULSA, "En compulsa"),
         (C.ST_PED_PEND_COMPULSA, "Pendiente de compulsa"),
+    )
+    status_correction = (
         (C.ST_PED_RECHAZADO, "Pedido rechazado"),
         (C.ST_PED_CORRECCION, "Corrección de pedido solicitada"),
         (C.ST_REV_RECHAZADO, "Revisión rechazada"),
         (C.ST_REV_CORRECCION, "Corrección de revisión solicitada"),
     )
-    for status, label in status_labels:
+
+    if fk == "all":
+        status_buckets: tuple[tuple[str, str], ...] = status_prep + status_compulsa + status_correction
+    elif fk == "prep_aut":
+        status_buckets = status_prep
+    elif fk == "compulsa":
+        status_buckets = status_compulsa
+    elif fk == "correction":
+        status_buckets = status_correction
+    else:
+        status_buckets = ()
+
+    for status, label in status_buckets:
         for c in (
             base.filter(Case.current_status == status)
             .order_by(Case.updated_at.desc())
@@ -105,39 +145,45 @@ def _build_pending_table(db: Session, usuario: dict, *, limit: int = _PENDING_TA
         ):
             _track_pending(tracked, c, label)
 
-    for doc_status, label in (
-        ("PENDING_UPLOAD", "Documento con subida pendiente (SharePoint)"),
-        ("UPLOAD_FAILED", "Documento con error de subida (SharePoint)"),
-    ):
-        stmt = (
-            select(Document.case_id)
-            .join(Case, Case.id == Document.case_id)
-            .where(
-                Document.is_active.is_(True),
-                Document.upload_status == doc_status,
+    if fk in ("all", "sp_pending", "sp_failed"):
+        doc_specs: list[tuple[str, str]] = []
+        if fk in ("all", "sp_pending"):
+            doc_specs.append(
+                ("PENDING_UPLOAD", "Documento con subida pendiente (SharePoint)"),
             )
-        )
-        if usuario.get("rol") == UserRole.VENDEDOR.value:
-            stmt = stmt.where(Case.seller_name == usuario.get("nombre"))
-        stmt = stmt.distinct().limit(cap)
-        case_ids = list(db.execute(stmt).scalars().all())
-        if not case_ids:
-            continue
-        for c in base.filter(Case.id.in_(case_ids)).all():
-            _track_pending(tracked, c, label)
+        if fk in ("all", "sp_failed"):
+            doc_specs.append(("UPLOAD_FAILED", "Documento con error de subida (SharePoint)"))
+        for doc_status, label in doc_specs:
+            stmt = (
+                select(Document.case_id)
+                .join(Case, Case.id == Document.case_id)
+                .where(
+                    Document.is_active.is_(True),
+                    Document.upload_status == doc_status,
+                )
+            )
+            if usuario.get("rol") == UserRole.VENDEDOR.value:
+                stmt = stmt.where(Case.seller_name == usuario.get("nombre"))
+            stmt = stmt.distinct().limit(cap)
+            case_ids = list(db.execute(stmt).scalars().all())
+            if not case_ids:
+                continue
+            for c in base.filter(Case.id.in_(case_ids)).all():
+                _track_pending(tracked, c, label)
 
-    for c in (
-        base.filter(
-            Case.case_type == C.CASE_TYPE_PEDIDO,
-            Case.order_type.isnot(None),
-            Case.current_status.in_((C.ST_PED_RECIBIDO, C.ST_PED_CORRECCION)),
-        )
-        .order_by(Case.updated_at.desc())
-        .limit(40)
-        .all()
-    ):
-        if not case_svc.pedido_has_all_documents(db, c):
-            _track_pending(tracked, c, "Faltan documentos del checklist")
+    if fk in ("all", "missing_docs"):
+        for c in (
+            base.filter(
+                Case.case_type == C.CASE_TYPE_PEDIDO,
+                Case.order_type.isnot(None),
+                Case.current_status.in_((C.ST_PED_RECIBIDO, C.ST_PED_CORRECCION)),
+            )
+            .order_by(Case.updated_at.desc())
+            .limit(40)
+            .all()
+        ):
+            if not case_svc.pedido_has_all_documents(db, c):
+                _track_pending(tracked, c, "Faltan documentos del checklist")
 
     sorted_items = sorted(
         tracked.items(),
@@ -213,14 +259,19 @@ def _build_metrics(db: Session, usuario: dict) -> dict:
 
 
 @router.get("/dashboard")
-def dashboard(request: Request, db: Session = Depends(get_web_db)):
+def dashboard(
+    request: Request,
+    db: Session = Depends(get_web_db),
+    filtro_pendientes: str | None = Query(default=None, alias="filter"),
+):
     redirect = require_login(request, db)
     if redirect:
         return redirect
 
     usuario = get_current_user(request, db)
+    pendiente_filter = _normalize_pending_filter(filtro_pendientes)
     metricas = _build_metrics(db, usuario or {})
-    pendientes_tabla = _build_pending_table(db, usuario or {})
+    pendientes_tabla = _build_pending_table(db, usuario or {}, filter_key=pendiente_filter)
 
     return templates.TemplateResponse(
         request=request,
@@ -229,5 +280,6 @@ def dashboard(request: Request, db: Session = Depends(get_web_db)):
             "usuario": usuario,
             "metricas": metricas,
             "pendientes_tabla": pendientes_tabla,
+            "pendiente_filter": pendiente_filter,
         },
     )

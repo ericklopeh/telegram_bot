@@ -105,7 +105,32 @@
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span>Pendientes operativos</span>
-                <span class="text-muted small fw-normal">Hasta {{ pendientes_tabla|length }} filas (prioridad por fecha de actualización)</span>
+                <span class="text-muted small fw-normal">Hasta {{ pendientes_tabla|length }} filas · orden por actualización</span>
+            </div>
+            <div class="card-body border-bottom py-3">
+                <p class="text-muted small mb-2">Filtro rápido (sin JavaScript):</p>
+                <div class="d-flex flex-wrap gap-1" role="group" aria-label="Filtros pendientes">
+                    <a href="/dashboard" class="btn btn-sm rounded-pill {% if pendiente_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Todos</a>
+                    <a href="/dashboard?filter=prep_aut" class="btn btn-sm rounded-pill {% if pendiente_filter == 'prep_aut' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Pend. autorización</a>
+                    <a href="/dashboard?filter=compulsa" class="btn btn-sm rounded-pill {% if pendiente_filter == 'compulsa' %}btn-primary{% else %}btn-outline-secondary{% endif %}">En compulsa</a>
+                    <a href="/dashboard?filter=sp_pending" class="btn btn-sm rounded-pill {% if pendiente_filter == 'sp_pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}">SharePoint pendiente</a>
+                    <a href="/dashboard?filter=sp_failed" class="btn btn-sm rounded-pill {% if pendiente_filter == 'sp_failed' %}btn-primary{% else %}btn-outline-secondary{% endif %}">SharePoint error</a>
+                    <a href="/dashboard?filter=correction" class="btn btn-sm rounded-pill {% if pendiente_filter == 'correction' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Corrección / rechazados</a>
+                    <a href="/dashboard?filter=missing_docs" class="btn btn-sm rounded-pill {% if pendiente_filter == 'missing_docs' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Documentos faltantes</a>
+                </div>
+                {% if pendiente_filter != 'all' %}
+                <p class="small text-muted mb-0 mt-2">
+                    Mostrando solo:
+                    {% if pendiente_filter == 'prep_aut' %}casos en preparación de autorización.
+                    {% elif pendiente_filter == 'compulsa' %}casos en compulsa o pendiente de compulsa.
+                    {% elif pendiente_filter == 'sp_pending' %}casos con documento activo en subida pendiente.
+                    {% elif pendiente_filter == 'sp_failed' %}casos con documento activo con error de subida.
+                    {% elif pendiente_filter == 'correction' %}casos con corrección o rechazo (pedido o revisión).
+                    {% elif pendiente_filter == 'missing_docs' %}pedidos con checklist incompleto (recibido/corrección).
+                    {% endif %}
+                    <a href="/dashboard">Quitar filtro</a>
+                </p>
+                {% endif %}
             </div>
             <div class="card-body p-0">
                 {% if pendientes_tabla %}
@@ -149,7 +174,10 @@
                     </table>
                 </div>
                 {% else %}
-                <p class="text-muted mb-0 p-3">No hay pendientes que coincidan con los criterios actuales.</p>
+                <div class="p-4 text-center text-muted">
+                    <p class="mb-2">No hay pendientes en esta categoría con los datos actuales.</p>
+                    <p class="small mb-0">Prueba otro filtro o vuelve a <a href="/dashboard">Todos</a> para ver el conjunto completo.</p>
+                </div>
                 {% endif %}
             </div>
         </div>
