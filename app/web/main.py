@@ -1,3 +1,4 @@
+import logging
 import sys
 import traceback
 
@@ -7,11 +8,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import PlainTextResponse, RedirectResponse
+from starlette.responses import PlainTextResponse, RedirectResponse, Response
 
 from app.config import get_settings
 from app.web.paths import STATIC_DIR, TEMPLATES_DIR
 from app.web.routes import dashboard, cases, revision_talon, authorizations
+
+_log = logging.getLogger(__name__)
 
 web_app = FastAPI(title="Sistema Gaman Web")
 settings = get_settings()
@@ -28,10 +31,15 @@ web_app.add_middleware(
 async def _log_unhandled_errors(request: Request, call_next):
     """Siempre imprime traceback a stderr; con WEB_DEBUG además responde texto en el navegador."""
     try:
-        return await call_next(request)
+        response = await call_next(request)
+        code = getattr(response, "status_code", None)
+        if code is not None and code >= 500:
+            _log.error("HTTP %s para %s %s", code, request.method, request.url.path)
+        return response
     except Exception as exc:
         if isinstance(exc, (HTTPException, RequestValidationError)):
             raise exc
+        _log.exception("Excepción no controlada en %s %s", request.method, request.url.path)
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
         if settings.web_debug:
@@ -56,15 +64,22 @@ def index():
     return RedirectResponse(url="/login")
 
 
+def _no_store_cache(response: Response) -> Response:
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
 @web_app.get("/login")
 def login_get(request: Request):
-    return templates.TemplateResponse(
+    resp = templates.TemplateResponse(
         request=request,
         name="login.html",
         context={
             "error": None,
-        }
+        },
     )
+    return _no_store_cache(resp)
 
 
 @web_app.post("/login")
@@ -81,12 +96,14 @@ def login_post(
         usuario = UserRepository.get_by_username(db, username)
 
         if not usuario or not AuthService.verify_password(password, usuario.hashed_password) or not usuario.is_active:
-            return templates.TemplateResponse(
-                request=request,
-                name="login.html",
-                context={
-                    "error": "Usuario o contraseña incorrectos",
-                }
+            return _no_store_cache(
+                templates.TemplateResponse(
+                    request=request,
+                    name="login.html",
+                    context={
+                        "error": "Usuario o contraseña incorrectos",
+                    },
+                )
             )
 
         request.session["usuario"] = {

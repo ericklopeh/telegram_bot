@@ -6,7 +6,7 @@
     <div>
         <h2 class="fw-bold mb-1">Dashboard operativo</h2>
         <p class="text-muted mb-0">
-            Métricas del flujo de casos y documentos{% if usuario.rol == 'vendedor' %} (solo tus casos){% endif %}.
+            Métricas del flujo de casos y documentos{% if usuario is not none and usuario.rol == 'vendedor' %} (solo tus casos){% endif %}.
         </p>
     </div>
 
