@@ -26,6 +26,7 @@ DOC_CARATULA_BANCARIA = "caratula_bancaria"
 DOC_REVISION_EVIDENCIA = "revision_evidencia"
 DOC_REVISION_DICTAMEN = "revision_dictamen"
 DOC_AUTORIZACION_SNTE = "autorizacion_snte"
+DOC_ORDEN_SNTE_PDF = "orden_snte_pdf"
 
 # Estados internos — revisión
 ST_REV_RECIBIDO = "Recibido"
@@ -72,7 +73,8 @@ def doc_type_label(doc_type: str) -> str:
         DOC_CARATULA_BANCARIA: "Carátula bancaria",
         DOC_REVISION_EVIDENCIA: "Evidencia de revisión",
         DOC_REVISION_DICTAMEN: "Evidencia dictamen revisión",
-        DOC_AUTORIZACION_SNTE: "Autorización SNTE",
+        DOC_AUTORIZACION_SNTE: "Autorización SNTE (Excel)",
+        DOC_ORDEN_SNTE_PDF: "Orden de descuento SNTE (PDF)",
     }.get(doc_type, doc_type)
 
 
