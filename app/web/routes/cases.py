@@ -6,7 +6,7 @@ from typing import Generator
 from fastapi import APIRouter, Request, Depends, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from starlette.responses import RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db_session
 from app.domain import constants as C
@@ -76,6 +76,7 @@ def detalle_caso(
 
     from app.models.talon_review import TalonReview
     from app.models.document import Document
+    from app.models.case_event import CaseEvent
 
     ultima_revision = (
         db.query(TalonReview)
@@ -88,6 +89,14 @@ def detalle_caso(
         db.query(Document)
         .filter(Document.case_id == caso.id, Document.is_active == True)
         .order_by(Document.uploaded_at.desc())
+        .all()
+    )
+
+    case_events = (
+        db.query(CaseEvent)
+        .options(joinedload(CaseEvent.actor))
+        .filter(CaseEvent.case_id == caso.id)
+        .order_by(CaseEvent.created_at.desc())
         .all()
     )
 
@@ -124,6 +133,7 @@ def detalle_caso(
             "has_refi_authorization": has_refi_authorization,
             "authorization_jobs": authorization_jobs,
             "upload_document_types": upload_document_types,
+            "case_events": case_events,
         }
     )
 
