@@ -29,7 +29,7 @@ web_app.add_middleware(
 
 @web_app.middleware("http")
 async def _log_unhandled_errors(request: Request, call_next):
-    """Siempre imprime traceback a stderr; con WEB_DEBUG además responde texto en el navegador."""
+    """Registra errores; ante excepción no controlada devuelve texto con traceback (desarrollo)."""
     try:
         response = await call_next(request)
         code = getattr(response, "status_code", None)
@@ -42,21 +42,25 @@ async def _log_unhandled_errors(request: Request, call_next):
         _log.exception("Excepción no controlada en %s %s", request.method, request.url.path)
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
-        if settings.web_debug:
-            body = (
-                "WEB_DEBUG=true: detalle del error (desactivar WEB_DEBUG en producción).\n\n"
-                f"{type(exc).__name__}: {exc}\n\n"
-                f"{traceback.format_exc()}"
-            )
-            return PlainTextResponse(
-                content=body,
-                status_code=500,
-                media_type="text/plain; charset=utf-8",
-            )
-        raise
+        body = (
+            "Error interno (detalle para desarrollo; no usar en producción expuesto a Internet).\n\n"
+            f"{type(exc).__name__}: {exc}\n\n"
+            f"{traceback.format_exc()}"
+        )
+        return PlainTextResponse(
+            content=body,
+            status_code=500,
+            media_type="text/plain; charset=utf-8",
+        )
 
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+
+@web_app.get("/ping")
+def ping():
+    """Comprueba que esta instancia es la app web (sin BD)."""
+    return {"status": "ok", "service": "sistema_gaman_web"}
 
 
 @web_app.get("/")
