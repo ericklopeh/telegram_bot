@@ -100,6 +100,72 @@
     </div>
 </div>
 
+<div class="row g-3 mt-1">
+    <div class="col-12">
+        <p class="text-muted small mb-2">
+            <span class="fw-semibold">Tiempo operativo / SLA (indicadores)</span>
+            — basado en <code>updated_at</code> / <code>created_at</code> del caso; umbral 24 h respecto al momento de carga del dashboard.
+        </p>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card shadow-sm border-0 h-100 border-warning border-opacity-50">
+            <div class="card-body">
+                <div class="text-muted small">Abiertos sin actualización &gt; 24 h</div>
+                <div class="fs-3 fw-bold text-warning">{{ metricas.sla_abiertos_sin_act_24h }}</div>
+                <div class="text-muted small mt-1">Casos operativamente abiertos con <code>updated_at</code> anterior al umbral.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card shadow-sm border-0 h-100 border-warning border-opacity-50">
+            <div class="card-body">
+                <div class="text-muted small">Prep. autorización &gt; 24 h</div>
+                <div class="fs-3 fw-bold text-warning">{{ metricas.sla_prep_aut_mas_24h }}</div>
+                <div class="text-muted small mt-1">Estado preparación de autorización, sin movimiento reciente.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card shadow-sm border-0 h-100 border-warning border-opacity-50">
+            <div class="card-body">
+                <div class="text-muted small">Compulsa / pend. compulsa &gt; 24 h</div>
+                <div class="fs-3 fw-bold text-warning">{{ metricas.sla_compulsa_mas_24h }}</div>
+                <div class="text-muted small mt-1">En compulsa o pendiente de compulsa según <code>updated_at</code>.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Edad media casos abiertos</div>
+                <div class="fs-3 fw-bold">
+                    {% if metricas.sla_edad_media_abiertos_horas is not none %}
+                    {{ "%.1f"|format(metricas.sla_edad_media_abiertos_horas) }} h
+                    {% else %}
+                    <span class="fs-6 fw-normal text-muted">Sin datos</span>
+                    {% endif %}
+                </div>
+                <div class="text-muted small mt-1">Promedio de <code>now − created_at</code> sobre casos abiertos.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Caso abierto más antiguo (alta)</div>
+                <div class="fs-5 fw-bold">
+                    {% if metricas.sla_caso_mas_antiguo_abierto %}
+                    {{ metricas.sla_caso_mas_antiguo_abierto.strftime('%d/%m/%Y %H:%M') }}
+                    {% else %}
+                    <span class="fs-6 fw-normal text-muted">Sin datos</span>
+                    {% endif %}
+                </div>
+                <div class="text-muted small mt-1"><code>created_at</code> mínimo entre casos abiertos.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row mt-4">
     <div class="col-12">
         <div class="card shadow-sm border-0">

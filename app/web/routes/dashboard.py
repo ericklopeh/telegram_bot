@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Generator
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -342,6 +343,30 @@ def _build_metrics(db: Session, usuario: dict) -> dict:
 
     por_estado = [{"estado": estado, "total": int(n)} for estado, n in rows]
 
+    # SLA / tiempo operativo (timestamps existentes; sin historial adicional).
+    umbral_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    filtro_abierto = not_(Case.current_status.in_(_CERRADOS_OPERATIVOS))
+    sla_abiertos_sin_act_24h = base.filter(filtro_abierto, Case.updated_at < umbral_24h).count()
+    sla_prep_aut_mas_24h = base.filter(
+        Case.current_status == C.ST_PED_PREP_AUT,
+        Case.updated_at < umbral_24h,
+    ).count()
+    sla_compulsa_mas_24h = base.filter(
+        Case.current_status.in_((C.ST_PED_EN_COMPULSA, C.ST_PED_PEND_COMPULSA)),
+        Case.updated_at < umbral_24h,
+    ).count()
+    avg_epoch = base.filter(filtro_abierto).with_entities(
+        func.avg(func.extract("epoch", func.now() - Case.created_at)),
+    ).scalar()
+    sla_edad_media_abiertos_horas: float | None
+    if avg_epoch is None:
+        sla_edad_media_abiertos_horas = None
+    else:
+        sla_edad_media_abiertos_horas = float(avg_epoch) / 3600.0
+    sla_caso_mas_antiguo_abierto = base.filter(filtro_abierto).with_entities(
+        func.min(Case.created_at),
+    ).scalar()
+
     return {
         "total_abiertos": total_abiertos,
         "pendientes_autorizacion": pendientes_autorizacion,
@@ -354,6 +379,11 @@ def _build_metrics(db: Session, usuario: dict) -> dict:
         "pedidos_checklist_incompleto": checklist_incompleto,
         "pedidos_checklist_incompleto_capped": checklist_capped,
         "por_estado": por_estado,
+        "sla_abiertos_sin_act_24h": sla_abiertos_sin_act_24h,
+        "sla_prep_aut_mas_24h": sla_prep_aut_mas_24h,
+        "sla_compulsa_mas_24h": sla_compulsa_mas_24h,
+        "sla_edad_media_abiertos_horas": sla_edad_media_abiertos_horas,
+        "sla_caso_mas_antiguo_abierto": sla_caso_mas_antiguo_abierto,
     }
 
 
