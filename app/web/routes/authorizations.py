@@ -90,8 +90,10 @@ async def generar_autorizacion(
         return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
 
     except TemplateNotFoundError as e:
+        db.rollback()
         msg = urllib.parse.quote(str(e))
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
     except Exception as e:
+        db.rollback()
         msg = urllib.parse.quote(f"Error generando autorización: {str(e)}")
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
