@@ -29,6 +29,14 @@ _CERRADOS_OPERATIVOS = (
     C.ST_REV_SIN_LIQUIDEZ,
 )
 
+_CORRECCION_RECHAZO_STATUSES = (
+    C.ST_PED_RECHAZADO,
+    C.ST_PED_CORRECCION,
+    C.ST_REV_RECHAZADO,
+    C.ST_REV_CORRECCION,
+)
+
+_RESUMEN_VENDEDORES_LIMIT = 25
 _MAX_CHECKLIST_SCAN = 150
 _PENDING_LIMIT_PER_SOURCE = 12
 _PENDING_TABLE_LIMIT = 30
@@ -208,6 +216,97 @@ def _doc_status_count(db: Session, usuario: dict, upload_status: str) -> int:
     return int(q.scalar() or 0)
 
 
+def _case_counts_grouped_by_seller(db: Session, usuario: dict, *filters) -> dict[str, int]:
+    q = db.query(Case.seller_name, func.count(Case.id)).filter(
+        Case.seller_name.isnot(None),
+        Case.seller_name != "",
+    )
+    for f in filters:
+        q = q.filter(f)
+    if usuario.get("rol") == UserRole.VENDEDOR.value:
+        q = q.filter(Case.seller_name == usuario.get("nombre"))
+    out: dict[str, int] = {}
+    for name, n in q.group_by(Case.seller_name).all():
+        if not name:
+            continue
+        key = str(name)
+        if key.strip():
+            out[key] = int(n)
+    return out
+
+
+def _doc_upload_failed_by_seller(db: Session, usuario: dict) -> dict[str, int]:
+    q = (
+        db.query(Case.seller_name, func.count(Document.id))
+        .select_from(Document)
+        .join(Case, Case.id == Document.case_id)
+        .filter(
+            Case.seller_name.isnot(None),
+            Case.seller_name != "",
+            Document.is_active.is_(True),
+            Document.upload_status == "UPLOAD_FAILED",
+        )
+    )
+    if usuario.get("rol") == UserRole.VENDEDOR.value:
+        q = q.filter(Case.seller_name == usuario.get("nombre"))
+    out: dict[str, int] = {}
+    for name, n in q.group_by(Case.seller_name).all():
+        if not name:
+            continue
+        key = str(name)
+        if key.strip():
+            out[key] = int(n)
+    return out
+
+
+def _build_resumen_vendedores(db: Session, usuario: dict) -> list[dict]:
+    """Agregados por vendedor: pocas consultas GROUP BY, sin escanear todos los documentos."""
+    u = usuario or {}
+    abiertos = _case_counts_grouped_by_seller(
+        db, u, not_(Case.current_status.in_(_CERRADOS_OPERATIVOS))
+    )
+    prep = _case_counts_grouped_by_seller(db, u, Case.current_status == C.ST_PED_PREP_AUT)
+    compulsa = _case_counts_grouped_by_seller(
+        db,
+        u,
+        Case.current_status.in_((C.ST_PED_EN_COMPULSA, C.ST_PED_PEND_COMPULSA)),
+    )
+    corr = _case_counts_grouped_by_seller(db, u, Case.current_status.in_(_CORRECCION_RECHAZO_STATUSES))
+    failed = _doc_upload_failed_by_seller(db, u)
+
+    def _score(s: str) -> int:
+        return (
+            abiertos.get(s, 0)
+            + prep.get(s, 0)
+            + compulsa.get(s, 0)
+            + corr.get(s, 0)
+            + failed.get(s, 0)
+        )
+
+    if u.get("rol") == UserRole.VENDEDOR.value:
+        nm = u.get("nombre")
+        if nm is None or str(nm).strip() == "":
+            return []
+        sellers = [str(nm)]
+    else:
+        pool = set(abiertos) | set(prep) | set(compulsa) | set(corr) | set(failed)
+        active = [s for s in pool if _score(s) > 0]
+        active.sort(key=lambda s: (abiertos.get(s, 0), _score(s)), reverse=True)
+        sellers = active[:_RESUMEN_VENDEDORES_LIMIT]
+
+    return [
+        {
+            "vendedor": s,
+            "abiertos": abiertos.get(s, 0),
+            "prep_aut": prep.get(s, 0),
+            "compulsa": compulsa.get(s, 0),
+            "correccion_rechazo": corr.get(s, 0),
+            "sharepoint_error": failed.get(s, 0),
+        }
+        for s in sellers
+    ]
+
+
 def _build_metrics(db: Session, usuario: dict) -> dict:
     base = _cases_query(db, usuario)
     settings = get_settings()
@@ -272,6 +371,7 @@ def dashboard(
     pendiente_filter = _normalize_pending_filter(filtro_pendientes)
     metricas = _build_metrics(db, usuario or {})
     pendientes_tabla = _build_pending_table(db, usuario or {}, filter_key=pendiente_filter)
+    resumen_vendedores = _build_resumen_vendedores(db, usuario or {})
 
     return templates.TemplateResponse(
         request=request,
@@ -281,5 +381,6 @@ def dashboard(
             "metricas": metricas,
             "pendientes_tabla": pendientes_tabla,
             "pendiente_filter": pendiente_filter,
+            "resumen_vendedores": resumen_vendedores,
         },
     )

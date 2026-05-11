@@ -185,6 +185,57 @@
 </div>
 
 <div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>Resumen operativo por vendedor</span>
+                <span class="text-muted small fw-normal">
+                    {% if usuario.rol == 'vendedor' %}Tu actividad{% else %}Hasta {{ resumen_vendedores|length }} vendedores con actividad{% endif %}
+                </span>
+            </div>
+            <div class="card-body p-0">
+                {% if resumen_vendedores %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Vendedor</th>
+                                <th class="text-end">Casos abiertos</th>
+                                <th class="text-end">Pend. autorización</th>
+                                <th class="text-end">Compulsa / pend. compulsa</th>
+                                <th class="text-end">Corrección / rechazados</th>
+                                <th class="text-end">Docs error SharePoint</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in resumen_vendedores %}
+                            <tr>
+                                <td class="fw-semibold">{{ r.vendedor }}</td>
+                                <td class="text-end">{{ r.abiertos }}</td>
+                                <td class="text-end">{{ r.prep_aut }}</td>
+                                <td class="text-end">{{ r.compulsa }}</td>
+                                <td class="text-end">{{ r.correccion_rechazo }}</td>
+                                <td class="text-end">{{ r.sharepoint_error }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0 p-3">
+                    {% if usuario.rol == 'vendedor' %}
+                    No hay datos de vendedor asociados a tu usuario o aún no registras actividad en el flujo.
+                    {% else %}
+                    No hay vendedores con actividad reciente en los agregados mostrados.
+                    {% endif %}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
     <div class="col-12 col-lg-6">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-header bg-white fw-bold">Casos por estado interno</div>
