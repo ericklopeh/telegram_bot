@@ -14,6 +14,15 @@ from app.services.refinanciamiento_service import (
     RefinanciamientoService,
     TemplateNotFoundError as RefiTemplateNotFoundError,
 )
+from app.services.case_event_service import (
+    AUTH_GENERATED,
+    DOCUMENT_CREATED,
+    REFI_GENERATED,
+    TELEGRAM_NOTIFIED,
+    log_document_event,
+    log_event,
+    log_status_change,
+)
 from app.services.sharepoint_document_service import SharePointDocumentService, SharePointUploadPayload
 from app.web.auth import get_current_user, require_roles
 
@@ -58,19 +67,103 @@ def _schedule_generated_document_tasks(
         background_tasks.add_task(sp_service.upload_document, payload)
 
 
+def _log_generation_events(
+    *,
+    db: Session,
+    case: Case,
+    docs: list,
+    generation_event_type: str,
+    generated_by: str,
+    route: str,
+    actor_user_id: int | None,
+    actor_role: str | None,
+) -> None:
+    log_event(
+        db,
+        case_id=case.id,
+        event_type=generation_event_type,
+        message="Documentos SNTE generados",
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        source="web",
+        metadata={
+            "case_id": case.id,
+            "generated_by": generated_by,
+            "route": route,
+            "document_ids": [doc.id for doc in docs],
+        },
+    )
+    for doc in docs:
+        log_document_event(
+            db,
+            case_id=case.id,
+            event_type=DOCUMENT_CREATED,
+            document_id=doc.id,
+            document_type=doc.document_type,
+            filename=doc.stored_filename,
+            message="Documento generado desde web",
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            source="web",
+            metadata={
+                "case_id": case.id,
+                "generated_by": generated_by,
+                "route": route,
+                "upload_status": doc.upload_status,
+            },
+        )
+
+
+def _log_background_notification_enqueued(
+    *,
+    db: Session,
+    case: Case,
+    generated_by: str,
+    route: str,
+    actor_user_id: int | None,
+    actor_role: str | None,
+) -> None:
+    try:
+        log_event(
+            db,
+            case_id=case.id,
+            event_type=TELEGRAM_NOTIFIED,
+            message="Notificacion Telegram encolada en background",
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            source="web",
+            metadata={
+                "case_id": case.id,
+                "generated_by": generated_by,
+                "route": route,
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception(
+            "No se pudo persistir evento de notificacion Telegram encolada",
+            extra={"case_id": case.id, "route": route},
+        )
+
+
 def _persist_generated_status(
     *,
     db: Session,
     case: Case,
     case_id: int,
     action_user: str,
+    actor_user_id: int | None,
+    actor_role: str | None,
     notes: str,
     log_message: str,
+    route: str,
 ) -> None:
     from app.config import get_settings
     from app.domain import constants as C
     from app.services.case_service import CaseService
 
+    old_status = case.current_status
     case_svc = CaseService(get_settings())
     case_svc.transition_case_status(
         db,
@@ -79,7 +172,40 @@ def _persist_generated_status(
         notes=notes,
         action_user=action_user,
     )
-    db.commit()
+    log_status_change(
+        db,
+        case_id=case_id,
+        old_status=old_status,
+        new_status=C.ST_PED_AUT_GENERADA,
+        message=notes,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        source="web",
+        metadata={
+            "case_id": case_id,
+            "generated_by": action_user,
+            "route": route,
+            "old_status": old_status,
+            "new_status": C.ST_PED_AUT_GENERADA,
+        },
+    )
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception(
+            "Fallo commit con auditoria; se reintenta persistir estatus sin eventos",
+            extra={"case_id": case_id, "route": route},
+        )
+        db.refresh(case)
+        case_svc.transition_case_status(
+            db,
+            case,
+            C.ST_PED_AUT_GENERADA,
+            notes=notes,
+            action_user=action_user,
+        )
+        db.commit()
     db.refresh(case)
     log.info(
         log_message,
@@ -100,6 +226,8 @@ async def generar_autorizacion(
 
     user = get_current_user(request, db)
     action_user = user.get("nombre", "web_user") if user else "web_user"
+    actor_user_id = user.get("id") if user else None
+    actor_role = user.get("rol") if user else None
 
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
@@ -130,13 +258,26 @@ async def generar_autorizacion(
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     try:
+        _log_generation_events(
+            db=db,
+            case=case,
+            docs=docs,
+            generation_event_type=AUTH_GENERATED,
+            generated_by=action_user,
+            route="generar_autorizacion",
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+        )
         _persist_generated_status(
             db=db,
             case=case,
             case_id=case_id,
             action_user=action_user,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
             notes="Autorizacion SNTE generada",
             log_message="Estatus de caso persistido tras generar autorizacion SNTE",
+            route="generar_autorizacion",
         )
     except Exception as e:
         db.rollback()
@@ -155,6 +296,14 @@ async def generar_autorizacion(
             case=case,
             docs=docs,
             case_id=case_id,
+        )
+        _log_background_notification_enqueued(
+            db=db,
+            case=case,
+            generated_by=action_user,
+            route="generar_autorizacion",
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
         )
     except Exception as e:
         log.exception(
@@ -272,6 +421,8 @@ async def generar_refinanciamiento(
 
     user = get_current_user(request, db)
     action_user = user.get("nombre", "web_user") if user else "web_user"
+    actor_user_id = user.get("id") if user else None
+    actor_role = user.get("rol") if user else None
 
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
@@ -327,13 +478,26 @@ async def generar_refinanciamiento(
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     try:
+        _log_generation_events(
+            db=db,
+            case=case,
+            docs=docs,
+            generation_event_type=REFI_GENERATED,
+            generated_by=action_user,
+            route="generar_refinanciamiento",
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+        )
         _persist_generated_status(
             db=db,
             case=case,
             case_id=case_id,
             action_user=action_user,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
             notes="Refinanciamiento SNTE generado",
             log_message="Estatus de caso persistido tras generar refinanciamiento",
+            route="generar_refinanciamiento",
         )
     except Exception as e:
         db.rollback()
@@ -352,6 +516,14 @@ async def generar_refinanciamiento(
             case=case,
             docs=docs,
             case_id=case_id,
+        )
+        _log_background_notification_enqueued(
+            db=db,
+            case=case,
+            generated_by=action_user,
+            route="generar_refinanciamiento",
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
         )
     except Exception as e:
         log.exception(
