@@ -93,6 +93,14 @@ def detalle_caso(
     has_snte_authorization = any(d.document_type == C.DOC_AUTORIZACION_SNTE for d in documentos)
     has_snte_order_pdf = any(d.document_type == C.DOC_ORDEN_SNTE_PDF for d in documentos)
 
+    from app.models.authorization_job import AuthorizationJob
+    authorization_jobs = (
+        db.query(AuthorizationJob)
+        .filter(AuthorizationJob.case_id == caso.id)
+        .order_by(AuthorizationJob.created_at.desc())
+        .all()
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -103,6 +111,7 @@ def detalle_caso(
             "documentos": documentos,
             "has_snte_authorization": has_snte_authorization,
             "has_snte_order_pdf": has_snte_order_pdf,
+            "authorization_jobs": authorization_jobs,
         }
     )
 

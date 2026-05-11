@@ -394,6 +394,41 @@
 
         <div class="card shadow-sm border-0 mt-4">
             <div class="card-header bg-white fw-bold">
+                Historial de Autorizaciones SNTE
+            </div>
+            <div class="card-body">
+                {% if authorization_jobs %}
+                    <div class="list-group">
+                        {% for job in authorization_jobs %}
+                        <div class="list-group-item p-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-bold" style="font-size: 0.85rem;">{{ job.template_name }}</span>
+                                {% if job.generation_status == 'success' %}
+                                    <span class="badge bg-success" style="font-size: 0.7rem;">Éxito</span>
+                                {% else %}
+                                    <span class="badge bg-danger" style="font-size: 0.7rem;">Error</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-muted text-break" style="font-size: 0.75rem; line-height: 1.2;">
+                                {% set filename = job.output_path.split('\\')[-1] if '\\' in job.output_path else job.output_path.split('/')[-1] %}
+                                <i class="bi bi-file-earmark-text"></i> {{ filename }}
+                            </div>
+                            <div class="text-muted mt-1 text-end" style="font-size: 0.7rem;">
+                                {{ job.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0 small">
+                        Aún no se han generado autorizaciones para este caso.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mt-4">
+            <div class="card-header bg-white fw-bold">
                 Historial
             </div>
 
