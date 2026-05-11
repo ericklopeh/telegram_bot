@@ -36,7 +36,12 @@ class SharePointDocumentService:
                 file_bytes=file_bytes,
             )
             with session_scope() as db:
-                DocumentRepository.set_upload_uploaded(db, payload.document_id, result.get("webUrl"))
+                DocumentRepository.set_upload_uploaded(
+                    db,
+                    payload.document_id,
+                    result.get("webUrl"),
+                    sharepoint_path=result.get("folder_path"),
+                )
             log.info(
                 "Documento subido a SharePoint",
                 extra={

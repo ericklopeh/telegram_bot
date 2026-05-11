@@ -255,7 +255,12 @@ async def sharepoint_retry_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             if item.document_id:
                 with session_scope() as db:
-                    DocumentRepository.set_upload_uploaded(db, item.document_id, result.get("webUrl"))
+                    DocumentRepository.set_upload_uploaded(
+                        db,
+                        item.document_id,
+                        result.get("webUrl"),
+                        sharepoint_path=result.get("folder_path"),
+                    )
             log.info(
                 "Retry SharePoint exitoso",
                 extra={
