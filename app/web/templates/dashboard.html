@@ -4,9 +4,9 @@
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
     <div>
-        <h2 class="fw-bold mb-1">Dashboard</h2>
+        <h2 class="fw-bold mb-1">Dashboard operativo</h2>
         <p class="text-muted mb-0">
-            Resumen general de solicitudes, revisiones y pedidos.
+            Métricas del flujo de casos y documentos{% if usuario.rol == 'vendedor' %} (solo tus casos){% endif %}.
         </p>
     </div>
 
@@ -16,54 +16,133 @@
 </div>
 
 <div class="row g-3">
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm border-0 stat-card">
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
-                <div class="text-muted small">Total</div>
-                <div class="fs-3 fw-bold">{{ resumen.total }}</div>
+                <div class="text-muted small">Casos abiertos</div>
+                <div class="fs-3 fw-bold text-primary">{{ metricas.total_abiertos }}</div>
+                <div class="text-muted small mt-1">Excluye cerrados, rechazados, compra y revisiones sin liquidez.</div>
             </div>
         </div>
     </div>
-
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm border-0 stat-card">
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
-                <div class="text-muted small">Recibidos</div>
-                <div class="fs-3 fw-bold">{{ resumen.recibidos }}</div>
+                <div class="text-muted small">Pendientes de autorización</div>
+                <div class="fs-3 fw-bold text-warning">{{ metricas.pendientes_autorizacion }}</div>
+                <div class="text-muted small mt-1">En preparación de autorización</div>
             </div>
         </div>
     </div>
-
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm border-0 stat-card">
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
-                <div class="text-muted small">En revisión</div>
-                <div class="fs-3 fw-bold">{{ resumen.en_revision }}</div>
+                <div class="text-muted small">Autorizaciones generadas</div>
+                <div class="fs-3 fw-bold text-success">{{ metricas.autorizaciones_generadas }}</div>
+                <div class="text-muted small mt-1">Estado «Autorización generada».</div>
             </div>
         </div>
     </div>
-
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm border-0 stat-card">
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
-                <div class="text-muted small">Aprobados</div>
-                <div class="fs-3 fw-bold">{{ resumen.aprobados }}</div>
+                <div class="text-muted small">Pendientes de compulsa</div>
+                <div class="fs-3 fw-bold text-warning">{{ metricas.pendientes_compulsa }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Compulsa OK</div>
+                <div class="fs-3 fw-bold text-success">{{ metricas.compulsa_ok }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Prep. aut. sin Excel SNTE</div>
+                <div class="fs-3 fw-bold text-secondary">{{ metricas.prep_sin_excel_snte }}</div>
+                <div class="text-muted small mt-1">Pedidos en prep. sin doc. activo <code>autorizacion_snte</code>.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100 border-danger border-opacity-25">
+            <div class="card-body">
+                <div class="text-muted small">Docs UPLOAD_FAILED</div>
+                <div class="fs-3 fw-bold text-danger">{{ metricas.docs_upload_failed }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100 border-info border-opacity-25">
+            <div class="card-body">
+                <div class="text-muted small">Docs PENDING_UPLOAD</div>
+                <div class="fs-3 fw-bold text-info">{{ metricas.docs_pending_upload }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Pedidos checklist incompleto</div>
+                <div class="fs-3 fw-bold">{{ metricas.pedidos_checklist_incompleto }}</div>
+                <div class="text-muted small mt-1">
+                    Recibido o corrección, sin todos los docs obligatorios (máx. 150 más recientes por fecha de actualización).
+                    {% if metricas.pedidos_checklist_incompleto_capped %}
+                    <span class="text-warning">Tope alcanzado; el número real puede ser mayor.</span>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="card shadow-sm border-0 mt-4">
-    <div class="card-body">
-        <h5 class="fw-bold">Flujo propuesto</h5>
-
-        <div class="d-flex flex-wrap gap-2 mt-3">
-            <span class="badge bg-secondary p-2">Recibido</span>
-            <span class="badge bg-primary p-2">En revisión</span>
-            <span class="badge bg-success p-2">Aprobado</span>
-            <span class="badge bg-info p-2">Autorización</span>
-            <span class="badge bg-warning text-dark p-2">Compulsa</span>
-            <span class="badge bg-dark p-2">Cerrado</span>
+<div class="row mt-4">
+    <div class="col-12 col-lg-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-bold">Casos por estado interno</div>
+            <div class="card-body p-0">
+                {% if metricas.por_estado %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Estado</th>
+                                <th class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for fila in metricas.por_estado %}
+                            <tr>
+                                <td>{{ fila.estado }}</td>
+                                <td class="text-end fw-semibold">{{ fila.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0 p-3">Sin casos que coincidan con el filtro actual.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-6 mt-4 mt-lg-0">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-bold">Referencia de flujo</div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Etiquetas orientativas del flujo pedido / revisión.</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="badge bg-secondary p-2">Recibido</span>
+                    <span class="badge bg-primary p-2">En revisión / prep. aut.</span>
+                    <span class="badge bg-success p-2">Autorización generada / compulsa OK</span>
+                    <span class="badge bg-warning text-dark p-2">Pendiente compulsa</span>
+                    <span class="badge bg-dark p-2">Cerrado / compra</span>
+                </div>
+            </div>
         </div>
     </div>
 </div>
