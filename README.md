@@ -80,6 +80,21 @@ Probar conexión (desde la raíz del proyecto):
 python scripts/test_db_connection.py
 ```
 
+### Smoke check (`scripts/smoke_check.py`)
+
+Comprueba sin levantar servidores: imports (`app.main`, web, API, servicios SNTE/refi/caso/documentos/notificaciones), variables obligatorias **sin imprimir secretos**, existencia de plantillas bajo `storage/templates/`, y `SELECT 1` si `DATABASE_URL` está definida.
+
+```bash
+docker compose up -d db
+python scripts/smoke_check.py
+```
+
+**Plantilla Excel SNTE:** debe existir `storage/templates/plantilla_master_autorizaciones.xlsx`. No siempre se versiona en el repo: cópiala desde tu fuente de verdad (otro repo de autorización SNTE o una ruta local de equipo como `E:\dev\autorizacion_snte`), conservando el nombre del archivo. Detalle: `docs/SNTE_MODULE.md`.
+
+**DATABASE_URL Docker vs local:** dentro de Docker Compose el host del servicio Postgres suele ser `db` (solo resuelve en la red del stack). Desde **PowerShell en Windows** fuera de Docker, usa **`localhost`** y el puerto mapeado (p. ej. **`5433`**, ver sección [DATABASE_URL](#database_url) arriba). El smoke no modifica `.env`.
+
+Si la base no responde, el script intenta `alembic heads` y **omite** `alembic current` con un `WARN` breve (evita trazas largas cuando la DB no está levantada).
+
 ## SharePoint (Microsoft Graph)
 
 La integración para subir archivos de revisión/pedido a SharePoint está documentada en:

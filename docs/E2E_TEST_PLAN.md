@@ -23,7 +23,14 @@ alembic current
 alembic upgrade head
 ```
 
-Comprobaciones auxiliares existentes en el repo (no hay `scripts/smoke_check.py` en el estado actual):
+Comprobación rápida de entorno (imports, plantillas críticas, variables sin exponer secretos, `SELECT 1` si hay DB):
+
+```bash
+docker compose up -d db
+python scripts/smoke_check.py
+```
+
+Comprobación de solo conexión:
 
 ```bash
 python scripts/test_db_connection.py
@@ -39,6 +46,13 @@ Arranque típico en desarrollo:
 
 - **Web:** `python -m uvicorn app.web.main:web_app --reload` (ver `docs/ARCHITECTURE_STATUS.md`).
 - **Bot:** `python -m app.main` (token Telegram y PostgreSQL válidos).
+
+### Smoke check y entorno local
+
+- **Script:** `python scripts/smoke_check.py` (desde la raíz del repo, con venv activo).
+- **Plantilla Excel SNTE:** debe existir `storage/templates/plantilla_master_autorizaciones.xlsx` (no se versiona si es propiedad interna; copiar desde el repo de referencia de autorización SNTE; ver `docs/SNTE_MODULE.md`). Rutas típicas en equipos de desarrollo pueden ser como `E:\dev\autorizacion_snte` — copiar el archivo conservando el nombre exacto.
+- **DATABASE_URL en Docker vs local:** en `docker-compose` el servicio Postgres se llama `db`; dentro de la red Compose la URL usa host `db`. En **PowerShell local** (fuera de Docker) ese host **no resuelve**; usa `localhost` y el puerto publicado (p. ej. `5433` según `README.md` y `docker-compose.yml`).
+- **Alembic:** si la DB no responde, el smoke omite `alembic current` con un `WARN` breve; `alembic heads` se intenta igual (no requiere DB).
 
 ---
 
@@ -438,6 +452,7 @@ Usar antes de entregar a QA o producción controlada.
 - [ ] `git status` limpio o cambios revisados y etiquetados.
 - [ ] `alembic current` coincide con revisión desplegada; `alembic upgrade head` aplicado en el entorno objetivo.
 - [ ] Variables críticas en `.env`: DB, `WEB_SESSION_SECRET`, Telegram, rutas de almacenamiento, Graph/SharePoint si aplica.
+- [ ] `python scripts/smoke_check.py` sin fallos críticos (plantillas bajo `storage/templates/` y `DATABASE_URL` alcanzable desde ese entorno).
 - [ ] **Escenarios 1 y 2** ejecutados al menos una vez en entorno con datos reales o semilla (`scripts/seed_admin.py`, `scripts/create_demo_case.py` si se usan).
 - [ ] **Escenario 3** (refi) con plantillas presentes.
 - [ ] **Escenario 4** (bloqueo compulsa) verificado tras cambios recientes de validación documental.
@@ -450,9 +465,3 @@ Usar antes de entregar a QA o producción controlada.
 - [ ] **Escenario 11** (talon/OCR) N/A o OK según despliegue.
 - [ ] **Escenario 12** (aislamiento vendedor) OK.
 - [ ] Registro de incidencias y capturas adjuntas al ticket de release.
-
----
-
-## Nota sobre `scripts/smoke_check.py`
-
-En el estado actual del repositorio **no existe** `scripts/smoke_check.py`. Si se añade en el futuro, incorporar aquí su comando y propósito en la sección 0 y en el checklist de release.
