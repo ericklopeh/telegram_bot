@@ -64,9 +64,6 @@ class Settings(BaseSettings):
     sla_autorizacion_minutes: int = Field(default=240, alias="SLA_AUTORIZACION_MINUTES")
     sla_compulsa_minutes: int = Field(default=180, alias="SLA_COMPULSA_MINUTES")
 
-    snte_template_path: str = Field(default="storage/templates/plantilla_snte.xlsx", alias="SNTE_TEMPLATE_PATH")
-    snte_mapping_path: str = Field(default="storage/templates/snte_mapping.json", alias="SNTE_MAPPING_PATH")
-
     @property
     def sqlalchemy_database_uri(self) -> str:
         return self.database_url.strip().strip('"').strip("'")
