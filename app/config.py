@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # SQLAlchemy / Alembic (obligatoria). Preferir postgresql+psycopg:// (psycopg3). Host `db` en Compose; `localhost` si el cliente corre en Windows contra el puerto publicado.
     database_url: str = Field(..., alias="DATABASE_URL")
     web_session_secret: str = Field(default="CAMBIA_ESTA_CLAVE_DEMO_GAMAN_2026", alias="WEB_SESSION_SECRET")
+    # Solo desarrollo local: ante un 500, respuesta texto con traceback y traza en consola. No usar en producción.
+    web_debug: bool = Field(default=False, alias="WEB_DEBUG")
+    # Si True, la web no aplica RBAC por rol (cualquier usuario logueado puede usar rutas de admin/autorización/revisión).
+    # En producción debe ser False. En docker-compose suele activarse por defecto para pruebas locales.
+    web_rbac_relaxed: bool = Field(default=False, alias="WEB_RBAC_RELAXED")
+    # Si True y el chat no tiene users.telegram_id, el bot usa un usuario demo (primer admin/sistemas activo, o el primer activo). Solo desarrollo.
+    telegram_dev_fallback_any_sender: bool = Field(default=False, alias="TELEGRAM_DEV_FALLBACK_ANY_SENDER")
 
     # Usadas por docker-compose para el servicio `db` (deben coincidir con usuario/clave/base en DATABASE_URL).
     postgres_db: str = Field(default="bot_gaman", alias="POSTGRES_DB")

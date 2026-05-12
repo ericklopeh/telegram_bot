@@ -13,12 +13,12 @@ from app.db.session import get_db_session
 from app.domain import constants as C
 from app.models.case import Case
 from app.models.document import Document
-from app.models.user import UserRole
 from app.services.case_service import CaseService
-from app.web.auth import get_current_user, require_login
+from app.web.auth import get_current_user, require_login, web_should_scope_vendedor_cases
+from app.web.paths import TEMPLATES_DIR
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/web/templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Estados considerados "cerrados" para el conteo de casos abiertos (operativo).
 _CERRADOS_OPERATIVOS = (
@@ -65,7 +65,7 @@ def get_web_db() -> Generator[Session, None, None]:
 
 def _cases_query(db: Session, usuario: dict):
     q = db.query(Case)
-    if usuario.get("rol") == UserRole.VENDEDOR.value:
+    if web_should_scope_vendedor_cases(usuario):
         q = q.filter(Case.seller_name == usuario.get("nombre"))
     return q
 
@@ -171,7 +171,7 @@ def _build_pending_table(
                     Document.upload_status == doc_status,
                 )
             )
-            if usuario.get("rol") == UserRole.VENDEDOR.value:
+            if web_should_scope_vendedor_cases(usuario):
                 stmt = stmt.where(Case.seller_name == usuario.get("nombre"))
             stmt = stmt.distinct().limit(cap)
             case_ids = list(db.execute(stmt).scalars().all())
@@ -212,7 +212,7 @@ def _doc_status_count(db: Session, usuario: dict, upload_status: str) -> int:
             Document.upload_status == upload_status,
         )
     )
-    if usuario.get("rol") == UserRole.VENDEDOR.value:
+    if web_should_scope_vendedor_cases(usuario):
         q = q.filter(Case.seller_name == usuario.get("nombre"))
     return int(q.scalar() or 0)
 
@@ -224,7 +224,7 @@ def _case_counts_grouped_by_seller(db: Session, usuario: dict, *filters) -> dict
     )
     for f in filters:
         q = q.filter(f)
-    if usuario.get("rol") == UserRole.VENDEDOR.value:
+    if web_should_scope_vendedor_cases(usuario):
         q = q.filter(Case.seller_name == usuario.get("nombre"))
     out: dict[str, int] = {}
     for name, n in q.group_by(Case.seller_name).all():
@@ -248,7 +248,7 @@ def _doc_upload_failed_by_seller(db: Session, usuario: dict) -> dict[str, int]:
             Document.upload_status == "UPLOAD_FAILED",
         )
     )
-    if usuario.get("rol") == UserRole.VENDEDOR.value:
+    if web_should_scope_vendedor_cases(usuario):
         q = q.filter(Case.seller_name == usuario.get("nombre"))
     out: dict[str, int] = {}
     for name, n in q.group_by(Case.seller_name).all():
@@ -284,7 +284,7 @@ def _build_resumen_vendedores(db: Session, usuario: dict) -> list[dict]:
             + failed.get(s, 0)
         )
 
-    if u.get("rol") == UserRole.VENDEDOR.value:
+    if web_should_scope_vendedor_cases(u):
         nm = u.get("nombre")
         if nm is None or str(nm).strip() == "":
             return []
@@ -337,7 +337,7 @@ def _build_metrics(db: Session, usuario: dict) -> dict:
     checklist_incompleto, checklist_capped = _count_pedidos_checklist_incompleto(db, usuario, case_svc)
 
     g = db.query(Case.current_status, func.count(Case.id))
-    if usuario.get("rol") == UserRole.VENDEDOR.value:
+    if web_should_scope_vendedor_cases(usuario):
         g = g.filter(Case.seller_name == usuario.get("nombre"))
     rows = g.group_by(Case.current_status).order_by(func.count(Case.id).desc()).all()
 

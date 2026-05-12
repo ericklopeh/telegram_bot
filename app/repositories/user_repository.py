@@ -41,6 +41,22 @@ class UserRepository:
         )
 
     @staticmethod
+    def get_active_dev_telegram_fallback(db: Session) -> User | None:
+        """Primer usuario activo para demos sin telegram_id: prioriza admin/sistemas, luego cualquier rol."""
+        u = (
+            db.query(User)
+            .filter(
+                User.is_active.is_(True),
+                User.role.in_((UserRole.ADMIN, UserRole.SISTEMAS)),
+            )
+            .order_by(User.id.asc())
+            .first()
+        )
+        if u:
+            return u
+        return db.query(User).filter(User.is_active.is_(True)).order_by(User.id.asc()).first()
+
+    @staticmethod
     def create(db: Session, user: User) -> User:
         db.add(user)
         db.commit()

@@ -5,10 +5,19 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
+from app.config import get_settings
 from app.models.user import UserRole
 from app.repositories.user_repository import UserRepository
 
 log = logging.getLogger(__name__)
+
+
+def web_should_scope_vendedor_cases(usuario: dict) -> bool:
+    """Vendedor solo ve sus casos salvo que RBAC esté relajado (pruebas)."""
+    if usuario.get("rol") != UserRole.VENDEDOR.value:
+        return False
+    return not get_settings().web_rbac_relaxed
+
 
 # Roles reutilizados en rutas sensibles (valores persistidos en BD, ver UserRole).
 ROLES_ADMIN_SISTEMAS: tuple[str, ...] = (UserRole.ADMIN.value, UserRole.SISTEMAS.value)
@@ -67,6 +76,9 @@ def require_roles(request: Request, db: Session, roles: Iterable[str]):
     usuario = get_current_user(request, db)
     if not usuario:
         return RedirectResponse(url="/login", status_code=302)
+
+    if get_settings().web_rbac_relaxed:
+        return None
 
     allowed_roles = set(roles)
     if usuario.get("rol") not in allowed_roles:

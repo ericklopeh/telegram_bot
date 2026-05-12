@@ -24,8 +24,8 @@ async def _lifespan(app: FastAPI):
     paths = [getattr(r, "path", None) for r in app.routes]
     paths = [p for p in paths if p]
     _log.warning(
-        "Arranque web Sistema Gaman: /ping en rutas=%s. Si /ping da 404 en el navegador, no estás "
-        "ejecutando esta versión del código (reinicia `web` o mata otro proceso en el puerto 8000).",
+        "Arranque web Sistema Gaman: /ping en rutas=%s. Si /ping da 404 en el navegador, suele ser "
+        "otro proceso en el puerto del host (recrea `web` con compose o revisa WEB_HOST_PORT).",
         "/ping" in paths,
     )
     yield
@@ -109,6 +109,9 @@ def login_post(
     from app.db.session import session_scope
     from app.repositories.user_repository import UserRepository
     from app.services.auth_service import AuthService
+
+    username = username.strip()
+    password = password.strip()
 
     with session_scope() as db:
         usuario = UserRepository.get_by_username(db, username)

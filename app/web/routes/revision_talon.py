@@ -11,9 +11,10 @@ from app.db.session import get_db_session
 from app.models.case import Case
 from app.web.services.talon_review_service import guardar_revision_talon
 from app.web.auth import ROLES_ADMIN_SISTEMAS, get_current_user, require_login, require_roles
+from app.web.paths import TEMPLATES_DIR
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/web/templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 log = logging.getLogger(__name__)
 

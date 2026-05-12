@@ -131,6 +131,8 @@ docker compose up --build -d db
 docker compose up --build -d bot
 ```
 
+En Telegram, **Revisión**, **Pedido**, **Mi estatus** y **Mis ventas de hoy** los pueden usar los roles **vendedor**, **admin**, **sistemas**, **compras** y **autorización** (mismo criterio que el teclado combinado). Lo normal es tener tu **`telegram_id`** en `users`; con el `docker-compose` actual el servicio **`bot`** lleva **`TELEGRAM_DEV_FALLBACK_ANY_SENDER=true`**, así que **si aún no tienes `telegram_id`**, el bot usa temporalmente el **primer usuario activo** admin o sistemas (si no hay, el primer activo cualquiera). **Quita esa variable o pon `false` en producción.**
+
 ### Servicio web (dashboard) en Docker
 
 Incluye el contenedor **`web`** (FastAPI + uvicorn). Requiere el mismo `.env` que el bot (incluye `TELEGRAM_BOT_TOKEN` y variables de Postgres; `DATABASE_URL` con `localhost` en el `.env` solo afecta a herramientas en el host: dentro del contenedor Compose **fuerza** `db:5432`).
@@ -140,7 +142,11 @@ docker compose up --build -d db
 docker compose up --build -d web
 ```
 
-Panel: **http://localhost:8000** (redirige a `/login`). Si el puerto 8000 del host está ocupado, cambia en `docker-compose.yml` el mapeo a `"8001:8000"` y abre **http://localhost:8001**.
+Panel: **http://localhost:8010** (redirige a `/login`). Comprueba la instancia correcta con **http://localhost:8010/ping** → debe responder `{"status":"ok","service":"sistema_gaman_web"}`. El puerto del host se configura con **`WEB_HOST_PORT`** en `.env` (por defecto **8010** en `docker-compose.yml` para evitar choque con otro servicio en `:8000`). Si quieres usar el 8000, pon `WEB_HOST_PORT=8000` y reinicia `web`.
+
+Los usuarios que aparecen en la pantalla de login son **demo**: hay que crearlos en Postgres con `docker compose exec web python scripts/seed_web_demo_users.py`. Si ya existían con otra contraseña: `... seed_web_demo_users.py --reset-passwords`.
+
+Para **probar todas las pantallas** con cualquier usuario demo, el servicio `web` en Compose define por defecto **`WEB_RBAC_RELAXED=true`** (sin comprobación de rol en rutas web). En producción pon `WEB_RBAC_RELAXED=false` en el entorno del contenedor o en `.env`.
 
 Migraciones (`alembic upgrade head`) siguen haciéndose desde tu máquina contra `localhost:5433` o con `docker compose exec bot alembic ...` si añades el CLI al contenedor del bot.
 

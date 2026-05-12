@@ -1,14 +1,17 @@
 import logging
+import mimetypes
 import os
 import shutil
 import uuid
 from typing import Generator
 
-from fastapi import APIRouter, Request, Depends, File, UploadFile, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
-from starlette.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
+from starlette.responses import RedirectResponse
 
+from app.config import get_settings
 from app.db.session import get_db_session
 from app.domain import constants as C
 from app.domain.constants import doc_type_label
@@ -19,10 +22,12 @@ from app.web.auth import (
     get_current_user,
     require_login,
     require_roles,
+    web_should_scope_vendedor_cases,
 )
+from app.web.paths import TEMPLATES_DIR
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/web/templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +42,8 @@ def get_web_db() -> Generator[Session, None, None]:
 
 def _can_upload_document_web(usuario: dict, caso: Case) -> bool:
     """Vendedor solo su caso; admin/sistemas cualquier caso."""
+    if get_settings().web_rbac_relaxed:
+        return True
     rol = usuario.get("rol")
     if rol in ROLES_ADMIN_SISTEMAS:
         return True
@@ -58,7 +65,7 @@ def listar_casos(
 
     query = db.query(Case)
 
-    if usuario["rol"] == "vendedor":
+    if web_should_scope_vendedor_cases(usuario):
         query = query.filter(Case.seller_name == usuario["nombre"])
 
     casos = query.order_by(Case.created_at.desc()).limit(50).all()
@@ -90,7 +97,7 @@ def detalle_caso(
     if not caso:
         return RedirectResponse(url="/casos", status_code=302)
 
-    if usuario["rol"] == "vendedor" and caso.seller_name != usuario["nombre"]:
+    if web_should_scope_vendedor_cases(usuario) and caso.seller_name != usuario["nombre"]:
         return RedirectResponse(url="/casos", status_code=302)
 
     from app.models.talon_review import TalonReview
@@ -143,6 +150,7 @@ def detalle_caso(
         name="case_detail.html",
         context={
             "usuario": usuario,
+            "web_rbac_relaxed": get_settings().web_rbac_relaxed,
             "caso": caso,
             "ultima_revision": ultima_revision,
             "documentos": documentos,
@@ -258,9 +266,10 @@ def procesar_ocr_route(
         return redirect
 
     usuario = get_current_user(request, db)
+    caso = db.query(Case).filter(Case.id == case_id).first()
     if not caso:
         return RedirectResponse(url="/casos", status_code=302)
-        
+
     from app.models.document import Document
     doc = db.query(Document).filter(Document.id == document_id, Document.case_id == case_id).first()
     
@@ -293,10 +302,6 @@ def procesar_ocr_route(
     
     return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
 
-import os
-import mimetypes
-from fastapi import HTTPException
-from fastapi.responses import FileResponse
 
 @router.get("/documentos/{document_id}/ver")
 def ver_documento_route(
@@ -321,7 +326,7 @@ def ver_documento_route(
     caso = db.query(Case).filter(Case.id == doc.case_id).first()
     if not caso:
         raise HTTPException(status_code=404, detail="Caso no encontrado en base de datos")
-    if usuario.get("rol") == UserRole.VENDEDOR.value and caso.seller_name != usuario.get("nombre"):
+    if web_should_scope_vendedor_cases(usuario) and caso.seller_name != usuario.get("nombre"):
         log.warning(
             "Vista de documento denegada: vendedor sin titularidad del caso",
             extra={"document_id": document_id, "case_id": caso.id, "user_id": usuario.get("id")},

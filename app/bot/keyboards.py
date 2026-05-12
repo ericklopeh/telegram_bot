@@ -21,7 +21,7 @@ ADMIN_MAIN_KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
-# Pruebas: mismo usuario con todas las acciones (vendedor + dictaminar + consultar)
+# Pruebas: teclado con vendedor + admin. Flujos de Revisión/Pedido: vendedor, admin, sistemas, compras y autorización (consulta solo consulta estatus).
 COMBINED_MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["🧾 Dictaminar revisión"],

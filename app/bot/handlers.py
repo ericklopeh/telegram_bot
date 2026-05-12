@@ -111,6 +111,19 @@ async def _upload_document_background(
         )
 
 
+# Roles que pueden usar los flujos de vendedor en Telegram (Revisión, Pedido, Mi estatus, callbacks de pedido).
+# Coincide con el teclado combinado de prueba: consulta queda fuera (solo lectura / consultar estatus).
+_TELEGRAM_SELLER_FLOW_ROLES: frozenset[str] = frozenset(
+    {
+        UserRole.VENDEDOR.value,
+        UserRole.ADMIN.value,
+        UserRole.SISTEMAS.value,
+        UserRole.COMPRAS.value,
+        UserRole.AUTORIZACION.value,
+    }
+)
+
+
 def _get_active_bot_user(update: Update) -> User | None:
     telegram_user = update.effective_user
     if not telegram_user:
@@ -131,6 +144,18 @@ def _get_active_bot_user(update: Update) -> User | None:
                 return None
 
             log.warning("Usuario Telegram no autorizado", extra={"telegram_id": telegram_user.id})
+
+            if get_settings().telegram_dev_fallback_any_sender:
+                fb = UserRepository.get_active_dev_telegram_fallback(db)
+                if fb:
+                    log.warning(
+                        "Telegram modo demo: chat telegram_id=%s sin fila en users; actuando como %s (user_id=%s)",
+                        telegram_user.id,
+                        fb.username,
+                        fb.id,
+                    )
+                    return fb
+
             return None
     except Exception:
         log.exception("Error validando usuario Telegram", extra={"telegram_id": telegram_user.id})
@@ -146,18 +171,36 @@ def _is_admin(update: Update) -> bool:
 
 
 def _is_seller(update: Update) -> bool:
+    """Quién puede usar flujos de vendedor (menú Revisión/Pedido y teclado inline de pedido)."""
     usuario = _get_active_bot_user(update)
     if not usuario:
         return False
     role = getattr(usuario.role, "value", usuario.role)
-    return role == UserRole.VENDEDOR.value
+    if isinstance(role, str):
+        role = role.strip().lower()
+    if role == UserRole.CONSULTA.value:
+        return False
+    return role in _TELEGRAM_SELLER_FLOW_ROLES
+
+
+def _seller_flow_denied_message(update: Update) -> str:
+    """Texto cuando el usuario no puede usar Revisión/Pedido/Mi estatus (no vinculado o rol consulta)."""
+    if not _get_active_bot_user(update):
+        return (
+            "Tu Telegram no está vinculado a un usuario activo en la base de datos.\n\n"
+            "Asigna tu ID numérico de Telegram en la columna `telegram_id` de la tabla `users` "
+            "(y deja `is_active` en verdadero)."
+        )
+    return (
+        "Tu rol no puede usar esta opción desde el bot.\n\n"
+        "Pueden usar Revisión, Pedido y Mi estatus: vendedor, admin, sistemas, compras y autorización. "
+        "El rol «consulta» solo puede consultar estatus."
+    )
 
 
 def _main_keyboard_for(update: Update) -> ReplyKeyboardMarkup:
     """Teclado completo para pruebas (dictaminar + vendedor)."""
     return COMBINED_MAIN_KEYBOARD
-
-
 def _status_block_for_list_item(case: Case, is_admin: bool) -> str:
     if is_admin:
         return (
@@ -412,7 +455,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if text == "📄 Revisión":
         if not is_seller:
-            await update.message.reply_text("Esta opción es solo para vendedores.", reply_markup=_main_keyboard_for(update))
+            await update.message.reply_text(_seller_flow_denied_message(update), reply_markup=_main_keyboard_for(update))
             return
         session.clear()
         session["flow"] = "revision"
@@ -422,7 +465,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if text == "🛒 Pedido":
         if not is_seller:
-            await update.message.reply_text("Esta opción es solo para vendedores.", reply_markup=_main_keyboard_for(update))
+            await update.message.reply_text(_seller_flow_denied_message(update), reply_markup=_main_keyboard_for(update))
             return
         session.clear()
         session["flow"] = "pedido"
@@ -460,7 +503,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if text == "📊 Mi estatus":
         if not is_seller:
-            await update.message.reply_text("Esta opción es solo para vendedores.", reply_markup=_main_keyboard_for(update))
+            await update.message.reply_text(_seller_flow_denied_message(update), reply_markup=_main_keyboard_for(update))
             return
         try:
             with session_scope() as db:
@@ -485,7 +528,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if text == "📋 Mis ventas de hoy":
         if not is_seller:
-            await update.message.reply_text("Esta opción es solo para vendedores.", reply_markup=_main_keyboard_for(update))
+            await update.message.reply_text(_seller_flow_denied_message(update), reply_markup=_main_keyboard_for(update))
             return
         try:
             with session_scope() as db:
@@ -917,7 +960,8 @@ async def _finalize_pedido(
 async def handle_pedido_doc_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_seller(update):
-        await query.answer("No tienes permisos.", show_alert=True)
+        note = _seller_flow_denied_message(update).replace("\n\n", " ")
+        await query.answer(note[:190], show_alert=True)
         return
     chat_id = update.effective_chat.id
     data = query.data or ""
