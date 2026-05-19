@@ -1,4 +1,6 @@
-# Imagen del servicio web (FastAPI + uvicorn). Sin pywin32 ni telegram.
+# Imagen del servicio web (FastAPI + uvicorn). Sin pywin32.
+# python-telegram-bot: notification_service y smoke_check importan app.main / telegram.
+# alembic: smoke_check ejecuta `python -m alembic current|heads` dentro del contenedor.
 fastapi==0.135.1
 uvicorn[standard]==0.42.0
 starlette==0.52.1
@@ -22,3 +24,5 @@ httpx==0.28.1
 msal==1.35.1
 cryptography==46.0.3
 PyJWT==2.12.1
+python-telegram-bot[job-queue]==22.7
+alembic==1.18.4
