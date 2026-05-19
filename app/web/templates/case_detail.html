@@ -152,12 +152,12 @@
                                 {% endif %}
                                 </div>
 
-                                {% if doc.document_type in ['talon', 'revision_evidencia', 'revision', 'talón'] %}
+                                {% if doc.document_type in ['talon', 'pedido', 'orden_descuento', 'caratula_bancaria'] %}
                                     {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] %}
                                 <div>
                                     <form action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/procesar-ocr" method="POST" class="m-0">
                                         <button type="submit" class="btn btn-sm btn-outline-dark">
-                                            Procesar OCR
+                                            {% if doc.ocr_results %}Reprocesar OCR{% else %}Procesar OCR{% endif %}
                                         </button>
                                     </form>
                                 </div>
@@ -175,8 +175,31 @@
                                             {{ ocr.review_status }}
                                         </span>
                                         <span class="text-muted ms-2">{{ ocr.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                                        {% if ocr.confidence_score is not none %}
+                                        <span class="badge bg-secondary ms-1">{{ (ocr.confidence_score * 100)|int }}% conf.</span>
+                                        {% endif %}
                                         
                                         {% if ocr.parsed_json and ocr.review_status == 'processed' %}
+                                        {% if ocr.parsed_json.get('review_fields') %}
+                                        <div class="mt-2 p-2 bg-white border rounded shadow-sm">
+                                            <div class="fw-bold text-dark mb-1" style="font-size: 0.75rem;">Campos detectados (revise en el formulario de autorización)</div>
+                                            <table class="table table-sm table-bordered mb-0" style="font-size: 0.7rem;">
+                                                <thead class="table-light">
+                                                    <tr><th>Campo</th><th>Valor OCR</th><th>Confianza</th><th>Fuente</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                {% for key, field in ocr.parsed_json.review_fields.items() %}
+                                                    <tr>
+                                                        <td class="text-muted">{{ key }}</td>
+                                                        <td class="fw-bold">{{ field.value }}</td>
+                                                        <td>{{ (field.confidence * 100)|int }}%</td>
+                                                        <td>{{ field.source }}</td>
+                                                    </tr>
+                                                {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% endif %}
                                         <div class="mt-2 p-2 bg-white border rounded shadow-sm">
                                             <div class="row g-1">
                                                 <div class="col-5 text-muted">Percepciones:</div>
@@ -549,25 +572,63 @@
             </div>
             {% endif %}
 
+            {% set pf = ocr_prefill.form if ocr_prefill else {} %}
+            {% set ometa = ocr_prefill.meta if ocr_prefill else {} %}
+            {% if ocr_prefill and ocr_prefill.has_data %}
+            <div class="alert alert-success small mb-4">
+                <strong><i class="bi bi-magic"></i> Precarga OCR activa.</strong>
+                Los campos del formulario se completaron con datos de:
+                {{ ocr_prefill.documents_with_ocr | join(', ') }}.
+                Revise cada valor antes de generar.
+            </div>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-bordered small mb-0">
+                    <thead class="table-light">
+                        <tr><th>Campo</th><th>Valor detectado</th><th>Confianza</th><th>Documento</th></tr>
+                    </thead>
+                    <tbody>
+                    {% for key, info in ometa.items() %}
+                        {% if not key.startswith('percepcion_') and not key.startswith('deduccion_') and key != 'claves_capacidad' %}
+                        <tr>
+                            <td>{{ key }}</td>
+                            <td>{{ info.value }}</td>
+                            <td>{{ (info.confidence * 100)|int }}%</td>
+                            <td>{{ info.source }}</td>
+                        </tr>
+                        {% endif %}
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
             <div class="row g-3">
                 <!-- Datos del agremiado -->
                 <div class="col-12"><h6 class="fw-bold mb-0 border-bottom pb-1">Datos del Agremiado</h6></div>
                 
                 <div class="col-md-6">
-                    <label class="form-label small fw-bold">Nombre Completo</label>
-                    <input type="text" class="form-control form-control-sm" name="nombre" value="{{ caso.client_name }}" required>
+                    <label class="form-label small fw-bold">Nombre Completo
+                        {% if ometa.get('nombre') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.nombre.source }}">{{ (ometa.nombre.confidence * 100)|int }}%</span>{% endif %}
+                    </label>
+                    <input type="text" class="form-control form-control-sm" name="nombre" value="{{ pf.get('nombre') or caso.client_name or '' }}" required>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-bold">Folio</label>
-                    <input type="text" class="form-control form-control-sm" name="folio" value="{{ caso.official_folio or caso.temp_folio }}" required>
+                    <label class="form-label small fw-bold">Folio
+                        {% if ometa.get('folio') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.folio.source }}">{{ (ometa.folio.confidence * 100)|int }}%</span>{% endif %}
+                    </label>
+                    <input type="text" class="form-control form-control-sm" name="folio" value="{{ pf.get('folio') or caso.official_folio or caso.temp_folio or '' }}" required>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-bold">RFC</label>
-                    <input type="text" class="form-control form-control-sm" name="rfc" required>
+                    <label class="form-label small fw-bold">RFC
+                        {% if ometa.get('rfc') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.rfc.source }}">{{ (ometa.rfc.confidence * 100)|int }}%</span>{% endif %}
+                    </label>
+                    <input type="text" class="form-control form-control-sm" name="rfc" value="{{ pf.get('rfc', '') }}" required>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-bold">Categoría</label>
-                    <input type="text" class="form-control form-control-sm" name="categoria">
+                    <label class="form-label small fw-bold">Categoría / Sección
+                        {% if ometa.get('categoria') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.categoria.source }}">{{ (ometa.categoria.confidence * 100)|int }}%</span>{% endif %}
+                    </label>
+                    <input type="text" class="form-control form-control-sm" name="categoria" value="{{ pf.get('categoria', '') }}">
                 </div>
                 <div class="col-md-12">
                     <label class="form-label small fw-bold">Domicilio</label>
@@ -604,7 +665,7 @@
                             <tbody>
                                 {% for i in range(1, 6) %}
                                 <tr>
-                                    <td><input type="text" class="form-control form-control-sm" name="prod_{{i}}_nombre"></td>
+                                    <td><input type="text" class="form-control form-control-sm" name="prod_{{i}}_nombre" value="{% if i == 1 %}{{ pf.get('prod_1_nombre', '') }}{% endif %}"></td>
                                     <td><input type="number" step="0.01" class="form-control form-control-sm" name="prod_{{i}}_trans"></td>
                                     <td><input type="number" step="0.01" class="form-control form-control-sm" name="prod_{{i}}_credito"></td>
                                     <td><input type="number" step="0.01" class="form-control form-control-sm" name="prod_{{i}}_precio"></td>
@@ -635,8 +696,10 @@
                     <div class="form-text" style="font-size: 0.65rem;">Formato: DD/MM/AAAA</div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-bold">Monto Total</label>
-                    <input type="number" step="0.01" class="form-control form-control-sm" name="monto_total" placeholder="Auto-calcula si vacío">
+                    <label class="form-label small fw-bold">Monto Total
+                        {% if ometa.get('monto_total') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.monto_total.source }}">{{ (ometa.monto_total.confidence * 100)|int }}%</span>{% endif %}
+                    </label>
+                    <input type="number" step="0.01" class="form-control form-control-sm" name="monto_total" value="{{ pf.get('monto_total', '') }}" placeholder="Auto-calcula si vacío">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-bold">Semana</label>
@@ -649,21 +712,21 @@
                     <div class="form-text" style="font-size: 0.65rem;">Formato: QQ-AAAA</div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-bold">Plazo (Qnas)</label>
+                    <label class="form-label small fw-bold">Plazo (Qnas)
+                        {% if ometa.get('plazo_qnas') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.plazo_qnas.source }}">{{ (ometa.plazo_qnas.confidence * 100)|int }}%</span>{% endif %}
+                    </label>
                     <select class="form-select form-select-sm" name="plazo_qnas" required>
-                        <option value="12">12</option>
-                        <option value="24">24</option>
-                        <option value="36">36</option>
-                        <option value="48">48</option>
-                        <option value="60">60</option>
-                        <option value="72" selected>72</option>
-                        <option value="84">84</option>
-                        <option value="96">96</option>
+                        {% set plazo_sel = pf.get('plazo_qnas', '72')|string %}
+                        {% for q in [12, 24, 36, 48, 60, 72, 84, 96] %}
+                        <option value="{{ q }}" {% if plazo_sel == q|string %}selected{% endif %}>{{ q }}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-bold">Descuento $ (Opcional)</label>
-                    <input type="number" step="0.01" class="form-control form-control-sm" name="descuento_qna" placeholder="Auto si vacío">
+                    <label class="form-label small fw-bold">Descuento $ (Opcional)
+                        {% if ometa.get('descuento_qna') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.descuento_qna.source }}">{{ (ometa.descuento_qna.confidence * 100)|int }}%</span>{% endif %}
+                    </label>
+                    <input type="number" step="0.01" class="form-control form-control-sm" name="descuento_qna" value="{{ pf.get('descuento_qna', '') }}" placeholder="Auto si vacío">
                 </div>
                 <div class="col-md-12">
                     <label class="form-label small fw-bold">Observaciones</label>

@@ -114,6 +114,7 @@ def detalle_caso(
 
     documentos = (
         db.query(Document)
+        .options(joinedload(Document.ocr_results))
         .filter(Document.case_id == caso.id, Document.is_active == True)
         .order_by(Document.uploaded_at.desc())
         .all()
@@ -160,6 +161,10 @@ def detalle_caso(
         C.ST_PED_AUT_GENERADA,
     )
 
+    from app.services.ocr_service import OCRService
+
+    ocr_prefill = OCRService.build_case_autorizacion_prefill(db, caso.id)
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -179,6 +184,7 @@ def detalle_caso(
             "pedido_checklist_ok": pedido_checklist_ok,
             "pedido_checklist_text": pedido_checklist_text,
             "snte_status_ok": snte_status_ok,
+            "ocr_prefill": ocr_prefill,
         }
     )
 
@@ -263,6 +269,18 @@ def upload_document(
     db.add(history_entry)
 
     db.commit()
+    db.refresh(new_doc)
+
+    from app.services.ocr_service import OCRService, OCR_ELIGIBLE_DOCUMENT_TYPES
+
+    if document_type in OCR_ELIGIBLE_DOCUMENT_TYPES:
+        try:
+            OCRService(db).process_document(
+                new_doc.id,
+                action_user=usuario.get("nombre", "web_user"),
+            )
+        except Exception:
+            log.exception("OCR automático falló tras subida doc=%s", new_doc.id)
 
     return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
 
@@ -294,12 +312,14 @@ def procesar_ocr_route(
     if not doc:
         return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
         
-    from app.web.services.talon_ocr_service import process_ocr_document
-    
-    process_ocr_document(
-        db=db,
+    from app.services.ocr_service import OCRService, OCR_ELIGIBLE_DOCUMENT_TYPES
+
+    if doc.document_type not in OCR_ELIGIBLE_DOCUMENT_TYPES:
+        return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
+
+    OCRService(db).process_document(
         document_id=document_id,
-        action_user=usuario.get("nombre", "web_user")
+        action_user=usuario.get("nombre", "web_user"),
     )
     
     from app.models.case_history import CaseHistory
