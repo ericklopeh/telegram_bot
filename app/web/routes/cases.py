@@ -17,6 +17,7 @@ from app.domain import constants as C
 from app.domain.constants import doc_type_label
 from app.models.case import Case
 from app.models.user import UserRole
+from app.services.case_service import CaseService
 from app.web.auth import (
     ROLES_ADMIN_SISTEMAS,
     get_current_user,
@@ -145,6 +146,20 @@ def detalle_caso(
         .all()
     )
 
+    case_svc = CaseService(get_settings())
+    pedido_checklist_ok = (
+        caso.case_type == C.CASE_TYPE_PEDIDO and case_svc.pedido_has_all_documents(db, caso)
+    )
+    pedido_checklist_text = (
+        case_svc.get_pedido_checklist(db, caso)
+        if caso.case_type == C.CASE_TYPE_PEDIDO and caso.order_type
+        else ""
+    )
+    snte_status_ok = caso.current_status in (
+        C.ST_PED_PREP_AUT,
+        C.ST_PED_AUT_GENERADA,
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -161,6 +176,9 @@ def detalle_caso(
             "authorization_jobs": authorization_jobs,
             "upload_document_types": upload_document_types,
             "case_events": case_events,
+            "pedido_checklist_ok": pedido_checklist_ok,
+            "pedido_checklist_text": pedido_checklist_text,
+            "snte_status_ok": snte_status_ok,
         }
     )
 

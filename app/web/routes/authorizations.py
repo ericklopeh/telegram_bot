@@ -6,11 +6,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
+from app.config import get_settings
 from app.db.session import get_db_session
 from app.domain import constants as C
 from app.models.case import Case
 from app.repositories.document_repository import DocumentRepository
 from app.services.authorization_service import AuthorizationService, TemplateNotFoundError
+from app.services.case_service import CaseService
 from app.services.refinanciamiento_service import (
     RefinanciamientoService,
     TemplateNotFoundError as RefiTemplateNotFoundError,
@@ -30,6 +32,8 @@ from app.web.auth import get_current_user, require_roles, ROLES_AUTORIZACION_SNT
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_SNTE_ALLOWED_STATUSES = (C.ST_PED_PREP_AUT, C.ST_PED_AUT_GENERADA)
 
 
 def get_web_db():
@@ -65,6 +69,98 @@ def _redirect_if_active_document_exists(
         f"Ya existe {label} activa para este caso. La regeneracion se habilitara en un flujo posterior."
     )
     return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+
+def _build_snte_payload(form: dict) -> dict:
+    """Normaliza campos del modal SNTE (misma convención que refinanciamiento)."""
+    payload: dict = {}
+    for campo in (
+        "nombre",
+        "rfc",
+        "categoria",
+        "domicilio",
+        "tel_part",
+        "tel_celular",
+        "correo",
+        "fecha_venta",
+        "folio",
+        "semana",
+        "monto_total",
+        "qna_inicial",
+        "plazo_qnas",
+        "descuento_qna",
+        "observaciones",
+    ):
+        raw = form.get(campo, "")
+        payload[campo] = raw.strip() if isinstance(raw, str) else str(raw).strip()
+
+    for i in range(1, 6):
+        for sub in ("nombre", "trans", "credito", "precio", "descuento", "tipo"):
+            key = f"prod_{i}_{sub}"
+            raw = form.get(key, "")
+            payload[key] = raw.strip() if isinstance(raw, str) else str(raw).strip()
+
+    return payload
+
+
+def _validate_snte_payload(form_data: dict) -> list[str]:
+    """Devuelve lista de errores de validación. Lista vacía significa OK."""
+    errors: list[str] = []
+
+    if not form_data.get("nombre"):
+        errors.append("El nombre del cliente es obligatorio.")
+    if not form_data.get("rfc"):
+        errors.append("El RFC es obligatorio.")
+    if not form_data.get("folio"):
+        errors.append("El folio es obligatorio.")
+    if not form_data.get("fecha_venta"):
+        errors.append("La fecha de venta es obligatoria.")
+    if not form_data.get("qna_inicial"):
+        errors.append("La quincena inicial es obligatoria.")
+    if not form_data.get("plazo_qnas"):
+        errors.append("El plazo es obligatorio.")
+
+    fecha = form_data.get("fecha_venta", "")
+    if fecha and not re.fullmatch(r"\d{2}/\d{2}/\d{4}", fecha):
+        errors.append("Fecha de venta inválida. Use formato DD/MM/AAAA (ej: 25/12/2026).")
+
+    qna = form_data.get("qna_inicial", "")
+    if qna and not re.fullmatch(r"\d{2}-\d{4}", qna):
+        errors.append("Quincena inicial inválida. Use formato QQ-AAAA (ej: 10-2026).")
+
+    plazo = form_data.get("plazo_qnas", "")
+    if plazo:
+        try:
+            p = int(plazo)
+            if p <= 0:
+                errors.append("El plazo debe ser mayor a 0.")
+        except ValueError:
+            errors.append("El plazo debe ser un número entero.")
+
+    tiene_producto = any(form_data.get(f"prod_{i}_nombre", "").strip() for i in range(1, 6))
+    monto_raw = form_data.get("monto_total", "").strip()
+    tiene_monto = bool(monto_raw)
+    if tiene_monto:
+        try:
+            if float(monto_raw.replace(",", "")) <= 0:
+                tiene_monto = False
+        except ValueError:
+            errors.append("El monto total debe ser numérico.")
+            tiene_monto = False
+
+    if not tiene_producto and not tiene_monto:
+        errors.append("Debe capturar al menos 1 producto o indicar un monto total.")
+
+    return errors
+
+
+def _verify_snte_documents_active(db: Session, case_id: int) -> tuple[bool, list[str]]:
+    """Comprueba que Excel SNTE y PDF orden estén activos tras la generación."""
+    missing: list[str] = []
+    for doc_type in (C.DOC_AUTORIZACION_SNTE, C.DOC_ORDEN_SNTE_PDF):
+        if not DocumentRepository.get_active_document(db, case_id, doc_type):
+            missing.append(doc_type)
+    return not missing, missing
 
 
 def _schedule_generated_document_tasks(
@@ -259,18 +355,37 @@ async def generar_autorizacion(
     if not case:
         return RedirectResponse(url="/casos", status_code=302)
 
-    duplicate_redirect = _redirect_if_active_document_exists(
-        db=db,
-        case_id=case_id,
-        document_type=C.DOC_AUTORIZACION_SNTE,
-        label="una autorizacion SNTE",
-        route="generar_autorizacion",
-    )
-    if duplicate_redirect:
-        return duplicate_redirect
+    if case.current_status not in _SNTE_ALLOWED_STATUSES:
+        msg = urllib.parse.quote(
+            f"Solo se puede generar SNTE en «{C.ST_PED_PREP_AUT}» o «{C.ST_PED_AUT_GENERADA}» "
+            f"(estado actual: {case.current_status})."
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
-    form = await request.form()
-    form_data = dict(form)
+    case_svc = CaseService(get_settings())
+    if not case_svc.pedido_has_all_documents(db, case):
+        checklist = case_svc.get_pedido_checklist(db, case)
+        msg = urllib.parse.quote(
+            "Completa el checklist del pedido antes de generar la autorización SNTE:\n"
+            + checklist.replace("\n", " · ")
+        )
+        log.warning(
+            "Generación SNTE bloqueada: checklist incompleto",
+            extra={"case_id": case_id},
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    raw_form = await request.form()
+    form_data = _build_snte_payload(dict(raw_form))
+
+    validation_errors = _validate_snte_payload(form_data)
+    if validation_errors:
+        msg = urllib.parse.quote(" | ".join(validation_errors))
+        log.warning(
+            "Payload SNTE inválido",
+            extra={"case_id": case_id, "errors": validation_errors},
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     auth_service = AuthorizationService(db)
 
@@ -293,6 +408,40 @@ async def generar_autorizacion(
         msg = urllib.parse.quote(f"Error generando autorizacion: {str(e)}")
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
+    returned_types = {doc.document_type for doc in docs}
+    required_types = {C.DOC_AUTORIZACION_SNTE, C.DOC_ORDEN_SNTE_PDF}
+    if not required_types.issubset(returned_types):
+        labels = ", ".join(C.doc_type_label(dt) for dt in required_types - returned_types)
+        msg = urllib.parse.quote(
+            f"Generación incompleta: no se crearon todos los documentos ({labels}). "
+            "El estatus del caso no se actualizó."
+        )
+        log.error(
+            "SNTE: generate_for_case no devolvió par Excel+PDF",
+            extra={"case_id": case_id, "returned": list(returned_types)},
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    ok_pair, missing_types = _verify_snte_documents_active(db, case_id)
+    if not ok_pair:
+        labels = ", ".join(C.doc_type_label(dt) for dt in missing_types)
+        msg = urllib.parse.quote(
+            f"Generación incompleta: faltan documentos activos ({labels}). "
+            "El estatus del caso no se actualizó."
+        )
+        log.error(
+            "SNTE generado sin par Excel+PDF activo en BD",
+            extra={"case_id": case_id, "missing": missing_types},
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    is_regeneration = case.current_status == C.ST_PED_AUT_GENERADA
+    status_notes = (
+        "Autorizacion SNTE regenerada"
+        if is_regeneration
+        else "Autorizacion SNTE generada"
+    )
+
     try:
         _log_generation_events(
             db=db,
@@ -311,7 +460,7 @@ async def generar_autorizacion(
             action_user=action_user,
             actor_user_id=actor_user_id,
             actor_role=actor_role,
-            notes="Autorizacion SNTE generada",
+            notes=status_notes,
             log_message="Estatus de caso persistido tras generar autorizacion SNTE",
             route="generar_autorizacion",
         )
@@ -351,9 +500,17 @@ async def generar_autorizacion(
         )
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
-    msg = urllib.parse.quote(
-        "Autorizacion generada. La subida a SharePoint se procesara en segundo plano."
-    )
+    if is_regeneration:
+        success_text = (
+            "Autorización SNTE regenerada. Las versiones anteriores quedaron archivadas; "
+            "la subida a SharePoint se procesará en segundo plano."
+        )
+    else:
+        success_text = (
+            "Autorización SNTE generada (Excel + PDF). "
+            "La subida a SharePoint se procesará en segundo plano."
+        )
+    msg = urllib.parse.quote(success_text)
     return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
 
 

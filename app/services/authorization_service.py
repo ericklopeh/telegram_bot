@@ -186,6 +186,9 @@ class AuthorizationService:
         qna_fin = calcular_qna_final(qna_inicial, plazo)
         escribir_seguro(ws, "G14", qna_fin, font=estilo, alignment=alineacion, number_format="@")
 
+        if "Hoja2" in wb.sheetnames:
+            arreglar_formula_final_venta(ws)
+
         filename = f"{uuid.uuid4()}_autorizacion.xlsx"
         abs_path = os.path.join(upload_dir, filename)
         wb.save(abs_path)

@@ -3,6 +3,9 @@
 {% block content %}
 
 {% set web_rbac_relaxed = web_rbac_relaxed|default(false) %}
+{% set pedido_checklist_ok = pedido_checklist_ok|default(true) %}
+{% set pedido_checklist_text = pedido_checklist_text|default('') %}
+{% set snte_status_ok = snte_status_ok|default(false) %}
 {% set error_msg = request.query_params.get('error') %}
 {% set success_msg = request.query_params.get('success') %}
 
@@ -298,7 +301,7 @@
                 {% endif %}
 
                 {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas', 'autorizacion'] %}
-                    {% if caso.current_status == 'En preparación de autorización' %}
+                    {% if snte_status_ok and pedido_checklist_ok %}
                         {% if has_snte_authorization or has_snte_order_pdf %}
                         <button type="button" class="btn btn-warning fw-bold text-start ps-3 shadow-sm border-warning" data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
                             <i class="bi bi-arrow-clockwise me-2 text-dark"></i> Regenerar autorización SNTE
@@ -308,9 +311,14 @@
                             <i class="bi bi-file-earmark-excel me-2 text-success"></i> Generar autorización SNTE
                         </button>
                         {% endif %}
+                    {% elif snte_status_ok and not pedido_checklist_ok %}
+                    <button class="btn btn-outline-secondary text-start ps-3" disabled title="Sube todos los documentos del checklist del pedido">
+                        <i class="bi bi-file-earmark-excel me-2"></i> Generar autorización SNTE (checklist incompleto)
+                    </button>
+                    <p class="small text-muted mb-0 mt-1">Checklist pendiente:<br><span class="font-monospace">{{ pedido_checklist_text }}</span></p>
                     {% else %}
-                    <button class="btn btn-outline-secondary text-start ps-3" disabled title="Solo disponible en 'En preparación de autorización'">
-                        <i class="bi bi-file-earmark-excel me-2"></i> Generar autorización SNTE (Requiere estatus correcto)
+                    <button class="btn btn-outline-secondary text-start ps-3" disabled title="Requiere «En preparación de autorización» o «Autorización generada»">
+                        <i class="bi bi-file-earmark-excel me-2"></i> Generar autorización SNTE (estatus no válido)
                     </button>
                     {% endif %}
                 {% else %}
@@ -319,8 +327,8 @@
                 </button>
                 {% endif %}
 
-                <button class="btn btn-outline-primary" disabled>
-                    Generar hoja sindicato
+                <button class="btn btn-outline-primary" disabled title="Se genera junto con la autorización SNTE (PDF orden de descuento)">
+                    Generar hoja sindicato (incluida en SNTE)
                 </button>
 
                 <button class="btn btn-outline-secondary" disabled>
@@ -524,12 +532,22 @@
         <div class="modal-body">
             {% if has_snte_authorization or has_snte_order_pdf %}
             <div class="alert alert-warning small mb-4 fw-bold shadow-sm">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i> Ya existe una autorización generada. Si continúas, la versión anterior será archivada y reemplazada por la nueva.
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                Ya existe una autorización activa. Al regenerar, las versiones anteriores se archivan automáticamente
+                (permanecen en historial) y los nuevos Excel + PDF pasan a ser los documentos activos del caso.
             </div>
             {% endif %}
             <div class="alert alert-info small mb-4">
-                Por favor, captura los datos faltantes para generar la Hoja de Sindicato y el Excel de autorización. Estos datos se utilizarán temporalmente para el documento y no se guardarán en la base de datos por ahora.
+                <strong>Requisitos:</strong> checklist del pedido completo · estatus «En preparación de autorización» o «Autorización generada».
+                Se generan <strong>Excel de autorización</strong> y <strong>PDF orden SNTE</strong> en la carpeta EVIDENCIAS del caso.
+                Los datos del formulario se usan solo para el documento (no se guardan en la base de datos).
             </div>
+            {% if not pedido_checklist_ok %}
+            <div class="alert alert-danger small mb-4">
+                <strong>Checklist incompleto.</strong> Completa los documentos del pedido antes de generar:
+                <pre class="mb-0 mt-1 small">{{ pedido_checklist_text }}</pre>
+            </div>
+            {% endif %}
 
             <div class="row g-3">
                 <!-- Datos del agremiado -->
