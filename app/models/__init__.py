@@ -6,6 +6,7 @@ from app.models.case_event import CaseEvent
 from app.models.case_history import CaseHistory
 from app.models.document import Document
 from app.models.ocr_result import OcrResult
+from app.models.operational_alert import OperationalAlert
 from app.models.talon_review import TalonReview
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "CaseHistory",
     "Document",
     "OcrResult",
+    "OperationalAlert",
     "TalonReview",
 ]

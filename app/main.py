@@ -20,6 +20,7 @@ from app.bot.handlers import (
     handle_files,
     handle_text,
     sharepoint_retry_job,
+    run_daily_operational_summary_job,
     sla_watchdog_job,
     start,
 )
@@ -61,6 +62,13 @@ def main() -> None:
             retry_interval = max(settings.sharepoint_retry_interval_minutes, 1) * 60
             app.job_queue.run_repeating(sharepoint_retry_job, interval=retry_interval, first=90)
             app.job_queue.run_repeating(sla_watchdog_job, interval=300, first=150)
+            if get_settings().operational_alerts_telegram:
+                app.job_queue.run_repeating(
+                    run_daily_operational_summary_job,
+                    interval=21600,
+                    first=300,
+                )
+                log.info("JobQueue: resumen operativo P16 cada 6h (Telegram)")
             log.info("JobQueue habilitado. Intervalo compulsa=%s segundos", interval_seconds)
         else:
             log.warning(

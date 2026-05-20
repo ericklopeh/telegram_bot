@@ -15,6 +15,7 @@ from app.models.case import Case
 from app.models.document import Document
 from app.models.ocr_result import OcrResult
 from app.services.case_service import CaseService
+from app.services.notification_rule_engine import NotificationRuleEngine
 from app.services.ocr_service import OCR_ELIGIBLE_DOCUMENT_TYPES
 from app.web.auth import get_current_user, require_login, web_should_scope_vendedor_cases
 from app.web.paths import TEMPLATES_DIR
@@ -510,6 +511,19 @@ def dashboard(
     pendientes_tabla = _build_pending_table(db, usuario or {}, filter_key=pendiente_filter)
     resumen_vendedores = _build_resumen_vendedores(db, usuario or {})
 
+    seller_scope = usuario.get("nombre") if web_should_scope_vendedor_cases(usuario or {}) else None
+    operational_alerts: list = []
+    daily_alert_summary: dict = {}
+    try:
+        engine = NotificationRuleEngine(get_settings())
+        operational_alerts, daily_alert_summary = engine.get_active_alerts_for_dashboard(
+            db, seller_scope
+        )
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Error calculando alertas operativas P16")
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -519,5 +533,7 @@ def dashboard(
             "pendientes_tabla": pendientes_tabla,
             "pendiente_filter": pendiente_filter,
             "resumen_vendedores": resumen_vendedores,
+            "operational_alerts": operational_alerts,
+            "daily_alert_summary": daily_alert_summary,
         },
     )

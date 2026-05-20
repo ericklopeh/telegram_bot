@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     sla_revision_minutes: int = Field(default=240, alias="SLA_REVISION_MINUTES")
     sla_autorizacion_minutes: int = Field(default=240, alias="SLA_AUTORIZACION_MINUTES")
     sla_compulsa_minutes: int = Field(default=180, alias="SLA_COMPULSA_MINUTES")
+    operational_alerts_telegram: bool = Field(
+        default=False, alias="OPERATIONAL_ALERTS_TELEGRAM"
+    )
 
     @property
     def sqlalchemy_database_uri(self) -> str:

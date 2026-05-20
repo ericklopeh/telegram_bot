@@ -15,6 +15,53 @@
     </a>
 </div>
 
+<div class="card shadow-sm border-0 mb-4 border-primary border-opacity-25">
+    <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-bell"></i> Alertas inteligentes (P16)</span>
+        <span class="badge bg-primary">{{ operational_alerts|length }} activa(s)</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-12 col-lg-4">
+                <div class="p-3 bg-light rounded h-100">
+                    <div class="fw-bold small text-muted mb-2">Resumen del día</div>
+                    <ul class="list-unstyled small mb-0">
+                        {% for line in daily_alert_summary.lines|default([]) %}
+                        <li>{{ line }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="col-12 col-lg-8">
+                {% if operational_alerts %}
+                <div class="list-group list-group-flush">
+                    {% for alert in operational_alerts %}
+                    <div class="list-group-item px-0 d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                            <span class="badge {% if alert.severity == 'danger' %}bg-danger{% elif alert.severity == 'success' %}bg-success{% elif alert.severity == 'info' %}bg-info text-dark{% else %}bg-warning text-dark{% endif %} me-1">
+                                {{ alert.alert_type }}
+                            </span>
+                            <span class="fw-semibold">{{ alert.message }}</span>
+                            {% if alert.case_id %}
+                            <div class="small text-muted mt-1">
+                                <a href="/casos/{{ alert.case_id }}" class="text-decoration-none">
+                                    Ver caso {% if alert.case %}{{ alert.case.public_id }}{% else %}#{{ alert.case_id }}{% endif %}
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <span class="small text-muted text-nowrap">{{ alert.updated_at.strftime('%d/%m %H:%M') }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">No hay alertas activas en este momento. Las reglas revisan casos detenidos, listos para autorización, OCR, SharePoint y regeneraciones.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <div class="col-6 col-md-4 col-lg-3">
         <div class="card shadow-sm border-0 h-100">

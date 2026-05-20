@@ -231,3 +231,51 @@ async def notify_snte_generation_from_web(case_id: int) -> None:
 
     except Exception:
         log.exception("Error general en notify_snte_generation_from_web", extra={"case_id": case_id})
+
+
+async def notify_daily_operational_summary_telegram() -> None:
+    """Envía resumen P16 a CHAT_ID_ADMIN_ALERTS o admins con telegram_id (opcional)."""
+    settings = get_settings()
+    if not settings.operational_alerts_telegram or not settings.telegram_bot_token:
+        return
+
+    try:
+        from telegram import Bot
+        from app.services.notification_rule_engine import NotificationRuleEngine
+
+        with session_scope() as db:
+            engine = NotificationRuleEngine(settings)
+            summary = engine.build_daily_summary(db, None)
+            alerts = engine.collect_all_alerts(db, None)
+            case_alerts = [a for a in alerts if a.case_id is not None][:15]
+
+        text = "📊 Resumen operativo\n\n" + summary.get("message", "")
+        if case_alerts:
+            text += "\n\n— Alertas destacadas —"
+            for a in case_alerts:
+                text += f"\n• {a.message}"
+                if a.case_id:
+                    meta = a.metadata or {}
+                    pid = meta.get("public_id")
+                    if pid:
+                        text += f" ({pid})"
+
+        bot = Bot(token=settings.telegram_bot_token)
+        targets: set[int] = set()
+        if settings.chat_id_admin_alerts:
+            targets.add(int(settings.chat_id_admin_alerts))
+        with session_scope() as db:
+            admins = UserRepository.list_active_admins_with_telegram_id(db)
+            targets.update(int(a.telegram_id) for a in admins if a.telegram_id)
+
+        for chat_id in targets:
+            try:
+                await bot.send_message(chat_id=chat_id, text=text[:4000])
+            except Exception:
+                log.exception("Error enviando resumen operativo Telegram", extra={"chat_id": chat_id})
+    except Exception:
+        log.exception("Error en notify_daily_operational_summary_telegram")
+
+
+async def run_daily_operational_summary_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    await notify_daily_operational_summary_telegram()
