@@ -7,3 +7,7 @@ pydantic-settings==2.13.1
 SQLAlchemy==2.0.46
 psycopg[binary]==3.3.2
 alembic==1.18.4
+# OCR (OCRService): mismas versiones que requirements-web.txt
+pillow==12.1.0
+pytesseract==0.3.13
+pymupdf==1.25.5
