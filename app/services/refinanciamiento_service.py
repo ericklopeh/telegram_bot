@@ -13,6 +13,7 @@ from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.core.paths import ORDEN_SNTE_PDF_PATH, REFINANCIAMIENTO_TEMPLATE_PATH
 from app.domain import constants as C
 from app.models.authorization_job import AuthorizationJob
 from app.models.case import Case
@@ -22,7 +23,7 @@ from app.services.pdf_orden_service import DatosOrden, generar_orden_snte_pdf
 
 log = logging.getLogger(__name__)
 
-TEMPLATE_REFI = "storage/templates/plantilla_refinanciamiento.xlsx"
+TEMPLATE_REFI = REFINANCIAMIENTO_TEMPLATE_PATH
 
 
 class TemplateNotFoundError(Exception):
@@ -176,10 +177,10 @@ class RefinanciamientoService:
         monto_total: float,
         upload_dir: Path,
     ) -> Document:
-        if not os.path.exists(TEMPLATE_REFI):
+        if not TEMPLATE_REFI.is_file():
             raise TemplateNotFoundError(f"Falta plantilla Excel en: {TEMPLATE_REFI}")
 
-        wb = openpyxl.load_workbook(TEMPLATE_REFI, data_only=False)
+        wb = openpyxl.load_workbook(str(TEMPLATE_REFI), data_only=False)
         ws = wb["Hoja1"] if "Hoja1" in wb.sheetnames else wb.active
 
         # Limpiar external links cacheados
@@ -327,8 +328,8 @@ class RefinanciamientoService:
         descuento_qna: str,
         upload_dir: Path,
     ) -> Document:
-        template_path = "storage/templates/plantilla_orden_snte.pdf"
-        if not os.path.exists(template_path):
+        template_path = ORDEN_SNTE_PDF_PATH
+        if not template_path.is_file():
             raise TemplateNotFoundError(f"Falta plantilla PDF SNTE en: {template_path}")
 
         datos = DatosOrden(
@@ -351,11 +352,11 @@ class RefinanciamientoService:
         filename = f"{uuid.uuid4()}_{folio}_{nombre_safe}_REFI_SNTE.pdf"
         abs_path = str(upload_dir / filename)
 
-        generar_orden_snte_pdf(template_path, abs_path, datos)
+        generar_orden_snte_pdf(str(template_path), abs_path, datos)
 
         job = AuthorizationJob(
             case_id=case.id,
-            template_name=os.path.basename(template_path),
+            template_name=template_path.name,
             output_path=abs_path,
             generation_status="success",
         )

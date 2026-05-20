@@ -17,6 +17,7 @@ class Case(Base):
     temp_folio: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     official_folio: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     current_status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    workflow_state: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     visible_status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     seller_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     seller_telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+    <h2 class="mb-3">Workflow operativo (P22)</h2>
+    <p class="text-muted">{{ snte_rule }}</p>
+
+    <section class="card mb-4">
+        <div class="card-header fw-bold">Estados lineales</div>
+        <div class="card-body">
+            <ol class="mb-0">
+                {% for key, label in states %}
+                <li>{{ label }} <code class="small">{{ key }}</code></li>
+                {% endfor %}
+            </ol>
+        </div>
+    </section>
+
+    <section class="card mb-4">
+        <div class="card-header fw-bold">Transiciones permitidas</div>
+        <div class="card-body">
+            <ul>
+                {% for t in transitions %}
+                <li><strong>{{ t.from }}</strong> → {{ t.to | join(', ') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-header fw-bold">Últimos bloqueos</div>
+        <div class="card-body">
+            {% if blocked_events %}
+            <ul class="list-unstyled mb-0">
+                {% for e in blocked_events %}
+                <li class="mb-2 small border-bottom pb-2">
+                    <span class="badge bg-danger">{{ e.event_type }}</span>
+                    Caso #{{ e.case_id }} — {{ e.message }}
+                    <span class="text-muted">{{ e.created_at }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-muted mb-0">Sin bloqueos recientes registrados.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <p class="mt-3"><a href="/dashboard">Volver al dashboard</a></p>
+</div>
+{% endblock %}

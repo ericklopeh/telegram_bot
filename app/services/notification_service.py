@@ -39,6 +39,13 @@ async def notificar_grupo_pedidos(
     context: ContextTypes.DEFAULT_TYPE,
     case: Case,
 ) -> None:
+    from app.bot.keyboards import keyboard_pedidos, keyboard_pedidos_from_guard
+    from app.db.session import session_scope
+    from app.services.action_guard_service import (
+        build_case_action_state,
+        keyboard_pedidos_filtered,
+    )
+
     settings = get_settings()
     if not settings.chat_id_pedidos:
         return
@@ -49,10 +56,23 @@ async def notificar_grupo_pedidos(
         f"Semana: {settings.effective_semana_activa}\n"
         f"Estado: {case.current_status}"
     )
+    reply_markup = keyboard_pedidos(case.public_id)
+    try:
+        with session_scope() as db:
+            state = build_case_action_state(db, case, None)
+            rows = keyboard_pedidos_filtered(case.public_id, state)
+            kb = keyboard_pedidos_from_guard(case.public_id, rows)
+            if kb is not None:
+                reply_markup = kb
+            if state.compulsa_block_reason and not state.can_send_to_compulsa:
+                mensaje += f"\n\n⚠️ Aprobar bloqueado: {state.compulsa_block_reason}"
+    except Exception:
+        log.exception("No se pudo aplicar guard de teclado pedidos", extra={"case_id": case.id})
+
     await context.bot.send_message(
         chat_id=settings.chat_id_pedidos,
         text=mensaje,
-        reply_markup=keyboard_pedidos(case.public_id),
+        reply_markup=reply_markup,
     )
 
 

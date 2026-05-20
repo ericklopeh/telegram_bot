@@ -11,6 +11,7 @@ from app.db.session import get_db_session
 from app.domain import constants as C
 from app.models.case import Case
 from app.repositories.document_repository import DocumentRepository
+from app.services.action_guard_service import can_generate_authorization
 from app.services.authorization_service import AuthorizationService, TemplateNotFoundError
 from app.services.case_service import CaseService
 from app.services.refinanciamiento_service import (
@@ -359,25 +360,16 @@ async def generar_autorizacion(
     if not case:
         return RedirectResponse(url="/casos", status_code=302)
 
-    if case.current_status not in _SNTE_ALLOWED_STATUSES:
-        msg = urllib.parse.quote(
-            f"Solo se puede generar SNTE en «{C.ST_PED_PREP_AUT}» o «{C.ST_PED_AUT_GENERADA}» "
-            f"(estado actual: {case.current_status})."
+    ok_auth, auth_reason = can_generate_authorization(db, case, user)
+    if not ok_auth:
+        msg = urllib.parse.quote(auth_reason or "No se puede generar la autorización SNTE.")
+        log.warning(
+            "Generación SNTE bloqueada por action guard",
+            extra={"case_id": case_id, "reason": auth_reason},
         )
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     case_svc = CaseService(get_settings())
-    if not case_svc.pedido_has_all_documents(db, case):
-        checklist = case_svc.get_pedido_checklist(db, case)
-        msg = urllib.parse.quote(
-            "Completa el checklist del pedido antes de generar la autorización SNTE:\n"
-            + checklist.replace("\n", " · ")
-        )
-        log.warning(
-            "Generación SNTE bloqueada: checklist incompleto",
-            extra={"case_id": case_id},
-        )
-        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     raw_form = await request.form()
     form_data = _build_snte_payload(dict(raw_form))

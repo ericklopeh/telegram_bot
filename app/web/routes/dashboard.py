@@ -416,6 +416,45 @@ def _build_resumen_vendedores(db: Session, usuario: dict) -> list[dict]:
     ]
 
 
+_ESTADO_BUCKET_MAP: dict[str, tuple[str, ...]] = {
+    "recibido": (C.ST_PED_RECIBIDO, C.ST_REV_RECIBIDO),
+    "correccion": (
+        C.ST_PED_CORRECCION,
+        C.ST_REV_CORRECCION,
+        C.ST_REV_EN_REVISION,
+    ),
+    "preparacion": (C.ST_PED_PREP_AUT,),
+    "autorizacion": (C.ST_PED_AUT_GENERADA, C.ST_PED_APROBADO),
+    "compulsa": (
+        C.ST_PED_EN_COMPULSA,
+        C.ST_PED_PEND_COMPULSA,
+        C.ST_PED_COMPULSA_OK,
+    ),
+    "rechazado": (C.ST_PED_RECHAZADO, C.ST_REV_RECHAZADO),
+    "cerrado": (
+        C.ST_PED_CERRADO,
+        C.ST_PED_COMPRA,
+        C.ST_REV_CERRADO,
+        C.ST_REV_SIN_LIQUIDEZ,
+        C.ST_REV_LIQUIDEZ,
+    ),
+}
+
+
+def _aggregate_estado_buckets(por_estado: list[dict]) -> dict[str, int]:
+    """Agrupa conteos existentes por etapa visual (sin consultas nuevas)."""
+    reverse: dict[str, str] = {}
+    for bucket, estados in _ESTADO_BUCKET_MAP.items():
+        for estado in estados:
+            reverse[estado] = bucket
+    totals = {k: 0 for k in _ESTADO_BUCKET_MAP}
+    for row in por_estado:
+        bucket = reverse.get(row["estado"])
+        if bucket:
+            totals[bucket] += int(row["total"])
+    return totals
+
+
 def _build_metrics(db: Session, usuario: dict) -> dict:
     base = _cases_query(db, usuario)
     settings = get_settings()
@@ -508,6 +547,7 @@ def dashboard(
     usuario = get_current_user(request, db)
     pendiente_filter = _normalize_pending_filter(filtro_pendientes)
     metricas = _build_metrics(db, usuario or {})
+    estado_buckets = _aggregate_estado_buckets(metricas.get("por_estado") or [])
     pendientes_tabla = _build_pending_table(db, usuario or {}, filter_key=pendiente_filter)
     resumen_vendedores = _build_resumen_vendedores(db, usuario or {})
 
@@ -535,5 +575,6 @@ def dashboard(
             "resumen_vendedores": resumen_vendedores,
             "operational_alerts": operational_alerts,
             "daily_alert_summary": daily_alert_summary,
+            "estado_buckets": estado_buckets,
         },
     )

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block body_class %}dash-shell-active{% endblock %}
+{% block main_class %}{% endblock %}
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+{% block content %}
+<div class="dash-app">
+    <aside class="dash-sidebar" id="dashSidebar">
+        <div class="dash-sidebar__brand"><h1>Gaman</h1><p>Conciliación</p></div>
+        <nav class="dash-nav">
+            <a href="/dashboard" class="dash-nav__link"><i data-lucide="layout-dashboard"></i><span>Dashboard</span></a>
+            <a href="/ventas/pendientes" class="dash-nav__link"><i data-lucide="clock"></i><span>Pendientes</span></a>
+            <a href="/control/conciliacion" class="dash-nav__link is-active"><i data-lucide="git-compare"></i><span>Conciliación</span></a>
+            <a href="/reportes/comercial" class="dash-nav__link"><i data-lucide="bar-chart-3"></i><span>Control comercial</span></a>
+        </nav>
+        <div class="dash-sidebar__footer">
+            <a href="/logout" class="dash-nav__link"><i data-lucide="log-out"></i><span>Salir</span></a>
+        </div>
+    </aside>
+    <div class="dash-main">
+        <header class="dash-topbar">
+            <div class="dash-topbar__title">
+                <h2>Conciliación comercial</h2>
+                <p>BD vs archivos en storage/excel_exports</p>
+            </div>
+        </header>
+        <div class="dash-content">
+            <div class="row g-3 mb-3">
+                <div class="col-md-3"><div class="dash-card p-3"><div class="small text-muted">Capturas revisadas</div><strong>{{ report.total_sales }}</strong></div></div>
+                <div class="col-md-3"><div class="dash-card p-3"><div class="small text-muted">Inconsistencias</div><strong class="text-danger">{{ report.issue_count }}</strong></div></div>
+                <div class="col-md-3"><div class="dash-card p-3"><div class="small text-muted">Errores</div><strong>{{ report.error_count }}</strong></div></div>
+                <div class="col-md-3"><div class="dash-card p-3"><div class="small text-muted">Advertencias</div><strong>{{ report.warning_count }}</strong></div></div>
+            </div>
+            {% if not report.has_issues %}
+            <div class="alert alert-success">CONCILIATION_OK — No se detectaron inconsistencias en el universo revisado.</div>
+            {% endif %}
+            <section class="dash-card">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Folio</th>
+                                <th>Cliente</th>
+                                <th>Vendedor</th>
+                                <th>Problema</th>
+                                <th>Severidad</th>
+                                <th>Acción sugerida</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in report.issues %}
+                            <tr>
+                                <td>{{ item.folio }}</td>
+                                <td>{{ item.cliente }}</td>
+                                <td>{{ item.vendedor }}</td>
+                                <td>{{ item.problem }}</td>
+                                <td>
+                                    {% if item.severity == 'CONCILIATION_ERROR' %}
+                                    <span class="badge bg-danger">ERROR</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">WARNING</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small">{{ item.suggested_action }}</td>
+                                <td class="text-nowrap">
+                                    <a href="/ventas/{{ item.sale_id }}" class="btn btn-outline-secondary btn-sm">Ver</a>
+                                    {% if item.can_retry %}
+                                    <form method="post" action="/ventas/{{ item.sale_id }}/reintentar-registro" class="d-inline">
+                                        <button type="submit" class="btn btn-warning btn-sm">Reintentar</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="7" class="text-center text-muted py-4">Sin hallazgos.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>lucide.createIcons();</script>
+{% endblock %}

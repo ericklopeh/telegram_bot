@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block body_class %}dash-shell-active{% endblock %}
+{% block main_class %}{% endblock %}
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+<style>
+.ventas-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+.ventas-form-grid .span-2 { grid-column: span 2; }
+.check-ok { background: #dcfce7; color: #166534; }
+.check-pending { background: #fef9c3; color: #854d0e; }
+.check-error { background: #fee2e2; color: #991b1b; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="dash-app">
+    <div class="dash-main" style="margin-left:0; max-width:1100px; margin:0 auto; padding:1.5rem;">
+        <header class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <h2 class="mb-1">{% if detail_mode %}Venta {{ form.folio }}{% else %}Captura de venta{% endif %}</h2>
+                <p class="text-muted small mb-0">
+                    Estatus: <strong>{{ status_labels.get(sale.status, sale.status) if sale else 'Nuevo' }}</strong>
+                    {% if sale and sale.registration_status %}
+                    · Registro: <strong>{{ registration_status_labels.get(sale.registration_status, sale.registration_status) }}</strong>
+                    {% endif %}
+                    {% if sale and (sale.registration_error or sale.export_error) %}
+                    · <span class="text-danger">{{ sale.registration_error or sale.export_error }}</span>
+                    {% endif %}
+                    {% if sale and sale.registration_attempts %} · Intentos: {{ sale.registration_attempts }}{% endif %}
+                </p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="/ventas" class="btn btn-outline-secondary btn-sm">Listado</a>
+                {% if perms.can_download_ventas %}
+                <a href="/ventas/{{ sale.id }}/descargar/ventas" class="btn btn-success btn-sm">Excel ventas</a>
+                {% endif %}
+                {% if perms.can_download_contratos %}
+                <a href="/ventas/{{ sale.id }}/descargar/contratos" class="btn btn-success btn-sm">Excel contratos</a>
+                {% endif %}
+                {% if perms.can_retry_registration and sale %}
+                <form method="post" action="/ventas/{{ sale.id }}/reintentar-registro" class="d-inline">
+                    <button type="submit" class="btn btn-warning btn-sm">Reintentar registro</button>
+                </form>
+                {% endif %}
+            </div>
+        </header>
+
+        {% if success_msg %}<div class="alert alert-success">{{ success_msg }}</div>{% endif %}
+        {% if error_msg %}<div class="alert alert-danger">{{ error_msg }}</div>{% endif %}
+        {% if warnings %}
+        <div class="alert alert-warning">
+            <ul class="mb-0">{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+        {% if errors %}
+        <div class="alert alert-danger"><ul class="mb-0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+        {% endif %}
+
+        {% if detail_mode and workflow_pipeline is defined %}
+        {% include "partials/workflow_pipeline.html" %}
+        {% endif %}
+
+        {% if checklist and detail_mode %}
+        <section class="dash-card mb-3">
+            <div class="dash-card__header"><h3 class="h6 mb-0">Checklist operativo</h3></div>
+            <div class="dash-card__body">
+                <div class="row g-2">
+                    {% for item in checklist.items %}
+                    <div class="col-md-6">
+                        <div class="p-2 rounded small check-{% if item.status == 'ok' %}ok{% elif item.status == 'error' %}error{% else %}pending{% endif %}">
+                            <strong>{{ item.label }}</strong> — {{ item.detail }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if checklist.register_block_reason and not perms.can_register_definitive %}
+                <p class="small text-muted mt-2 mb-0">{{ checklist.register_block_reason }}</p>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+
+        <form method="post" action="/ventas/nueva" class="dash-card">
+            <div class="dash-card__body">
+                <input type="hidden" name="sale_id" value="{{ form.id or '' }}">
+                {% if form.case_id %}<input type="hidden" name="case_id" value="{{ form.case_id }}">{% endif %}
+                <fieldset {% if is_readonly %}disabled{% endif %}>
+                    <div class="ventas-form-grid">
+                        <div>
+                            <label class="form-label small">Folio *</label>
+                            <input type="text" name="folio" class="form-control form-control-sm" required
+                                   value="{{ form.folio or '' }}" {% if sale and sale.status == 'registered' and not perms.can_edit %}readonly{% endif %}>
+                        </div>
+                        <div>
+                            <label class="form-label small">Fecha *</label>
+                            <input type="date" name="fecha" class="form-control form-control-sm" required value="{{ form.fecha or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Vendedor *</label>
+                            <input type="text" name="vendedor" class="form-control form-control-sm" required value="{{ form.vendedor or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Semana</label>
+                            <input type="text" name="semana" class="form-control form-control-sm" value="{{ form.semana or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Sección</label>
+                            <input type="text" name="seccion" class="form-control form-control-sm" value="{{ form.seccion or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">QNA (QQ-AAAA)</label>
+                            <input type="text" name="qna" class="form-control form-control-sm" value="{{ form.qna or '' }}" placeholder="24-2026">
+                        </div>
+                        <div class="span-2">
+                            <label class="form-label small">Cliente *</label>
+                            <input type="text" name="cliente" class="form-control form-control-sm" required value="{{ form.cliente or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">RFC</label>
+                            <input type="text" name="rfc" class="form-control form-control-sm font-monospace" value="{{ form.rfc or '' }}" maxlength="13">
+                        </div>
+                        <div>
+                            <label class="form-label small">Código producto</label>
+                            <input type="text" name="codigo" class="form-control form-control-sm" value="{{ form.codigo or '' }}">
+                        </div>
+                        <div class="span-2">
+                            <label class="form-label small">Producto / artículo</label>
+                            <textarea name="producto" class="form-control form-control-sm" rows="2">{{ form.producto or '' }}</textarea>
+                        </div>
+                        <div>
+                            <label class="form-label small">Tipo venta</label>
+                            <select name="tipo_venta" class="form-select form-select-sm">
+                                {% for t in ['PARALELA','NUEVA','REACTIVADA','REFINANCIADA'] %}
+                                <option value="{{ t }}" {% if form.tipo_venta == t %}selected{% endif %}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small">Tipo cotización</label>
+                            <select name="tipo_cotizacion" class="form-select form-select-sm">
+                                {% for t in ['MATERIAL','MUEBLE','DINERO'] %}
+                                <option value="{{ t }}" {% if form.tipo_cotizacion == t %}selected{% endif %}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small">Plazo *</label>
+                            <input type="number" name="plazo" class="form-control form-control-sm" min="1" value="{{ form.plazo or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Costo *</label>
+                            <input type="text" name="costo" class="form-control form-control-sm" value="{{ form.costo or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Venta real</label>
+                            <input type="text" name="venta" class="form-control form-control-sm" value="{{ form.venta or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Venta + refinanciamiento</label>
+                            <input type="text" name="venta_refinanciamiento" class="form-control form-control-sm" value="{{ form.venta_refinanciamiento or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Total venta</label>
+                            <input type="text" name="total_venta" class="form-control form-control-sm" value="{{ form.total_venta or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Precio comisión</label>
+                            <input type="text" name="precio_comision" class="form-control form-control-sm" value="{{ form.precio_comision or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Venta sin agregado</label>
+                            <input type="text" name="venta_sin_agregado" class="form-control form-control-sm" value="{{ form.venta_sin_agregado or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label small">Recuperación</label>
+                            <input type="text" name="recuperacion" class="form-control form-control-sm" value="{{ form.recuperacion or '' }}">
+                        </div>
+                        <div class="span-2">
+                            <label class="form-label small">Observaciones</label>
+                            <textarea name="observaciones" class="form-control form-control-sm" rows="2">{{ form.observaciones or '' }}</textarea>
+                        </div>
+                    </div>
+                </fieldset>
+
+                {% if not is_readonly %}
+                <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top align-items-center">
+                    {% if perms.can_save_draft %}
+                    <button type="submit" name="action" value="save_draft" class="btn btn-outline-secondary">Guardar borrador</button>
+                    {% else %}
+                    <button type="button" class="btn btn-outline-secondary" disabled title="{{ perms.save_draft_reason }}">Guardar borrador</button>
+                    {% endif %}
+                    {% if perms.can_submit_validation %}
+                    <button type="submit" name="action" value="submit_validation" class="btn btn-outline-primary">Enviar a validación</button>
+                    {% else %}
+                    <button type="button" class="btn btn-outline-primary" disabled title="{{ perms.submit_validation_reason }}">Enviar a validación</button>
+                    {% endif %}
+                    {% if perms.can_register_definitive %}
+                    <div class="form-check ms-2">
+                        <input class="form-check-input" type="checkbox" name="confirm_probable_duplicate" value="1" id="confirmDup">
+                        <label class="form-check-label small" for="confirmDup">Confirmo duplicado probable</label>
+                    </div>
+                    <button type="submit" name="action" value="register" class="btn btn-success"
+                            onclick="return confirm('¿Registrar en copia Excel?');">Registrar definitivo</button>
+                    {% else %}
+                    <button type="button" class="btn btn-success" disabled
+                            title="{{ perms.register_reason or checklist.register_block_reason if checklist else 'No disponible' }}">
+                        Registrar definitivo
+                    </button>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </form>
+
+        {% if sale and sale.case_id %}
+        <p class="small text-muted mt-3">
+            Caso: <a href="/casos/{{ sale.case_id }}">#{{ sale.case_id }}</a>
+            {% if sale.ventas_excel_row %} · Fila ventas {{ sale.ventas_excel_row }}{% endif %}
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

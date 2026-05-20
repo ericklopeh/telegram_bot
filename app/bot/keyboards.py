@@ -85,22 +85,50 @@ def dictamen_revision_keyboard(cases: list[Case]) -> InlineKeyboardMarkup | None
     return InlineKeyboardMarkup(rows)
 
 
-def pedido_document_keyboard(order_type: str) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = [
-        [
-            InlineKeyboardButton("📎 Pedido", callback_data="pd|p"),
-            InlineKeyboardButton("📎 Orden descuento", callback_data="pd|o"),
-        ],
+def pedido_document_keyboard(
+    order_type: str,
+    *,
+    allowed_doc_keys: list[str] | None = None,
+    show_finalize: bool = True,
+) -> InlineKeyboardMarkup:
+    """Teclado de captura de pedido. Si allowed_doc_keys está definido, solo muestra esos tipos."""
+    rows: list[list[InlineKeyboardButton]] = []
+    doc_row: list[InlineKeyboardButton] = []
+    keys = allowed_doc_keys if allowed_doc_keys is not None else ["p", "o"]
+    if allowed_doc_keys is None and order_type == C.ORDER_TYPE_PRESTAMO:
+        keys = ["p", "o", "c"]
+    for key in keys:
+        if key == "c" and order_type != C.ORDER_TYPE_PRESTAMO:
+            continue
+        if key == "p":
+            doc_row.append(InlineKeyboardButton("📎 Pedido", callback_data="pd|p"))
+        elif key == "o":
+            doc_row.append(InlineKeyboardButton("📎 Orden descuento", callback_data="pd|o"))
+        elif key == "c":
+            doc_row.append(InlineKeyboardButton("📎 Carátula bancaria", callback_data="pd|c"))
+    if doc_row:
+        rows.append(doc_row)
+    footer: list[InlineKeyboardButton] = [
+        InlineKeyboardButton("📋 Ver checklist", callback_data="pd|v"),
     ]
-    if order_type == C.ORDER_TYPE_PRESTAMO:
-        rows.append([InlineKeyboardButton("📎 Carátula bancaria", callback_data="pd|c")])
-    rows.append(
+    if show_finalize:
+        footer.append(InlineKeyboardButton("✅ Enviar pedido", callback_data="pd|f"))
+    rows.append(footer)
+    return InlineKeyboardMarkup(rows)
+
+
+def keyboard_pedidos_from_guard(
+    case_public_id: str,
+    button_rows: list[list[tuple[str, str]]],
+) -> InlineKeyboardMarkup | None:
+    if not button_rows:
+        return None
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("📋 Ver checklist", callback_data="pd|v"),
-            InlineKeyboardButton("✅ Enviar pedido", callback_data="pd|f"),
+            [InlineKeyboardButton(label, callback_data=data) for label, data in row]
+            for row in button_rows
         ]
     )
-    return InlineKeyboardMarkup(rows)
 
 
 def pedido_confirm_keyboard() -> InlineKeyboardMarkup:

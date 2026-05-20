@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+
+{% block body_class %}dash-shell-active{% endblock %}
+{% block main_class %}{% endblock %}
+
+{% block extra_head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+
+{% block content %}
+{% set user_initial = (usuario.nombre[0] if usuario and usuario.nombre else 'G')|upper %}
+{% set tab = filtros.tab|default('ventas') %}
+
+<div class="dash-app">
+    <div class="dash-sidebar-backdrop" id="dashSidebarBackdrop"></div>
+
+    <aside class="dash-sidebar" id="dashSidebar">
+        <div class="dash-sidebar__brand">
+            <h1>Gaman</h1>
+            <p>Control comercial</p>
+        </div>
+        <nav class="dash-nav">
+            <a href="/dashboard" class="dash-nav__link">
+                <i data-lucide="layout-dashboard"></i><span>Dashboard</span>
+            </a>
+            <a href="/casos" class="dash-nav__link">
+                <i data-lucide="folder-open"></i><span>Casos</span>
+            </a>
+            <a href="/autorizaciones/aprobadas" class="dash-nav__link">
+                <i data-lucide="badge-check"></i><span>Autorizaciones</span>
+            </a>
+            <a href="/ventas/nueva" class="dash-nav__link">
+                <i data-lucide="plus-circle"></i><span>Nueva venta</span>
+            </a>
+            <a href="/comisiones" class="dash-nav__link">
+                <i data-lucide="wallet"></i><span>Comisiones</span>
+            </a>
+            <a href="/reportes/comercial" class="dash-nav__link is-active">
+                <i data-lucide="bar-chart-3"></i><span>Control comercial</span>
+            </a>
+            {% if usuario.rol in ['admin', 'sistemas', 'autorizacion'] %}
+            <a href="/ventas/pendientes" class="dash-nav__link">
+                <i data-lucide="clock"></i><span>Ventas pendientes</span>
+            </a>
+            <a href="/control/conciliacion" class="dash-nav__link">
+                <i data-lucide="git-compare"></i><span>Conciliación</span>
+            </a>
+            {% endif %}
+            <span class="dash-nav__link is-disabled"><i data-lucide="scale"></i><span>Compulsa</span></span>
+            <span class="dash-nav__link is-disabled"><i data-lucide="users"></i><span>Vendedores</span></span>
+            <span class="dash-nav__link is-disabled"><i data-lucide="settings"></i><span>Configuración</span></span>
+        </nav>
+        <div class="dash-sidebar__footer">
+            <div class="dash-user">
+                <div class="dash-user__avatar">{{ user_initial }}</div>
+                <div>
+                    <div class="dash-user__name">{{ usuario.nombre }}</div>
+                    <div class="dash-user__role">{{ usuario.rol|capitalize }}</div>
+                </div>
+            </div>
+            <a href="/logout" class="dash-nav__link mt-2" style="padding-left:0;">
+                <i data-lucide="log-out"></i><span>Salir</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="dash-main">
+        <header class="dash-topbar">
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="dash-mobile-toggle" id="dashSidebarToggle" aria-label="Menú">
+                    <i data-lucide="menu"></i>
+                </button>
+                <div class="dash-topbar__title">
+                    <h2>Control comercial</h2>
+                    <p>Ventas 2026 · Relación de contratos · Autorizaciones generadas (máx. {{ limit }} filas por sección)</p>
+                </div>
+            </div>
+            <div class="dash-topbar__actions">
+                <a href="/dashboard" class="dash-btn-ghost">Dashboard</a>
+            </div>
+        </header>
+
+        <div class="dash-content">
+            <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link {% if tab == 'ventas' %}active{% endif %}"
+                       href="/reportes/comercial?tab=ventas">Ventas 2026</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if tab == 'contratos' %}active{% endif %}"
+                       href="/reportes/comercial?tab=contratos">Relación de contratos</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if tab == 'autorizaciones' %}active{% endif %}"
+                       href="/reportes/comercial?tab=autorizaciones">Autorizaciones generadas</a>
+                </li>
+            </ul>
+
+            {% if tab == 'ventas' %}
+            <section class="dash-card mb-3">
+                <div class="dash-card__header">
+                    <h3>A) Ventas 2026</h3>
+                    <span class="small text-muted">Fuente: CAPTURA_2026 o hoja SEM · solo lectura</span>
+                </div>
+                <div class="dash-card__body">
+                    {% if ventas.error %}
+                    <div class="alert alert-danger">{{ ventas.error }}</div>
+                    {% endif %}
+                    {% if opciones_ventas.error %}
+                    <div class="alert alert-warning small">{{ opciones_ventas.error }}</div>
+                    {% endif %}
+
+                    <form method="get" action="/reportes/comercial" class="row g-2 align-items-end mb-3">
+                        <input type="hidden" name="tab" value="ventas">
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small mb-1">Vendedor</label>
+                            <select name="ventas_vendedor" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for v in opciones_ventas.vendedores %}
+                                <option value="{{ v }}" {% if filtros.ventas_vendedor == v %}selected{% endif %}>{{ v }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">QNA / plazo</label>
+                            <input type="text" name="ventas_qna" class="form-control form-control-sm"
+                                   value="{{ filtros.ventas_qna }}" placeholder="Ej. 24">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1">Semana</label>
+                            <select name="ventas_semana" class="form-select form-select-sm">
+                                <option value="">CAPTURA_2026 (todas)</option>
+                                {% for s in opciones_ventas.semanas %}
+                                <option value="{{ s }}" {% if filtros.ventas_semana == s %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1">Cliente</label>
+                            <input type="search" name="ventas_cliente" class="form-control form-control-sm"
+                                   value="{{ filtros.ventas_cliente }}">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">RFC</label>
+                            <input type="text" name="ventas_rfc" class="form-control form-control-sm"
+                                   value="{{ filtros.ventas_rfc }}">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">Tipo venta</label>
+                            <select name="ventas_tipo" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for t in opciones_ventas.tipos_venta %}
+                                <option value="{{ t }}" {% if filtros.ventas_tipo == t %}selected{% endif %}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-auto">
+                            <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+                            <a href="/reportes/comercial?tab=ventas" class="btn btn-outline-secondary btn-sm">Limpiar</a>
+                        </div>
+                    </form>
+
+                    {% if ventas.truncated %}
+                    <div class="alert alert-info py-2 small">Mostrando las primeras {{ limit }} filas. Afina los filtros para ver más resultados.</div>
+                    {% endif %}
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Folio</th><th>Fecha</th><th>Vendedor</th><th>Sección</th><th>QNA</th>
+                                    <th>Cliente</th><th>RFC</th><th>Producto</th><th>Tipo</th><th>Plazo</th>
+                                    <th class="text-end">Costo</th><th class="text-end">Venta</th>
+                                    <th class="text-end">Comisión</th><th class="text-end">Recup.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in ventas.rows %}
+                                <tr>
+                                    <td>{{ r.folio }}</td>
+                                    <td>{{ r.fecha }}</td>
+                                    <td>{{ r.vendedor }}</td>
+                                    <td>{{ r.seccion }}</td>
+                                    <td>{{ r.qna }}</td>
+                                    <td>{{ r.cliente }}</td>
+                                    <td class="font-monospace small">{{ r.rfc }}</td>
+                                    <td class="small" style="max-width:180px;">{{ r.producto }}</td>
+                                    <td>{{ r.tipo_venta }}</td>
+                                    <td>{{ r.plazo }}</td>
+                                    <td class="text-end">{{ r.costo }}</td>
+                                    <td class="text-end">{{ r.venta }}</td>
+                                    <td class="text-end">{{ r.comision }}</td>
+                                    <td class="text-end">{{ r.recuperacion }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="14" class="text-muted text-center py-4">Sin registros con los filtros actuales.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <details class="mt-3 small text-muted">
+                        <summary>Diagnóstico de columnas (ventas)</summary>
+                        <ul class="mb-0 mt-2">
+                            {% for d in ventas.diagnostics %}
+                            <li><strong>{{ d.sheet_name }}</strong> — fila encabezado: {{ d.header_row or '—' }},
+                                filas: {{ d.rows_read }}
+                                {% if d.note %} · {{ d.note }}{% endif %}
+                                {% if d.columns_detected %}
+                                <br>Detectadas: {{ d.columns_detected|tojson }}
+                                {% endif %}
+                                {% if d.columns_missing %} · Faltantes: {{ d.columns_missing|join(', ') }}{% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                </div>
+            </section>
+            {% endif %}
+
+            {% if tab == 'contratos' %}
+            <section class="dash-card mb-3">
+                <div class="dash-card__header">
+                    <h3>B) Relación de contratos</h3>
+                    <span class="small text-muted">Una hoja por vendedor · solo lectura</span>
+                </div>
+                <div class="dash-card__body">
+                    {% if contratos.error %}
+                    <div class="alert alert-danger">{{ contratos.error }}</div>
+                    {% endif %}
+
+                    <form method="get" action="/reportes/comercial" class="row g-2 align-items-end mb-3">
+                        <input type="hidden" name="tab" value="contratos">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1">Vendedor (hoja)</label>
+                            <select name="contratos_vendedor" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for v in opciones_contratos.vendedores %}
+                                <option value="{{ v }}" {% if filtros.contratos_vendedor == v %}selected{% endif %}>{{ v }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-1">QNA</label>
+                            <input type="text" name="contratos_qna" class="form-control form-control-sm" value="{{ filtros.contratos_qna }}">
+                        </div>
+                        <div class="col-8 col-md-4">
+                            <label class="form-label small mb-1">Cliente</label>
+                            <input type="search" name="contratos_cliente" class="form-control form-control-sm" value="{{ filtros.contratos_cliente }}">
+                        </div>
+                        <div class="col-4 col-md-2">
+                            <label class="form-label small mb-1">Folio / código</label>
+                            <input type="text" name="contratos_folio" class="form-control form-control-sm" value="{{ filtros.contratos_folio }}">
+                        </div>
+                        <div class="col-12 col-md-auto">
+                            <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+                            <a href="/reportes/comercial?tab=contratos" class="btn btn-outline-secondary btn-sm">Limpiar</a>
+                        </div>
+                    </form>
+
+                    {% if contratos.truncated %}
+                    <div class="alert alert-info py-2 small">Mostrando las primeras {{ limit }} filas.</div>
+                    {% endif %}
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Vendedor</th><th>Cliente</th><th>Folio</th><th>Contrato</th>
+                                    <th class="text-end">Monto</th><th>Plazo</th><th class="text-end">Comisión</th>
+                                    <th>Saldo</th><th>Estatus</th><th>QNA</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in contratos.rows %}
+                                <tr>
+                                    <td>{{ r.vendedor }}</td>
+                                    <td>{{ r.cliente }}</td>
+                                    <td>{{ r.folio }}</td>
+                                    <td class="small" style="max-width:200px;">{{ r.contrato }}</td>
+                                    <td class="text-end">{{ r.monto }}</td>
+                                    <td>{{ r.plazo }}</td>
+                                    <td class="text-end">{{ r.comision }}</td>
+                                    <td>{{ r.saldo }}</td>
+                                    <td>{{ r.estatus }}</td>
+                                    <td>{{ r.qna }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="10" class="text-muted text-center py-4">Sin registros (las hojas de vendedor pueden estar vacías en la plantilla).</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <details class="mt-3 small text-muted">
+                        <summary>Diagnóstico de columnas (contratos)</summary>
+                        <ul class="mb-0 mt-2">
+                            {% for d in contratos.diagnostics %}
+                            <li><strong>{{ d.sheet_name }}</strong> — encabezado fila {{ d.header_row or '—' }}, filas leídas: {{ d.rows_read }}
+                                {% if d.columns_detected %}<br>Detectadas: {{ d.columns_detected|tojson }}{% endif %}
+                                {% if d.columns_missing %} · Sin columna: {{ d.columns_missing|join(', ') }} (folio/contrato usan código/artículo){% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                </div>
+            </section>
+            {% endif %}
+
+            {% if tab == 'autorizaciones' %}
+            <section class="dash-card mb-3">
+                <div class="dash-card__header">
+                    <h3>C) Autorizaciones generadas</h3>
+                    <span class="small text-muted">Base de datos · DOC_AUTORIZACION_SNTE o ST_PED_AUT_GENERADA</span>
+                </div>
+                <div class="dash-card__body">
+                    <form method="get" action="/reportes/comercial" class="row g-2 align-items-end mb-3">
+                        <input type="hidden" name="tab" value="autorizaciones">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small mb-1">Búsqueda</label>
+                            <input type="search" name="auth_q" class="form-control form-control-sm"
+                                   placeholder="Cliente, RFC o folio" value="{{ filtros.auth_q }}">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1">Vendedor</label>
+                            <select name="auth_vendedor" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for v in opciones_auth.vendedores %}
+                                <option value="{{ v }}" {% if filtros.auth_vendedor == v %}selected{% endif %}>{{ v }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">QNA</label>
+                            <input type="text" name="auth_qna" class="form-control form-control-sm" value="{{ filtros.auth_qna }}">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">Desde</label>
+                            <input type="date" name="auth_desde" class="form-control form-control-sm" value="{{ filtros.auth_desde }}">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small mb-1">Hasta</label>
+                            <input type="date" name="auth_hasta" class="form-control form-control-sm" value="{{ filtros.auth_hasta }}">
+                        </div>
+                        <div class="col-12 col-md-auto">
+                            <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+                            <a href="/reportes/comercial?tab=autorizaciones" class="btn btn-outline-secondary btn-sm">Limpiar</a>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Folio</th><th>Cliente</th><th>RFC</th><th>Vendedor</th>
+                                    <th>Fecha aut.</th><th>QNA</th><th class="text-end">Monto</th><th>Descargas</th><th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for fila in autorizaciones %}
+                                <tr>
+                                    <td class="font-monospace small">{{ fila.folio }}</td>
+                                    <td>{{ fila.cliente }}</td>
+                                    <td class="font-monospace small">{{ fila.rfc }}</td>
+                                    <td>{{ fila.vendedor }}</td>
+                                    <td>{{ fila.fecha_autorizacion_label }}</td>
+                                    <td>{{ fila.qna }}</td>
+                                    <td class="text-end">{{ fila.monto }}</td>
+                                    <td class="small">
+                                        {% if fila.excel_doc_id %}
+                                        <a href="/documentos/{{ fila.excel_doc_id }}/ver" class="dash-link" target="_blank" rel="noopener">Excel SNTE</a>
+                                        {% else %}<span class="text-muted">—</span>{% endif %}
+                                        {% if fila.pdf_doc_id %}
+                                        · <a href="/documentos/{{ fila.pdf_doc_id }}/ver" class="dash-link" target="_blank" rel="noopener">PDF sindicato</a>
+                                        {% endif %}
+                                    </td>
+                                    <td><a href="/casos/{{ fila.case_id }}" class="btn btn-sm btn-outline-primary py-0">Ver caso</a></td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="9" class="text-muted text-center py-4">Sin autorizaciones que coincidan.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

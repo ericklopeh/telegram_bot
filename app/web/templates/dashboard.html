@@ -1,437 +1,613 @@
 {% extends "base.html" %}
 
+{% block body_class %}dash-shell-active{% endblock %}
+{% block main_class %}{% endblock %}
+
+{% block extra_head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+
 {% block content %}
+{% set refresh_url = '/dashboard' ~ ('?filter=' ~ pendiente_filter if pendiente_filter != 'all' else '') %}
+{% set user_initial = (usuario.nombre[0] if usuario and usuario.nombre else 'G')|upper %}
+{% set ds = daily_alert_summary %}
 
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-1">Dashboard operativo</h2>
-        <p class="text-muted mb-0">
-            Métricas del flujo de casos y documentos{% if usuario is not none and usuario.rol == 'vendedor' %} (solo tus casos){% endif %}.
-        </p>
-    </div>
+<div class="dash-app">
+    <div class="dash-sidebar-backdrop" id="dashSidebarBackdrop" aria-hidden="true"></div>
 
-    <a href="/casos" class="btn btn-primary mt-3 mt-md-0">
-        Ver casos
-    </a>
-</div>
+    <aside class="dash-sidebar" id="dashSidebar" aria-label="Navegación principal">
+        <div class="dash-sidebar__brand">
+            <h1>Gaman</h1>
+            <p>Sistema de autorizaciones</p>
+        </div>
 
-<div class="card shadow-sm border-0 mb-4 border-primary border-opacity-25">
-    <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <span><i class="bi bi-bell"></i> Alertas inteligentes (P16)</span>
-        <span class="badge bg-primary">{{ operational_alerts|length }} activa(s)</span>
-    </div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-12 col-lg-4">
-                <div class="p-3 bg-light rounded h-100">
-                    <div class="fw-bold small text-muted mb-2">Resumen del día</div>
-                    <ul class="list-unstyled small mb-0">
-                        {% for line in daily_alert_summary.lines|default([]) %}
-                        <li>{{ line }}</li>
-                        {% endfor %}
-                    </ul>
+        <nav class="dash-nav">
+            <a href="/dashboard" class="dash-nav__link is-active">
+                <i data-lucide="layout-dashboard"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="/casos" class="dash-nav__link">
+                <i data-lucide="folder-open"></i>
+                <span>Casos</span>
+            </a>
+            <a href="/casos" class="dash-nav__link" title="Gestión de documentos por caso">
+                <i data-lucide="file-text"></i>
+                <span>Documentos</span>
+            </a>
+            <a href="/autorizaciones/aprobadas" class="dash-nav__link" title="Autorizaciones SNTE generadas">
+                <i data-lucide="badge-check"></i>
+                <span>Autorizaciones</span>
+            </a>
+            <span class="dash-nav__link is-disabled" title="Próximamente">
+                <i data-lucide="scale"></i>
+                <span>Compulsa</span>
+            </span>
+            <a href="/ventas/nueva" class="dash-nav__link" title="Capturar venta">
+                <i data-lucide="plus-circle"></i>
+                <span>Nueva venta</span>
+            </a>
+            <a href="/comisiones" class="dash-nav__link" title="Comisiones por vendedor y QNA">
+                <i data-lucide="wallet"></i>
+                <span>Comisiones</span>
+            </a>
+            <a href="/reportes/comercial" class="dash-nav__link" title="Ventas, contratos y autorizaciones">
+                <i data-lucide="bar-chart-3"></i>
+                <span>Control comercial</span>
+            </a>
+            {% if usuario.rol in ['admin', 'sistemas', 'autorizacion'] %}
+            <a href="/ventas/pendientes" class="dash-nav__link" title="Cola y errores de registro Excel">
+                <i data-lucide="clock"></i>
+                <span>Ventas pendientes</span>
+            </a>
+            <a href="/control/conciliacion" class="dash-nav__link" title="Conciliación BD vs exportaciones">
+                <i data-lucide="git-compare"></i>
+                <span>Conciliación</span>
+            </a>
+            {% endif %}
+            <span class="dash-nav__link is-disabled" title="Próximamente">
+                <i data-lucide="users"></i>
+                <span>Vendedores</span>
+            </span>
+            <span class="dash-nav__link is-disabled" title="Próximamente">
+                <i data-lucide="package"></i>
+                <span>Productos</span>
+            </span>
+            <span class="dash-nav__link is-disabled" title="Próximamente">
+                <i data-lucide="settings"></i>
+                <span>Configuración</span>
+            </span>
+        </nav>
+
+        <div class="dash-sidebar__footer">
+            <div class="dash-p16-badge">
+                <span class="dot" aria-hidden="true"></span>
+                <div>
+                    <strong>Alertas inteligentes</strong><br>
+                    <span>P16 activo</span>
                 </div>
             </div>
-            <div class="col-12 col-lg-8">
-                {% if operational_alerts %}
-                <div class="list-group list-group-flush">
-                    {% for alert in operational_alerts %}
-                    <div class="list-group-item px-0 d-flex justify-content-between align-items-start gap-2">
+            <div class="dash-user">
+                <div class="dash-user__avatar">{{ user_initial }}</div>
+                <div>
+                    <div class="dash-user__name">{{ usuario.nombre }}</div>
+                    <div class="dash-user__role">{{ usuario.rol|capitalize }}</div>
+                </div>
+            </div>
+            <a href="/logout" class="dash-nav__link mt-2" style="padding-left:0;">
+                <i data-lucide="log-out"></i>
+                <span>Salir</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="dash-main">
+        <header class="dash-topbar">
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="dash-mobile-toggle" id="dashSidebarToggle" aria-label="Abrir menú">
+                    <i data-lucide="menu"></i>
+                </button>
+                <div class="dash-topbar__title">
+                    <h2>Dashboard operativo</h2>
+                    <p>Métricas del flujo de casos y documentos{% if usuario.rol == 'vendedor' %} · solo tus casos{% endif %}.</p>
+                </div>
+            </div>
+            <div class="dash-topbar__actions">
+                <a href="/autorizaciones/aprobadas" class="dash-btn-ghost">
+                    <i data-lucide="badge-check" style="width:16px;height:16px;"></i>
+                    Autorizaciones aprobadas
+                </a>
+                <a href="/casos" class="dash-btn-primary">
+                    <i data-lucide="folder-open" style="width:16px;height:16px;"></i>
+                    Ver casos
+                </a>
+                <select class="dash-period-select" id="dashPeriodSelect" aria-label="Periodo" title="Resumen del día (P16)">
+                    <option value="today" selected>Hoy</option>
+                    <option value="week" disabled>Esta semana</option>
+                </select>
+                <a href="{{ refresh_url }}" class="dash-btn-ghost">
+                    <i data-lucide="refresh-cw" style="width:16px;height:16px;"></i>
+                    Actualizar
+                </a>
+            </div>
+        </header>
+
+        <div class="dash-content">
+
+            {# —— Alertas inteligentes P16 —— #}
+            <section class="dash-card mb-4">
+                <div class="dash-card__header">
+                    <h3><i data-lucide="bell" style="width:18px;height:18px;vertical-align:-3px;"></i> Alertas inteligentes (P16)</h3>
+                    <span class="dash-badge dash-badge--muted">{{ operational_alerts|length }} activa(s)</span>
+                </div>
+                <div class="dash-card__body">
+                    <div class="dash-alerts-panel">
                         <div>
-                            <span class="badge {% if alert.severity == 'danger' %}bg-danger{% elif alert.severity == 'success' %}bg-success{% elif alert.severity == 'info' %}bg-info text-dark{% else %}bg-warning text-dark{% endif %} me-1">
-                                {{ alert.alert_type }}
-                            </span>
-                            <span class="fw-semibold">{{ alert.message }}</span>
-                            {% if alert.case_id %}
-                            <div class="small text-muted mt-1">
-                                <a href="/casos/{{ alert.case_id }}" class="text-decoration-none">
-                                    Ver caso {% if alert.case %}{{ alert.case.public_id }}{% else %}#{{ alert.case_id }}{% endif %}
-                                </a>
+                            <p class="dash-section-title">Resumen del día</p>
+                            <ul class="dash-summary-list">
+                                <li>
+                                    <span>Nuevos casos hoy</span>
+                                    <span class="dash-summary-badge dash-summary-badge--blue">{{ ds.nuevos_casos|default(0) }}</span>
+                                </li>
+                                <li>
+                                    <span>Listos para autorización</span>
+                                    <span class="dash-summary-badge dash-summary-badge--green">{{ ds.listos_autorizacion|default(0) }}</span>
+                                </li>
+                                <li>
+                                    <span>Pendientes OCR</span>
+                                    <span class="dash-summary-badge dash-summary-badge--orange">{{ ds.pendientes_ocr|default(0) }}</span>
+                                </li>
+                                <li>
+                                    <span>SharePoint fallidos</span>
+                                    <span class="dash-summary-badge dash-summary-badge--red">{{ ds.sharepoint_fallidos|default(0) }}</span>
+                                </li>
+                                <li>
+                                    <span>Sin avance &gt; 24 h</span>
+                                    <span class="dash-summary-badge dash-summary-badge--red">{{ ds.stale_24h|default(0) }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div>
+                            {% if operational_alerts %}
+                            <div class="dash-alert-cards">
+                                {% for alert in operational_alerts %}
+                                {% set at = alert.alert_type %}
+                                <article class="dash-alert-item">
+                                    <div class="dash-alert-item__icon {% if at == 'sharepoint_failed' %}dash-alert-item__icon--danger{% elif at == 'ready_for_auth' %}dash-alert-item__icon--success{% elif at == 'stale_case' %}dash-alert-item__icon--warning{% elif at == 'low_ocr' %}dash-alert-item__icon--info{% else %}dash-alert-item__icon--warning{% endif %}">
+                                        {% if at == 'sharepoint_failed' %}
+                                        <i data-lucide="cloud-off"></i>
+                                        {% elif at == 'ready_for_auth' %}
+                                        <i data-lucide="check-circle-2"></i>
+                                        {% elif at == 'stale_case' %}
+                                        <i data-lucide="clock"></i>
+                                        {% elif at == 'low_ocr' %}
+                                        <i data-lucide="scan-text"></i>
+                                        {% elif at == 'multiple_regen' %}
+                                        <i data-lucide="refresh-cw"></i>
+                                        {% else %}
+                                        <i data-lucide="alert-circle"></i>
+                                        {% endif %}
+                                    </div>
+                                    <div class="dash-alert-item__body">
+                                        <span class="dash-badge {% if alert.severity == 'danger' %}dash-badge--danger{% elif alert.severity == 'success' %}dash-badge--success{% elif alert.severity == 'info' %}dash-badge--muted{% else %}dash-badge--warning{% endif %}">{{ at }}</span>
+                                        <div class="mt-1 small">{{ alert.message }}</div>
+                                        {% if alert.case_id %}
+                                        <a href="/casos/{{ alert.case_id }}" class="dash-link small">
+                                            {% if alert.case %}{{ alert.case.public_id }}{% else %}Caso #{{ alert.case_id }}{% endif %}
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                    <span class="dash-alert-item__meta">{{ alert.updated_at.strftime('%d/%m %H:%M') }}</span>
+                                </article>
+                                {% endfor %}
                             </div>
+                            {% else %}
+                            <p class="text-muted small mb-0">No hay alertas activas. Las reglas revisan casos detenidos, listos para autorización, OCR, SharePoint y regeneraciones.</p>
                             {% endif %}
                         </div>
-                        <span class="small text-muted text-nowrap">{{ alert.updated_at.strftime('%d/%m %H:%M') }}</span>
                     </div>
-                    {% endfor %}
                 </div>
-                {% else %}
-                <p class="text-muted small mb-0">No hay alertas activas en este momento. Las reglas revisan casos detenidos, listos para autorización, OCR, SharePoint y regeneraciones.</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
+            </section>
 
-<div class="row g-3">
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Casos abiertos</div>
-                <div class="fs-3 fw-bold text-primary">{{ metricas.total_abiertos }}</div>
-                <div class="text-muted small mt-1">Excluye cerrados, rechazados, compra y revisiones sin liquidez.</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Pendientes de autorización</div>
-                <div class="fs-3 fw-bold text-warning">{{ metricas.pendientes_autorizacion }}</div>
-                <div class="text-muted small mt-1">En preparación de autorización</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Autorizaciones generadas</div>
-                <div class="fs-3 fw-bold text-success">{{ metricas.autorizaciones_generadas }}</div>
-                <div class="text-muted small mt-1">Estado «Autorización generada».</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Pendientes de compulsa</div>
-                <div class="fs-3 fw-bold text-warning">{{ metricas.pendientes_compulsa }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Compulsa OK</div>
-                <div class="fs-3 fw-bold text-success">{{ metricas.compulsa_ok }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Prep. aut. sin Excel SNTE</div>
-                <div class="fs-3 fw-bold text-secondary">{{ metricas.prep_sin_excel_snte }}</div>
-                <div class="text-muted small mt-1">Pedidos en prep. sin doc. activo <code>autorizacion_snte</code>.</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-danger border-opacity-25">
-            <div class="card-body">
-                <div class="text-muted small">Docs UPLOAD_FAILED</div>
-                <div class="fs-3 fw-bold text-danger">{{ metricas.docs_upload_failed }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100 border-info border-opacity-25">
-            <div class="card-body">
-                <div class="text-muted small">Docs PENDING_UPLOAD</div>
-                <div class="fs-3 fw-bold text-info">{{ metricas.docs_pending_upload }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Pedidos checklist incompleto</div>
-                <div class="fs-3 fw-bold">{{ metricas.pedidos_checklist_incompleto }}</div>
-                <div class="text-muted small mt-1">
-                    Recibido o corrección, sin todos los docs obligatorios (máx. 150 más recientes por fecha de actualización).
+            {# —— KPIs —— #}
+            <div class="dash-kpi-grid mb-4">
+                <a href="/casos" class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--blue"><i data-lucide="briefcase"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.total_abiertos }}</div>
+                    <div class="dash-kpi__label">Casos abiertos</div>
+                    <div class="dash-kpi__hint">Excluye cerrados, rechazados y compra.</div>
+                </a>
+                <a href="/dashboard?filter=prep_aut" class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--orange"><i data-lucide="file-clock"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.pendientes_autorizacion }}</div>
+                    <div class="dash-kpi__label">Pendientes de autorización</div>
+                    <div class="dash-kpi__hint">En preparación de autorización.</div>
+                </a>
+                <div class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--green"><i data-lucide="badge-check"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.autorizaciones_generadas }}</div>
+                    <div class="dash-kpi__label">Autorizaciones generadas</div>
+                    <div class="dash-kpi__hint">Estado «Autorización generada».</div>
+                </div>
+                <a href="/dashboard?filter=compulsa" class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--orange"><i data-lucide="scale"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.pendientes_compulsa }}</div>
+                    <div class="dash-kpi__label">Pendientes de compulsa</div>
+                </a>
+                <div class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--green"><i data-lucide="circle-check-big"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.compulsa_ok }}</div>
+                    <div class="dash-kpi__label">Compulsa OK</div>
+                </div>
+                <a href="/dashboard?filter=sp_failed" class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--red"><i data-lucide="cloud-off"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.docs_upload_failed }}</div>
+                    <div class="dash-kpi__label">UPLOAD_FAILED</div>
+                    <div class="dash-kpi__hint">Documentos activos con error de subida.</div>
+                </a>
+                <a href="/dashboard?filter=sp_pending" class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--cyan"><i data-lucide="cloud-upload"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.docs_pending_upload }}</div>
+                    <div class="dash-kpi__label">PENDING_UPLOAD</div>
+                </a>
+                <a href="/dashboard?filter=missing_docs" class="dash-kpi">
+                    <div class="dash-kpi__icon dash-kpi__icon--purple"><i data-lucide="list-checks"></i></div>
+                    <div class="dash-kpi__value">{{ metricas.pedidos_checklist_incompleto }}</div>
+                    <div class="dash-kpi__label">Checklist incompleto</div>
                     {% if metricas.pedidos_checklist_incompleto_capped %}
-                    <span class="text-warning">Tope alcanzado; el número real puede ser mayor.</span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row g-3 mt-1">
-    <div class="col-12">
-        <p class="text-muted small mb-2">
-            <span class="fw-semibold">Tiempo operativo / SLA (indicadores)</span>
-            — basado en <code>updated_at</code> / <code>created_at</code> del caso; umbral 24 h respecto al momento de carga del dashboard.
-        </p>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100 border-warning border-opacity-50">
-            <div class="card-body">
-                <div class="text-muted small">Abiertos sin actualización &gt; 24 h</div>
-                <div class="fs-3 fw-bold text-warning">{{ metricas.sla_abiertos_sin_act_24h }}</div>
-                <div class="text-muted small mt-1">Casos operativamente abiertos con <code>updated_at</code> anterior al umbral.</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100 border-warning border-opacity-50">
-            <div class="card-body">
-                <div class="text-muted small">Prep. autorización &gt; 24 h</div>
-                <div class="fs-3 fw-bold text-warning">{{ metricas.sla_prep_aut_mas_24h }}</div>
-                <div class="text-muted small mt-1">Estado preparación de autorización, sin movimiento reciente.</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100 border-warning border-opacity-50">
-            <div class="card-body">
-                <div class="text-muted small">Compulsa / pend. compulsa &gt; 24 h</div>
-                <div class="fs-3 fw-bold text-warning">{{ metricas.sla_compulsa_mas_24h }}</div>
-                <div class="text-muted small mt-1">En compulsa o pendiente de compulsa según <code>updated_at</code>.</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Edad media casos abiertos</div>
-                <div class="fs-3 fw-bold">
-                    {% if metricas.sla_edad_media_abiertos_horas is not none %}
-                    {{ "%.1f"|format(metricas.sla_edad_media_abiertos_horas) }} h
+                    <div class="dash-kpi__hint text-warning">Tope 150 casos; el total real puede ser mayor.</div>
                     {% else %}
-                    <span class="fs-6 fw-normal text-muted">Sin datos</span>
+                    <div class="dash-kpi__hint">Recibido o corrección sin docs obligatorios.</div>
                     {% endif %}
-                </div>
-                <div class="text-muted small mt-1">Promedio de <code>now − created_at</code> sobre casos abiertos.</div>
+                </a>
             </div>
-        </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body">
-                <div class="text-muted small">Caso abierto más antiguo (alta)</div>
-                <div class="fs-5 fw-bold">
-                    {% if metricas.sla_caso_mas_antiguo_abierto %}
-                    {{ metricas.sla_caso_mas_antiguo_abierto.strftime('%d/%m/%Y %H:%M') }}
-                    {% else %}
-                    <span class="fs-6 fw-normal text-muted">Sin datos</span>
-                    {% endif %}
-                </div>
-                <div class="text-muted small mt-1"><code>created_at</code> mínimo entre casos abiertos.</div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span>Seguimiento operativo por etapa</span>
-                <span class="text-muted small fw-normal">Hasta {{ pendientes_tabla|length }} filas · orden por actualización</span>
-            </div>
-            <div class="card-body border-bottom py-3">
-                <p class="text-muted small mb-2">Filtro rápido (sin JavaScript):</p>
-                <div class="d-flex flex-wrap gap-1" role="group" aria-label="Filtros pendientes">
-                    <a href="/dashboard" class="btn btn-sm rounded-pill {% if pendiente_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Todos</a>
-                    <a href="/dashboard?filter=prep_aut" class="btn btn-sm rounded-pill {% if pendiente_filter == 'prep_aut' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Pend. autorización</a>
-                    <a href="/dashboard?filter=compulsa" class="btn btn-sm rounded-pill {% if pendiente_filter == 'compulsa' %}btn-primary{% else %}btn-outline-secondary{% endif %}">En compulsa</a>
-                    <a href="/dashboard?filter=sp_pending" class="btn btn-sm rounded-pill {% if pendiente_filter == 'sp_pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}">SharePoint pendiente</a>
-                    <a href="/dashboard?filter=sp_failed" class="btn btn-sm rounded-pill {% if pendiente_filter == 'sp_failed' %}btn-primary{% else %}btn-outline-secondary{% endif %}">SharePoint error</a>
-                    <a href="/dashboard?filter=correction" class="btn btn-sm rounded-pill {% if pendiente_filter == 'correction' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Corrección / rechazados</a>
-                    <a href="/dashboard?filter=missing_docs" class="btn btn-sm rounded-pill {% if pendiente_filter == 'missing_docs' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Falta documentación</a>
-                    <a href="/dashboard?filter=ready_for_auth" class="btn btn-sm rounded-pill {% if pendiente_filter == 'ready_for_auth' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Listos para autorización</a>
-                    <a href="/dashboard?filter=with_ocr" class="btn btn-sm rounded-pill {% if pendiente_filter == 'with_ocr' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Con OCR</a>
-                    <a href="/dashboard?filter=without_ocr" class="btn btn-sm rounded-pill {% if pendiente_filter == 'without_ocr' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Sin OCR</a>
-                    <a href="/dashboard?filter=stale_24h" class="btn btn-sm rounded-pill {% if pendiente_filter == 'stale_24h' %}btn-primary{% else %}btn-outline-secondary{% endif %}">&gt; 24 h sin avance</a>
+            <div class="row g-3 mb-2">
+                <div class="col-6 col-md-3">
+                    <div class="dash-kpi" style="padding:0.85rem;">
+                        <div class="dash-kpi__icon dash-kpi__icon--slate" style="width:32px;height:32px;margin-bottom:0.5rem;"><i data-lucide="file-spreadsheet" style="width:18px;height:18px;"></i></div>
+                        <div class="dash-kpi__value" style="font-size:1.35rem;">{{ metricas.prep_sin_excel_snte }}</div>
+                        <div class="dash-kpi__label" style="font-size:0.75rem;">Prep. aut. sin Excel SNTE</div>
+                    </div>
                 </div>
-                {% if pendiente_filter != 'all' %}
-                <p class="small text-muted mb-0 mt-2">
-                    Mostrando solo:
-                    {% if pendiente_filter == 'prep_aut' %}casos en preparación de autorización.
-                    {% elif pendiente_filter == 'compulsa' %}casos en compulsa o pendiente de compulsa.
-                    {% elif pendiente_filter == 'sp_pending' %}casos con documento activo en subida pendiente.
-                    {% elif pendiente_filter == 'sp_failed' %}casos con documento activo con error de subida.
-                    {% elif pendiente_filter == 'correction' %}casos con corrección o rechazo (pedido o revisión).
-                    {% elif pendiente_filter == 'missing_docs' %}pedidos con documentación obligatoria incompleta.
-                    {% elif pendiente_filter == 'ready_for_auth' %}pedidos en prep. de autorización con checklist completo.
-                    {% elif pendiente_filter == 'with_ocr' %}casos con al menos un OCR procesado en documentos elegibles.
-                    {% elif pendiente_filter == 'without_ocr' %}pedidos con documentos elegibles sin OCR procesado.
-                    {% elif pendiente_filter == 'stale_24h' %}casos abiertos sin actualización en más de 24 horas.
-                    {% endif %}
-                    <a href="/dashboard">Quitar filtro</a>
+            </div>
+
+            {# —— SLA + sparklines —— #}
+            <section class="mb-4">
+                <p class="dash-section-title mb-2">
+                    <i data-lucide="info" style="width:14px;height:14px;"></i>
+                    Tiempo operativo / SLA (indicadores) — basado en <code>updated_at</code> / <code>created_at</code>; umbral 24 h al cargar.
                 </p>
-                {% endif %}
-            </div>
-            <div class="card-body p-0">
-                {% if pendientes_tabla %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Folio / id</th>
-                                <th>Cliente</th>
-                                <th>Vendedor</th>
-                                <th>Estado</th>
-                                <th>Tipo pedido</th>
-                                <th>Checklist</th>
-                                <th>OCR</th>
-                                <th>Autorización</th>
-                                <th>SharePoint</th>
-                                <th>Antigüedad</th>
-                                <th>Actualización</th>
-                                <th>Siguiente acción</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for fila in pendientes_tabla %}
-                            {% set c = fila.case %}
-                            <tr class="{% if fila.sin_avance_24h %}table-warning{% endif %}">
-                                <td class="font-monospace small">
-                                    {{ c.public_id }}
-                                    <span class="text-muted">#{{ c.id }}</span>
-                                </td>
-                                <td>{{ c.client_name }}</td>
-                                <td>{{ c.seller_name or "—" }}</td>
-                                <td><span class="badge bg-secondary">{{ c.current_status }}</span></td>
-                                <td class="small">{{ fila.tipo_pedido }}</td>
-                                <td class="small text-center" title="Documentos obligatorios cargados">
-                                    {% if fila.checklist_resumen != '—' %}
-                                    <span class="{% if fila.checklist_ok %}text-success{% else %}text-danger{% endif %} fw-semibold">{{ fila.checklist_resumen }}</span>
-                                    {% else %}—{% endif %}
-                                </td>
-                                <td class="small text-center">
-                                    {% if fila.ocr_disponible %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-light text-muted border">No</span>{% endif %}
-                                </td>
-                                <td class="small text-center">
-                                    {% if fila.autorizacion_generada %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-light text-muted border">No</span>{% endif %}
-                                </td>
-                                <td class="small">
-                                    {% if fila.sharepoint_estado == 'fallido' %}
-                                    <span class="badge bg-danger">Fallido</span>
-                                    {% elif fila.sharepoint_estado == 'pendiente' %}
-                                    <span class="badge bg-warning text-dark">Pendiente</span>
-                                    {% elif fila.sharepoint_estado == 'sincronizado' %}
-                                    <span class="badge bg-success">OK</span>
-                                    {% else %}—{% endif %}
-                                </td>
-                                <td class="small text-nowrap">{{ fila.antiguedad_label }}</td>
-                                <td class="small text-nowrap">
-                                    {{ c.updated_at.strftime('%d/%m/%Y %H:%M') }}
-                                    {% if fila.sin_avance_24h %}<span class="badge bg-warning text-dark ms-1" title="Sin movimiento &gt; 24 h">24h+</span>{% endif %}
-                                </td>
-                                <td>
-                                    <span class="badge {{ fila.accion_badge }}">{{ fila.siguiente_accion }}</span>
-                                    {% if fila.problema and fila.problema != fila.siguiente_accion %}
-                                    <small class="d-block text-muted mt-1" style="font-size:0.65rem;">{{ fila.problema }}</small>
-                                    {% endif %}
-                                </td>
-                                <td class="text-end text-nowrap">
-                                    <a href="/casos/{{ c.id }}" class="btn btn-sm btn-outline-primary">Ver</a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <div id="dashSlaCharts" data-sla='{"abiertos":{{ metricas.sla_abiertos_sin_act_24h }},"prep":{{ metricas.sla_prep_aut_mas_24h }},"compulsa":{{ metricas.sla_compulsa_mas_24h }}}'>
+                    <div class="dash-sla-grid">
+                        <div class="dash-card dash-sla-card">
+                            <div class="text-muted small">Abiertos sin actualización &gt; 24 h</div>
+                            <div class="dash-sla-card__value text-warning">{{ metricas.sla_abiertos_sin_act_24h }}</div>
+                            <div class="dash-sla-card__chart"><canvas id="sparkAbiertos" height="56"></canvas></div>
+                        </div>
+                        <div class="dash-card dash-sla-card">
+                            <div class="text-muted small">Prep. autorización &gt; 24 h</div>
+                            <div class="dash-sla-card__value text-warning">{{ metricas.sla_prep_aut_mas_24h }}</div>
+                            <div class="dash-sla-card__chart"><canvas id="sparkPrep" height="56"></canvas></div>
+                        </div>
+                        <div class="dash-card dash-sla-card">
+                            <div class="text-muted small">Compulsa / pend. compulsa &gt; 24 h</div>
+                            <div class="dash-sla-card__value text-success">{{ metricas.sla_compulsa_mas_24h }}</div>
+                            <div class="dash-sla-card__chart"><canvas id="sparkCompulsa" height="56"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="dash-sla-extra">
+                        <div class="dash-card dash-sla-card">
+                            <div class="text-muted small">Edad media casos abiertos</div>
+                            <div class="dash-sla-card__value">
+                                {% if metricas.sla_edad_media_abiertos_horas is not none %}
+                                {{ "%.1f"|format(metricas.sla_edad_media_abiertos_horas) }} h
+                                {% else %}—{% endif %}
+                            </div>
+                        </div>
+                        <div class="dash-card dash-sla-card">
+                            <div class="text-muted small">Caso abierto más antiguo (alta)</div>
+                            <div class="dash-sla-card__value" style="font-size:1.1rem;">
+                                {% if metricas.sla_caso_mas_antiguo_abierto %}
+                                {{ metricas.sla_caso_mas_antiguo_abierto.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}—{% endif %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                {% else %}
-                <div class="p-4 text-center text-muted">
-                    <p class="mb-2">No hay pendientes en esta categoría con los datos actuales.</p>
-                    <p class="small mb-0">Prueba otro filtro o vuelve a <a href="/dashboard">Todos</a> para ver el conjunto completo.</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
+            </section>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span>Resumen operativo por vendedor</span>
-                <span class="text-muted small fw-normal">
-                    {% if usuario.rol == 'vendedor' %}Tu actividad{% else %}Hasta {{ resumen_vendedores|length }} vendedores con actividad{% endif %}
-                </span>
-            </div>
-            <div class="card-body p-0">
-                {% if resumen_vendedores %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Vendedor</th>
-                                <th class="text-end">Casos abiertos</th>
-                                <th class="text-end">Pend. autorización</th>
-                                <th class="text-end">Compulsa / pend. compulsa</th>
-                                <th class="text-end">Corrección / rechazados</th>
-                                <th class="text-end">Docs error SharePoint</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for r in resumen_vendedores %}
-                            <tr>
-                                <td class="fw-semibold">{{ r.vendedor }}</td>
-                                <td class="text-end">{{ r.abiertos }}</td>
-                                <td class="text-end">{{ r.prep_aut }}</td>
-                                <td class="text-end">{{ r.compulsa }}</td>
-                                <td class="text-end">{{ r.correccion_rechazo }}</td>
-                                <td class="text-end">{{ r.sharepoint_error }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+            {# —— Distribución por estado + errores recientes —— #}
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-8">
+                    <section class="dash-card h-100">
+                        <div class="dash-card__header">
+                            <h3>Distribución por estado</h3>
+                        </div>
+                        <div class="dash-card__body">
+                            <div class="dash-pipeline">
+                                <div class="dash-pipeline__step">
+                                    <div class="dash-pipeline__value">{{ estado_buckets.recibido }}</div>
+                                    <div class="dash-pipeline__label">Recibido</div>
+                                </div>
+                                <div class="dash-pipeline__step">
+                                    <div class="dash-pipeline__value">{{ estado_buckets.correccion }}</div>
+                                    <div class="dash-pipeline__label">Corrección</div>
+                                </div>
+                                <div class="dash-pipeline__step">
+                                    <div class="dash-pipeline__value">{{ estado_buckets.preparacion }}</div>
+                                    <div class="dash-pipeline__label">Preparación</div>
+                                </div>
+                                <div class="dash-pipeline__step">
+                                    <div class="dash-pipeline__value">{{ estado_buckets.autorizacion }}</div>
+                                    <div class="dash-pipeline__label">Autorización</div>
+                                </div>
+                                <div class="dash-pipeline__step">
+                                    <div class="dash-pipeline__value">{{ estado_buckets.compulsa }}</div>
+                                    <div class="dash-pipeline__label">Compulsa</div>
+                                </div>
+                                <div class="dash-pipeline__step">
+                                    <div class="dash-pipeline__value">{{ estado_buckets.rechazado }}</div>
+                                    <div class="dash-pipeline__label">Rechazado</div>
+                                </div>
+                                <div class="dash-pipeline__step">
+                                    <div class="dash-pipeline__value">{{ estado_buckets.cerrado }}</div>
+                                    <div class="dash-pipeline__label">Cerrado</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 </div>
-                {% else %}
-                <p class="text-muted mb-0 p-3">
-                    {% if usuario.rol == 'vendedor' %}
-                    No hay datos de vendedor asociados a tu usuario o aún no registras actividad en el flujo.
-                    {% else %}
-                    No hay vendedores con actividad reciente en los agregados mostrados.
+                <div class="col-12 col-xl-4">
+                    <section class="dash-card h-100">
+                        <div class="dash-card__header">
+                            <h3>Documentos recientes con error</h3>
+                            <a href="/dashboard?filter=sp_failed" class="dash-link small">Ver todos</a>
+                        </div>
+                        <div class="dash-card__body p-0">
+                            <div class="dash-table-wrap">
+                                <table class="dash-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Caso</th>
+                                            <th>Documento</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% set err_ns = namespace(shown=0) %}
+                                        {% for alert in operational_alerts if alert.alert_type == 'sharepoint_failed' and err_ns.shown < 8 %}
+                                        {% set err_ns.shown = err_ns.shown + 1 %}
+                                        <tr>
+                                            <td>
+                                                {% if alert.case_id %}
+                                                <a href="/casos/{{ alert.case_id }}" class="dash-link">
+                                                    {% if alert.case %}{{ alert.case.public_id }}{% else %}#{{ alert.case_id }}{% endif %}
+                                                </a>
+                                                {% else %}—{% endif %}
+                                            </td>
+                                            <td class="small">Subida SharePoint</td>
+                                            <td><span class="dash-badge dash-badge--danger">UPLOAD_FAILED</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                        {% for fila in pendientes_tabla if fila.sharepoint_estado == 'fallido' and err_ns.shown < 8 %}
+                                        {% set err_ns.shown = err_ns.shown + 1 %}
+                                        <tr>
+                                            <td><a href="/casos/{{ fila.case.id }}" class="dash-link">{{ fila.case.public_id }}</a></td>
+                                            <td class="small text-muted">{{ fila.problema or 'Error de subida' }}</td>
+                                            <td><span class="dash-badge dash-badge--danger">UPLOAD_FAILED</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                        {% if err_ns.shown == 0 %}
+                                        <tr><td colspan="3" class="text-muted text-center py-3">No hay documentos con error recientes.</td></tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            {# —— Seguimiento operativo P14 —— #}
+            <section class="dash-card mb-4">
+                <div class="dash-card__header">
+                    <h3>Seguimiento operativo por etapa</h3>
+                    <span class="text-muted small">Hasta {{ pendientes_tabla|length }} filas · P14</span>
+                </div>
+                <div class="dash-card__body border-bottom">
+                    <p class="dash-section-title">Filtro rápido</p>
+                    <div class="dash-filters" role="group" aria-label="Filtros pendientes">
+                        <a href="/dashboard" class="dash-filter-pill {% if pendiente_filter == 'all' %}is-active{% endif %}">Todos</a>
+                        <a href="/dashboard?filter=prep_aut" class="dash-filter-pill {% if pendiente_filter == 'prep_aut' %}is-active{% endif %}">Pend. autorización</a>
+                        <a href="/dashboard?filter=compulsa" class="dash-filter-pill {% if pendiente_filter == 'compulsa' %}is-active{% endif %}">En compulsa</a>
+                        <a href="/dashboard?filter=sp_pending" class="dash-filter-pill {% if pendiente_filter == 'sp_pending' %}is-active{% endif %}">SharePoint pendiente</a>
+                        <a href="/dashboard?filter=sp_failed" class="dash-filter-pill {% if pendiente_filter == 'sp_failed' %}is-active{% endif %}">SharePoint error</a>
+                        <a href="/dashboard?filter=correction" class="dash-filter-pill {% if pendiente_filter == 'correction' %}is-active{% endif %}">Corrección / rechazados</a>
+                        <a href="/dashboard?filter=missing_docs" class="dash-filter-pill {% if pendiente_filter == 'missing_docs' %}is-active{% endif %}">Falta documentación</a>
+                        <a href="/dashboard?filter=ready_for_auth" class="dash-filter-pill {% if pendiente_filter == 'ready_for_auth' %}is-active{% endif %}">Listos para autorización</a>
+                        <a href="/dashboard?filter=with_ocr" class="dash-filter-pill {% if pendiente_filter == 'with_ocr' %}is-active{% endif %}">Con OCR</a>
+                        <a href="/dashboard?filter=without_ocr" class="dash-filter-pill {% if pendiente_filter == 'without_ocr' %}is-active{% endif %}">Sin OCR</a>
+                        <a href="/dashboard?filter=stale_24h" class="dash-filter-pill {% if pendiente_filter == 'stale_24h' %}is-active{% endif %}">&gt; 24 h sin avance</a>
+                    </div>
+                    {% if pendiente_filter != 'all' %}
+                    <p class="small text-muted mt-2 mb-0">
+                        Filtro activo:
+                        {% if pendiente_filter == 'prep_aut' %}preparación de autorización
+                        {% elif pendiente_filter == 'compulsa' %}compulsa
+                        {% elif pendiente_filter == 'sp_pending' %}SharePoint pendiente
+                        {% elif pendiente_filter == 'sp_failed' %}SharePoint con error
+                        {% elif pendiente_filter == 'correction' %}corrección o rechazo
+                        {% elif pendiente_filter == 'missing_docs' %}documentación incompleta
+                        {% elif pendiente_filter == 'ready_for_auth' %}listos para autorización
+                        {% elif pendiente_filter == 'with_ocr' %}con OCR
+                        {% elif pendiente_filter == 'without_ocr' %}sin OCR
+                        {% elif pendiente_filter == 'stale_24h' %}sin avance &gt; 24 h
+                        {% endif %}
+                        · <a href="/dashboard" class="dash-link">Quitar filtro</a>
+                    </p>
                     {% endif %}
-                </p>
-                {% endif %}
-            </div>
+                </div>
+                <div class="p-0">
+                    {% if pendientes_tabla %}
+                    <div class="dash-table-wrap">
+                        <table class="dash-table">
+                            <thead>
+                                <tr>
+                                    <th>Folio</th>
+                                    <th>Cliente</th>
+                                    <th>Vendedor</th>
+                                    <th>Estado</th>
+                                    <th>Checklist</th>
+                                    <th>OCR</th>
+                                    <th>Autorización</th>
+                                    <th>SharePoint</th>
+                                    <th>Antigüedad</th>
+                                    <th>Actualización</th>
+                                    <th>Siguiente acción</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for fila in pendientes_tabla %}
+                                {% set c = fila.case %}
+                                <tr class="{% if fila.sin_avance_24h %}table-warning{% endif %}">
+                                    <td class="font-monospace small">
+                                        <a href="/casos/{{ c.id }}" class="dash-link">{{ c.public_id }}</a>
+                                        <span class="text-muted">#{{ c.id }}</span>
+                                    </td>
+                                    <td>{{ c.client_name }}</td>
+                                    <td>{{ c.seller_name or "—" }}</td>
+                                    <td><span class="dash-badge dash-badge--muted">{{ c.current_status }}</span></td>
+                                    <td class="text-center small">
+                                        {% if fila.checklist_resumen != '—' %}
+                                        <span class="{% if fila.checklist_ok %}text-success{% else %}text-danger{% endif %} fw-semibold">{{ fila.checklist_resumen }}</span>
+                                        {% else %}—{% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if fila.ocr_disponible %}<span class="dash-badge dash-badge--success">Sí</span>
+                                        {% else %}<span class="dash-badge dash-badge--muted">No</span>{% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if fila.autorizacion_generada %}<span class="dash-badge dash-badge--success">Sí</span>
+                                        {% else %}<span class="dash-badge dash-badge--muted">No</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if fila.sharepoint_estado == 'fallido' %}
+                                        <span class="dash-badge dash-badge--danger">Fallido</span>
+                                        {% elif fila.sharepoint_estado == 'pendiente' %}
+                                        <span class="dash-badge dash-badge--warning">Pendiente</span>
+                                        {% elif fila.sharepoint_estado == 'sincronizado' %}
+                                        <span class="dash-badge dash-badge--success">OK</span>
+                                        {% else %}—{% endif %}
+                                    </td>
+                                    <td class="text-nowrap small">{{ fila.antiguedad_label }}</td>
+                                    <td class="text-nowrap small">
+                                        {{ c.updated_at.strftime('%d/%m/%Y %H:%M') }}
+                                        {% if fila.sin_avance_24h %}<span class="dash-badge dash-badge--warning ms-1">24h+</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ fila.accion_badge }}">{{ fila.siguiente_accion }}</span>
+                                        {% if fila.problema and fila.problema != fila.siguiente_accion %}
+                                        <small class="d-block text-muted mt-1" style="font-size:0.65rem;">{{ fila.problema }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="/casos/{{ c.id }}" class="dash-btn-ghost btn-sm py-1 px-2">Ver</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <p class="mb-2">No hay pendientes en esta categoría.</p>
+                        <a href="/dashboard" class="dash-link">Ver todos</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+
+            {# —— Resumen vendedores —— #}
+            <section class="dash-card mb-4">
+                <div class="dash-card__header">
+                    <h3>Resumen operativo por vendedor</h3>
+                    <span class="text-muted small">
+                        {% if usuario.rol == 'vendedor' %}Tu actividad{% else %}Hasta {{ resumen_vendedores|length }} vendedores{% endif %}
+                    </span>
+                </div>
+                <div class="p-0">
+                    {% if resumen_vendedores %}
+                    <div class="dash-table-wrap">
+                        <table class="dash-table">
+                            <thead>
+                                <tr>
+                                    <th>Vendedor</th>
+                                    <th class="text-end">Abiertos</th>
+                                    <th class="text-end">Pend. aut.</th>
+                                    <th class="text-end">Compulsa</th>
+                                    <th class="text-end">Corrección</th>
+                                    <th class="text-end">SP error</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in resumen_vendedores %}
+                                <tr>
+                                    <td class="fw-semibold">{{ r.vendedor }}</td>
+                                    <td class="text-end">{{ r.abiertos }}</td>
+                                    <td class="text-end">{{ r.prep_aut }}</td>
+                                    <td class="text-end">{{ r.compulsa }}</td>
+                                    <td class="text-end">{{ r.correccion_rechazo }}</td>
+                                    <td class="text-end">{{ r.sharepoint_error }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted p-3 mb-0">Sin actividad en los agregados mostrados.</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            {# —— Detalle por estado interno —— #}
+            <section class="dash-card">
+                <div class="dash-card__header">
+                    <h3>Casos por estado interno</h3>
+                </div>
+                <div class="p-0">
+                    {% if metricas.por_estado %}
+                    <div class="dash-table-wrap">
+                        <table class="dash-table">
+                            <thead>
+                                <tr><th>Estado</th><th class="text-end">Total</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for fila in metricas.por_estado %}
+                                <tr>
+                                    <td>{{ fila.estado }}</td>
+                                    <td class="text-end fw-semibold">{{ fila.total }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted p-3 mb-0">Sin casos en el alcance actual.</p>
+                    {% endif %}
+                </div>
+            </section>
+
         </div>
     </div>
 </div>
+{% endblock %}
 
-<div class="row mt-4">
-    <div class="col-12 col-lg-6">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white fw-bold">Casos por estado interno</div>
-            <div class="card-body p-0">
-                {% if metricas.por_estado %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Estado</th>
-                                <th class="text-end">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for fila in metricas.por_estado %}
-                            <tr>
-                                <td>{{ fila.estado }}</td>
-                                <td class="text-end fw-semibold">{{ fila.total }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <p class="text-muted mb-0 p-3">Sin casos que coincidan con el filtro actual.</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-lg-6 mt-4 mt-lg-0">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white fw-bold">Referencia de flujo</div>
-            <div class="card-body">
-                <p class="text-muted small mb-3">Etiquetas orientativas del flujo pedido / revisión.</p>
-                <div class="d-flex flex-wrap gap-2">
-                    <span class="badge bg-secondary p-2">Recibido</span>
-                    <span class="badge bg-primary p-2">En revisión / prep. aut.</span>
-                    <span class="badge bg-success p-2">Autorización generada / compulsa OK</span>
-                    <span class="badge bg-warning text-dark p-2">Pendiente compulsa</span>
-                    <span class="badge bg-dark p-2">Cerrado / compra</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
+{% block extra_scripts %}
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/dashboard.js"></script>
 {% endblock %}

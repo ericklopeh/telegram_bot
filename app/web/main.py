@@ -13,7 +13,18 @@ from starlette.responses import PlainTextResponse, RedirectResponse, Response
 
 from app.config import get_settings
 from app.web.paths import STATIC_DIR, TEMPLATES_DIR
-from app.web.routes import dashboard, cases, revision_talon, authorizations
+from app.web.routes import (
+    approved_authorizations,
+    authorizations,
+    cases,
+    admin_workflow,
+    commercial_reconciliation,
+    commercial_reports,
+    commissions,
+    dashboard,
+    sales,
+    revision_talon,
+)
 
 _log = logging.getLogger(__name__)
 settings = get_settings()
@@ -145,9 +156,15 @@ def logout(request: Request):
 
 
 web_app.include_router(dashboard.router)
+web_app.include_router(admin_workflow.router)
 web_app.include_router(cases.router)
 web_app.include_router(revision_talon.router)
 web_app.include_router(authorizations.router)
+web_app.include_router(approved_authorizations.router)
+web_app.include_router(commercial_reports.router)
+web_app.include_router(commercial_reconciliation.router)
+web_app.include_router(commissions.router)
+web_app.include_router(sales.router)
 
 # Montar estáticos al final (recomendación FastAPI/Starlette) para no interferir con rutas HTTP.
 web_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

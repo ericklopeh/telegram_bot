@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block body_class %}dash-shell-active{% endblock %}
+{% block main_class %}{% endblock %}
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+{% block content %}
+<div class="dash-app">
+    <aside class="dash-sidebar" id="dashSidebar">
+        <div class="dash-sidebar__brand"><h1>Gaman</h1><p>Ventas</p></div>
+        <nav class="dash-nav">
+            <a href="/dashboard" class="dash-nav__link"><i data-lucide="layout-dashboard"></i><span>Dashboard</span></a>
+            <a href="/ventas" class="dash-nav__link is-active"><i data-lucide="list"></i><span>Listado</span></a>
+            <a href="/ventas/nueva" class="dash-nav__link"><i data-lucide="plus-circle"></i><span>Nueva venta</span></a>
+            <a href="/comisiones" class="dash-nav__link"><i data-lucide="wallet"></i><span>Comisiones</span></a>
+            <a href="/reportes/comercial" class="dash-nav__link"><i data-lucide="bar-chart-3"></i><span>Control comercial</span></a>
+            {% if usuario.rol in ['admin', 'sistemas', 'autorizacion'] %}
+            <a href="/ventas/pendientes" class="dash-nav__link"><i data-lucide="clock"></i><span>Pendientes</span></a>
+            <a href="/control/conciliacion" class="dash-nav__link"><i data-lucide="git-compare"></i><span>Conciliación</span></a>
+            {% endif %}
+        </nav>
+        <div class="dash-sidebar__footer">
+            <a href="/logout" class="dash-nav__link"><i data-lucide="log-out"></i><span>Salir</span></a>
+        </div>
+    </aside>
+    <div class="dash-main">
+        <header class="dash-topbar">
+            <div class="dash-topbar__title">
+                <h2>Ventas capturadas</h2>
+                <p>Registro en BD y exportación a copias Excel</p>
+            </div>
+            <a href="/ventas/nueva" class="dash-btn-primary">+ Nueva venta</a>
+        </header>
+        <div class="dash-content">
+            <section class="dash-card mb-3">
+                <div class="dash-card__body">
+                    <form method="get" class="row g-2 align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label small">Folio</label>
+                            <input type="text" name="folio" class="form-control form-control-sm" value="{{ filtros.folio }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Cliente</label>
+                            <input type="search" name="cliente" class="form-control form-control-sm" value="{{ filtros.cliente }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">RFC</label>
+                            <input type="text" name="rfc" class="form-control form-control-sm" value="{{ filtros.rfc }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Vendedor</label>
+                            <select name="vendedor" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for v in vendedores %}
+                                <option value="{{ v }}" {% if filtros.vendedor == v %}selected{% endif %}>{{ v }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Estatus</label>
+                            <select name="status" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for key, label in status_labels.items() %}
+                                <option value="{{ key }}" {% if filtros.status == key %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Registrado</label>
+                            <select name="registered" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                <option value="yes" {% if filtros.registered == 'yes' %}selected{% endif %}>Sí</option>
+                                <option value="no" {% if filtros.registered == 'no' %}selected{% endif %}>No</option>
+                            </select>
+                        </div>
+                        <div class="col-md-12 col-lg-auto">
+                            <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+                            <a href="/ventas" class="btn btn-outline-secondary btn-sm">Limpiar</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
+            <div class="table-responsive dash-card">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Folio</th><th>Cliente</th><th>Vendedor</th><th>Estatus</th>
+                            <th>Caso</th><th>Registrado</th><th>Fecha</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in ventas %}
+                        <tr>
+                            <td class="font-monospace">{{ v.folio }}</td>
+                            <td>{{ v.cliente }}</td>
+                            <td>{{ v.vendedor }}</td>
+                            <td><span class="badge {% if v.status == 'registered' %}bg-success{% elif v.status == 'export_failed' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                {{ status_labels.get(v.status, v.status) }}</span></td>
+                            <td>{% if v.case_id %}<a href="/casos/{{ v.case_id }}">#{{ v.case_id }}</a>{% else %}—{% endif %}</td>
+                            <td>{% if v.registered_at %}{{ v.registered_at.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
+                            <td>{{ v.sale_date }}</td>
+                            <td class="text-end text-nowrap">
+                                <a href="/ventas/{{ v.id }}" class="btn btn-sm btn-outline-primary py-0">Ver</a>
+                                {% if v.status != 'registered' %}
+                                <a href="/ventas/nueva?id={{ v.id }}" class="btn btn-sm btn-outline-secondary py-0">Editar</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" class="text-center text-muted py-4">Sin resultados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

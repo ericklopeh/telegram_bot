@@ -1,0 +1,35 @@
+{% if workflow_pipeline %}
+<section class="dash-card mb-3">
+    <div class="dash-card__header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h3 class="h6 mb-0">Flujo operativo</h3>
+            <span class="small text-muted">Estado: <strong>{{ workflow_pipeline.current_label }}</strong></span>
+        </div>
+        {% if can_recalc_workflow %}
+        <form method="post" action="/casos/{{ caso.id }}/recalcular-estado" class="d-inline">
+            <button type="submit" class="btn btn-outline-primary btn-sm">Recalcular estado</button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="dash-card__body">
+        <div class="workflow-pipeline d-flex flex-wrap gap-2 align-items-center">
+            {% for step in workflow_pipeline.steps %}
+            <div class="workflow-step workflow-step--{{ step.status }} text-center px-2 py-1 rounded small">
+                <div class="fw-semibold">{{ step.label }}</div>
+                <div class="text-muted" style="font-size:0.7rem;">
+                    {% if step.status == 'completed' %}✓{% elif step.status == 'current' %}●{% elif step.status == 'error' %}✗{% elif step.status == 'blocked' %}⊘{% else %}○{% endif %}
+                </div>
+            </div>
+            {% if not loop.last %}<span class="text-muted">→</span>{% endif %}
+            {% endfor %}
+        </div>
+        <style>
+            .workflow-step--completed { background: #dcfce7; color: #166534; }
+            .workflow-step--current { background: #dbeafe; color: #1e40af; border: 2px solid #3b82f6; }
+            .workflow-step--pending { background: #f1f5f9; color: #64748b; }
+            .workflow-step--blocked { background: #fef3c7; color: #92400e; }
+            .workflow-step--error { background: #fee2e2; color: #991b1b; }
+        </style>
+    </div>
+</section>
+{% endif %}

@@ -17,7 +17,17 @@ from app.domain import constants as C
 from app.domain.constants import doc_type_label
 from app.models.case import Case
 from app.models.user import UserRole
+from app.services.action_guard_service import (
+    build_case_action_state,
+    can_generate_authorization,
+    can_retry_sharepoint,
+    can_upload_document,
+)
 from app.services.case_service import CaseService
+from app.services.sharepoint_document_service import (
+    SharePointDocumentService,
+    SharePointUploadPayload,
+)
 from app.web.auth import (
     ROLES_ADMIN_SISTEMAS,
     get_current_user,
@@ -169,6 +179,18 @@ def detalle_caso(
 
     case_timeline = build_case_timeline(case_events)
 
+    action_guard = build_case_action_state(db, caso, usuario)
+
+    from app.web.services.workflow_visualization import build_workflow_pipeline
+    from app.services.workflow_state_service import WORKFLOW_STATE_LABELS, normalize_workflow_state
+
+    workflow_pipeline = (
+        build_workflow_pipeline(db, caso) if caso.case_type == C.CASE_TYPE_PEDIDO else None
+    )
+    wf_state = normalize_workflow_state(
+        getattr(caso, "workflow_state", None), legacy_status=caso.current_status
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -190,8 +212,83 @@ def detalle_caso(
             "pedido_checklist_text": pedido_checklist_text,
             "snte_status_ok": snte_status_ok,
             "ocr_prefill": ocr_prefill,
+            "action_guard": action_guard,
+            "workflow_pipeline": workflow_pipeline,
+            "workflow_state": wf_state,
+            "workflow_state_label": WORKFLOW_STATE_LABELS.get(wf_state, wf_state),
+            "can_recalc_workflow": (usuario or {}).get("rol") in ROLES_ADMIN_SISTEMAS
+            or get_settings().web_rbac_relaxed,
         }
     )
+
+
+@router.post("/casos/{case_id}/recalcular-estado")
+async def recalcular_estado_caso(
+    case_id: int,
+    request: Request,
+    db: Session = Depends(get_web_db),
+):
+    import urllib.parse
+
+    redirect = require_login(request, db)
+    if redirect:
+        return redirect
+    denied = require_roles(request, db, ROLES_ADMIN_SISTEMAS)
+    if denied:
+        return denied
+
+    usuario = get_current_user(request, db)
+    from app.services.workflow_transition_service import recalculate_case_workflow_state
+
+    try:
+        _case, new_state, warning = recalculate_case_workflow_state(
+            db, case_id, usuario or {}, apply=True
+        )
+        db.commit()
+        msg = urllib.parse.quote(
+            warning or f"Estado recalculado: {new_state}"
+        )
+        return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
+    except Exception as exc:
+        db.rollback()
+        err = urllib.parse.quote(str(exc))
+        return RedirectResponse(url=f"/casos/{case_id}?error={err}", status_code=302)
+
+
+@router.post("/casos/{case_id}/workflow/transition")
+async def workflow_transition_caso(
+    case_id: int,
+    request: Request,
+    db: Session = Depends(get_web_db),
+    target_state: str = Form(...),
+):
+    import urllib.parse
+
+    redirect = require_login(request, db)
+    if redirect:
+        return redirect
+    denied = require_roles(request, db, ROLES_ADMIN_SISTEMAS)
+    if denied:
+        return denied
+
+    usuario = get_current_user(request, db)
+    from app.services.workflow_transition_service import request_transition
+
+    try:
+        _case, err = request_transition(db, case_id, target_state.strip(), usuario or {})
+        if err:
+            db.rollback()
+            return RedirectResponse(
+                url=f"/casos/{case_id}?error={urllib.parse.quote(err)}", status_code=302
+            )
+        db.commit()
+        msg = urllib.parse.quote(f"Transición aplicada: {target_state}")
+        return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
+    except Exception as exc:
+        db.rollback()
+        return RedirectResponse(
+            url=f"/casos/{case_id}?error={urllib.parse.quote(str(exc))}", status_code=302
+        )
 
 
 @router.post("/casos/{case_id}/upload-document")
@@ -222,6 +319,18 @@ def upload_document(
             },
         )
         return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
+
+    if caso.case_type == C.CASE_TYPE_PEDIDO and document_type in {
+        C.DOC_PEDIDO,
+        C.DOC_ORDEN_DESCUENTO,
+        C.DOC_CARATULA_BANCARIA,
+    }:
+        ok_guard, guard_reason = can_upload_document(db, caso, document_type, usuario)
+        if not ok_guard:
+            import urllib.parse
+
+            msg = urllib.parse.quote(guard_reason or "Acción no permitida para este caso.")
+            return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
     # Validar que sea uno de los tipos permitidos
     allowed_types = {
@@ -413,3 +522,59 @@ def ver_documento_route(
         filename=doc.original_filename or doc.stored_filename,
         content_disposition_type="inline"  # force inline to open in browser instead of downloading if possible
     )
+
+
+@router.post("/casos/{case_id}/documentos/{document_id}/reintentar-sharepoint")
+def reintentar_sharepoint_documento(
+    case_id: int,
+    document_id: int,
+    request: Request,
+    db: Session = Depends(get_web_db),
+):
+    import urllib.parse
+
+    redirect = require_login(request, db)
+    if redirect:
+        return redirect
+
+    usuario = get_current_user(request, db)
+    caso = db.query(Case).filter(Case.id == case_id).first()
+    if not caso:
+        return RedirectResponse(url="/casos", status_code=302)
+
+    if web_should_scope_vendedor_cases(usuario) and caso.seller_name != usuario.get("nombre"):
+        return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
+
+    doc = db.query(Document).filter(Document.id == document_id, Document.case_id == case_id).first()
+    if not doc:
+        return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
+
+    ok, reason = can_retry_sharepoint(db, caso, usuario, document_id=document_id)
+    if not ok:
+        msg = urllib.parse.quote(reason or "No se puede reintentar la subida.")
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
+
+    from app.repositories.document_repository import DocumentRepository
+
+    DocumentRepository.set_upload_pending(db, document_id)
+    db.commit()
+
+    payload = SharePointUploadPayload(
+        document_id=doc.id,
+        file_path=doc.file_path,
+        vendedor=caso.seller_name or "SIN VENDEDOR",
+        semana=caso.week_code,
+        cliente=caso.client_name,
+        folio=caso.official_folio or caso.temp_folio or caso.public_id,
+        tipo_documento=doc.document_type,
+        filename=doc.stored_filename,
+    )
+    try:
+        SharePointDocumentService().upload_document(payload)
+        msg = urllib.parse.quote("Documento sincronizado en SharePoint correctamente.")
+        return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
+    except Exception as exc:
+        db.rollback()
+        log.exception("Reintento SharePoint fallido", extra={"document_id": document_id})
+        msg = urllib.parse.quote(f"Error al reintentar subida: {exc}")
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)

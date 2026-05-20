@@ -12,11 +12,21 @@ from app.bot.keyboards import (
     TIPO_PEDIDO_KEYBOARD,
     dictamen_revision_keyboard,
     keyboard_compulsas,
+    keyboard_pedidos_from_guard,
     order_type_display,
     pedido_confirm_keyboard,
     pedido_document_keyboard,
     revision_resolution_keyboard,
     status_recent_cases_keyboard,
+)
+from app.services.action_guard_service import (
+    action_unavailable_message,
+    build_case_action_state,
+    can_finalize_pedido,
+    can_send_to_compulsa,
+    can_upload_document,
+    explain_blocked_action,
+    keyboard_pedidos_filtered,
 )
 from app.config import get_settings
 from app.db.session import session_scope
@@ -251,6 +261,36 @@ def _seller_flow_denied_message(update: Update) -> str:
 def _main_keyboard_for(update: Update) -> ReplyKeyboardMarkup:
     """Teclado completo para pruebas (dictaminar + vendedor)."""
     return COMBINED_MAIN_KEYBOARD
+
+
+def _telegram_user_dict(update: Update) -> dict | None:
+    usuario = _get_active_bot_user(update)
+    if not usuario:
+        return None
+    return {
+        "id": usuario.id,
+        "nombre": usuario.nombre,
+        "rol": getattr(usuario.role, "value", usuario.role),
+    }
+
+
+def _pedido_doc_keyboard(
+    db,
+    order_type: str,
+    *,
+    case: Case | None = None,
+    user: dict | None = None,
+) -> object:
+    if case:
+        state = build_case_action_state(db, case, user)
+        return pedido_document_keyboard(
+            order_type,
+            allowed_doc_keys=state.allowed_pedido_doc_keys or ["p"],
+            show_finalize=state.checklist_ok,
+        )
+    return pedido_document_keyboard(order_type, allowed_doc_keys=["p"], show_finalize=False)
+
+
 def _status_block_for_list_item(case: Case, is_admin: bool) -> str:
     if is_admin:
         return (
@@ -694,9 +734,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         session["pending_doc_type"] = None
         checklist = checklist_lines(session["order_type"], set())
         await update.message.reply_text(
-            "Elige qué documento vas a adjuntar (puedes reemplazar uno ya cargado).\n\n"
+            "Elige el documento a adjuntar (captura en orden: primero pedido, luego orden de descuento"
+            + (", luego carátula" if session["order_type"] == C.ORDER_TYPE_PRESTAMO else "")
+            + ").\n\n"
             f"Checklist:\n{checklist}",
-            reply_markup=pedido_document_keyboard(session["order_type"]),
+            reply_markup=pedido_document_keyboard(
+                session["order_type"], allowed_doc_keys=["p"], show_finalize=False
+            ),
         )
         return
 
@@ -923,8 +967,20 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             session.clear()
             return
 
+        guard_notice = ""
+        try:
+            with session_scope() as db:
+                state = build_case_action_state(db, case, _telegram_user_dict(update))
+                if state.sharepoint_notice:
+                    guard_notice = f"\n\nℹ️ {state.sharepoint_notice}"
+                if state.ocr_notice:
+                    guard_notice += f"\n\nℹ️ {state.ocr_notice}"
+        except Exception:
+            pass
+
         await update.message.reply_text(
-            "Archivo recibido ✅ Se está subiendo a SharePoint...",
+            "Archivo recibido ✅ Se está subiendo a SharePoint..."
+            + guard_notice,
             reply_markup=_main_keyboard_for(update),
         )
         context.application.create_task(
@@ -946,9 +1002,17 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         session["state"] = "waiting_pedido_pick_doc"
         present_set = present if isinstance(present, set) else set(present)
         checklist = checklist_lines(order_type, present_set)
+        try:
+            with session_scope() as db:
+                db.refresh(case)
+                kb = _pedido_doc_keyboard(
+                    db, order_type, case=case, user=_telegram_user_dict(update)
+                )
+        except Exception:
+            kb = pedido_document_keyboard(order_type, allowed_doc_keys=["p"], show_finalize=False)
         await update.message.reply_text(
             f"Documento guardado: {doc_type_label(doc_type)}{ocr_note}\n\nChecklist:\n{checklist}",
-            reply_markup=pedido_document_keyboard(order_type),
+            reply_markup=kb,
         )
         return
 
@@ -997,11 +1061,28 @@ async def _finalize_pedido(
                 await update.effective_message.reply_text("Caso no encontrado.", reply_markup=_main_keyboard_for(update))
                 session.clear()
                 return
+            ok, reason = can_finalize_pedido(db, case, _telegram_user_dict(update))
+            if not ok:
+                await update.effective_message.reply_text(
+                    reason or action_unavailable_message(),
+                    reply_markup=_pedido_doc_keyboard(
+                        db,
+                        case.order_type or session.get("order_type", ""),
+                        case=case,
+                        user=_telegram_user_dict(update),
+                    ),
+                )
+                return
             completed, case, checklist = svc.finalize_pedido_if_complete(db, case)
             if not completed:
                 await update.effective_message.reply_text(
                     f"Aún no se puede enviar. Completa:\n{checklist}",
-                    reply_markup=pedido_document_keyboard(case.order_type or session.get("order_type", "")),
+                    reply_markup=_pedido_doc_keyboard(
+                        db,
+                        case.order_type or session.get("order_type", ""),
+                        case=case,
+                        user=_telegram_user_dict(update),
+                    ),
                 )
                 return
             db.refresh(case)
@@ -1068,6 +1149,21 @@ async def handle_pedido_doc_callback(update: Update, context: ContextTypes.DEFAU
                         seller_name=seller,
                     )
                     session["case_public_id"] = case.public_id
+                else:
+                    case = CaseRepository.get_by_public_id(db, session["case_public_id"])
+                if not case:
+                    await query.answer(action_unavailable_message(), show_alert=True)
+                    session.clear()
+                    return
+                ok, reason = can_upload_document(
+                    db, case, doc_type, _telegram_user_dict(update)
+                )
+                if not ok:
+                    await query.answer(
+                        (reason or action_unavailable_message())[:190],
+                        show_alert=True,
+                    )
+                    return
                 session["pending_doc_type"] = doc_type
                 session["state"] = "waiting_pedido_file"
         except Exception:
@@ -1106,8 +1202,17 @@ async def handle_pedido_doc_callback(update: Update, context: ContextTypes.DEFAU
             with session_scope() as db:
                 case = CaseRepository.get_by_public_id(db, session["case_public_id"])
                 if not case:
-                    await query.answer("Caso no encontrado.", show_alert=True)
+                    await query.answer(action_unavailable_message(), show_alert=True)
                     session.clear()
+                    return
+                ok, reason = can_finalize_pedido(
+                    db, case, _telegram_user_dict(update)
+                )
+                if not ok:
+                    await query.answer(
+                        (reason or action_unavailable_message())[:190],
+                        show_alert=True,
+                    )
                     return
                 present = DocumentRepository.get_active_types_for_case(db, case.id)
                 checklist = checklist_lines(case.order_type or "", present)
@@ -1128,10 +1233,20 @@ async def handle_pedido_doc_callback(update: Update, context: ContextTypes.DEFAU
         if parts[2] == "no":
             session["state"] = "waiting_pedido_pick_doc"
             await query.edit_message_text("Puedes seguir cargando o reemplazando documentos.")
-            await query.message.reply_text(
-                "Flujo de pedido activo.",
-                reply_markup=pedido_document_keyboard(session.get("order_type", "")),
-            )
+            try:
+                with session_scope() as db:
+                    case = CaseRepository.get_by_public_id(db, session.get("case_public_id"))
+                    kb = _pedido_doc_keyboard(
+                        db,
+                        session.get("order_type", ""),
+                        case=case,
+                        user=_telegram_user_dict(update),
+                    )
+            except Exception:
+                kb = pedido_document_keyboard(
+                    session.get("order_type", ""), allowed_doc_keys=["p"], show_finalize=False
+                )
+            await query.message.reply_text("Flujo de pedido activo.", reply_markup=kb)
             await query.answer()
             return
         if parts[2] == "si":
@@ -1139,7 +1254,7 @@ async def handle_pedido_doc_callback(update: Update, context: ContextTypes.DEFAU
             await _finalize_pedido(update, context, session)
             return
 
-    await query.answer()
+    await query.answer(action_unavailable_message(), show_alert=True)
 
 
 async def handle_group_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1147,13 +1262,36 @@ async def handle_group_callbacks(update: Update, context: ContextTypes.DEFAULT_T
     if not _is_admin(update):
         await query.answer("No tienes permisos.", show_alert=True)
         return
-    await query.answer()
     data = query.data or ""
     if "|" not in data:
+        await query.answer()
         return
     action, case_id = data.split("|", 1)
     actor = _actor_name(update)
     svc = _case_service()
+
+    if action == "ped_aprobar":
+        try:
+            with session_scope() as db:
+                case = CaseRepository.get_by_public_id(db, case_id)
+                if not case:
+                    await query.answer("Caso no encontrado.", show_alert=True)
+                    return
+                ok, reason = can_send_to_compulsa(
+                    db, case, _telegram_user_dict(update)
+                )
+                if not ok:
+                    await query.answer(
+                        (reason or action_unavailable_message())[:190],
+                        show_alert=True,
+                    )
+                    return
+        except Exception:
+            log.exception("Error validando compulsa")
+            await query.answer("Error al validar el caso.", show_alert=True)
+            return
+
+    await query.answer()
 
     pending_status = svc.group_action_requires_reason(action)
     if pending_status:

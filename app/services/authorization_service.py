@@ -14,6 +14,7 @@ from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.core.paths import MASTER_AUTORIZACIONES_PATH, ORDEN_SNTE_PDF_PATH
 from app.domain import constants as C
 from app.models.authorization_job import AuthorizationJob
 from app.models.case import Case
@@ -110,11 +111,11 @@ class AuthorizationService:
         return [doc_excel, doc_pdf]
 
     def _generar_excel_maestro(self, case: Case, form_data: dict, cliente: str, folio: str, plazo: int, qna_inicial: str, monto_total: float, upload_dir: Path) -> Document:
-        template_path = "storage/templates/plantilla_master_autorizaciones.xlsx"
-        if not os.path.exists(template_path):
+        template_path = MASTER_AUTORIZACIONES_PATH
+        if not template_path.is_file():
             raise TemplateNotFoundError(f"Falta plantilla Excel en: {template_path}")
 
-        wb = openpyxl.load_workbook(template_path, data_only=False)
+        wb = openpyxl.load_workbook(str(template_path), data_only=False)
         ws = wb["Hoja1"] if "Hoja1" in wb.sheetnames else wb.active
         try:
             wb._external_links = []
@@ -213,8 +214,8 @@ class AuthorizationService:
         return doc
 
     def _generar_pdf_snte(self, case: Case, form_data: dict, cliente: str, folio: str, plazo: int, qna_inicial: str, qna_final: str, descuento_qna: str, upload_dir: Path) -> Document:
-        template_path = "storage/templates/plantilla_orden_snte.pdf"
-        if not os.path.exists(template_path):
+        template_path = ORDEN_SNTE_PDF_PATH
+        if not template_path.is_file():
             raise TemplateNotFoundError(f"Falta plantilla PDF SNTE en: {template_path}")
 
         datos = DatosOrden(
@@ -237,11 +238,11 @@ class AuthorizationService:
         filename = f"{uuid.uuid4()}_{folio}_{nombre_safe}_SNTE.pdf"
         abs_path = os.path.join(upload_dir, filename)
 
-        generar_orden_snte_pdf(template_path, abs_path, datos)
+        generar_orden_snte_pdf(str(template_path), abs_path, datos)
 
         job = AuthorizationJob(
             case_id=case.id,
-            template_name=os.path.basename(template_path),
+            template_name=template_path.name,
             output_path=abs_path,
             generation_status="success"
         )

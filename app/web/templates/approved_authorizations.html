@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block body_class %}dash-shell-active{% endblock %}
+{% block main_class %}{% endblock %}
+
+{% block extra_head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+
+{% block content %}
+{% set user_initial = (usuario.nombre[0] if usuario and usuario.nombre else 'G')|upper %}
+
+<div class="dash-app">
+    <div class="dash-sidebar-backdrop" id="dashSidebarBackdrop"></div>
+
+    <aside class="dash-sidebar" id="dashSidebar">
+        <div class="dash-sidebar__brand">
+            <h1>Gaman</h1>
+            <p>Sistema de autorizaciones</p>
+        </div>
+        <nav class="dash-nav">
+            <a href="/dashboard" class="dash-nav__link">
+                <i data-lucide="layout-dashboard"></i><span>Dashboard</span>
+            </a>
+            <a href="/casos" class="dash-nav__link">
+                <i data-lucide="folder-open"></i><span>Casos</span>
+            </a>
+            <a href="/casos" class="dash-nav__link">
+                <i data-lucide="file-text"></i><span>Documentos</span>
+            </a>
+            <a href="/autorizaciones/aprobadas" class="dash-nav__link is-active">
+                <i data-lucide="badge-check"></i><span>Autorizaciones</span>
+            </a>
+            <span class="dash-nav__link is-disabled"><i data-lucide="scale"></i><span>Compulsa</span></span>
+            <a href="/reportes/comercial" class="dash-nav__link"><i data-lucide="bar-chart-3"></i><span>Control comercial</span></a>
+            <span class="dash-nav__link is-disabled"><i data-lucide="users"></i><span>Vendedores</span></span>
+            <span class="dash-nav__link is-disabled"><i data-lucide="package"></i><span>Productos</span></span>
+            <span class="dash-nav__link is-disabled"><i data-lucide="settings"></i><span>Configuración</span></span>
+        </nav>
+        <div class="dash-sidebar__footer">
+            <div class="dash-user">
+                <div class="dash-user__avatar">{{ user_initial }}</div>
+                <div>
+                    <div class="dash-user__name">{{ usuario.nombre }}</div>
+                    <div class="dash-user__role">{{ usuario.rol|capitalize }}</div>
+                </div>
+            </div>
+            <a href="/logout" class="dash-nav__link mt-2" style="padding-left:0;">
+                <i data-lucide="log-out"></i><span>Salir</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="dash-main">
+        <header class="dash-topbar">
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="dash-mobile-toggle" id="dashSidebarToggle" aria-label="Menú">
+                    <i data-lucide="menu"></i>
+                </button>
+                <div class="dash-topbar__title">
+                    <h2>Autorizaciones aprobadas</h2>
+                    <p>Pedidos con autorización SNTE generada · {{ total }} registro(s){% if usuario.rol == 'vendedor' %} · solo tus casos{% endif %}</p>
+                </div>
+            </div>
+            <div class="dash-topbar__actions">
+                <a href="/dashboard" class="dash-btn-ghost">Dashboard</a>
+                <a href="/casos" class="dash-btn-primary">
+                    <i data-lucide="folder-open" style="width:16px;height:16px;"></i>
+                    Ver casos
+                </a>
+            </div>
+        </header>
+
+        <div class="dash-content">
+            <section class="dash-card mb-4">
+                <div class="dash-card__header">
+                    <h3>Filtros</h3>
+                    <a href="/autorizaciones/aprobadas" class="dash-link small">Limpiar</a>
+                </div>
+                <div class="dash-card__body">
+                    <form method="get" action="/autorizaciones/aprobadas" class="row g-2 align-items-end">
+                        <div class="col-12 col-md-4 col-lg-3">
+                            <label class="form-label small mb-1">Búsqueda</label>
+                            <input type="search" name="q" class="form-control form-control-sm"
+                                   placeholder="Cliente, RFC o folio" value="{{ filtros.q }}">
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small mb-1">Vendedor</label>
+                            <select name="vendedor" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for v in opciones.vendedores %}
+                                <option value="{{ v }}" {% if filtros.vendedor == v %}selected{% endif %}>{{ v }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small mb-1">QNA inicial</label>
+                            <input type="text" name="qna" class="form-control form-control-sm"
+                                   placeholder="Ej. 10-2026" value="{{ filtros.qna }}">
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small mb-1">Tipo venta</label>
+                            <select name="tipo_venta" class="form-select form-select-sm">
+                                {% for val, label in opciones.tipos_venta %}
+                                <option value="{{ val }}" {% if filtros.tipo_venta == val %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small mb-1">Estado</label>
+                            <select name="estado" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for e in opciones.estados %}
+                                <option value="{{ e }}" {% if filtros.estado == e %}selected{% endif %}>{{ e }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small mb-1">Desde</label>
+                            <input type="date" name="fecha_desde" class="form-control form-control-sm"
+                                   value="{{ filtros.fecha_desde }}">
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small mb-1">Hasta</label>
+                            <input type="date" name="fecha_hasta" class="form-control form-control-sm"
+                                   value="{{ filtros.fecha_hasta }}">
+                        </div>
+                        <div class="col-12 col-md-auto">
+                            <button type="submit" class="dash-btn-primary">Filtrar</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section class="dash-card">
+                <div class="dash-card__body p-0">
+                    {% if filas %}
+                    <div class="dash-table-wrap">
+                        <table class="dash-table">
+                            <thead>
+                                <tr>
+                                    <th>Folio</th>
+                                    <th>Cliente</th>
+                                    <th>RFC</th>
+                                    <th>Vendedor</th>
+                                    <th>Sección</th>
+                                    <th>QNA</th>
+                                    <th>Tipo venta</th>
+                                    <th>Plazo</th>
+                                    <th>Monto</th>
+                                    <th>Fecha aut.</th>
+                                    <th>Estado</th>
+                                    <th>Excel</th>
+                                    <th>PDF</th>
+                                    <th class="text-end">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for fila in filas %}
+                                <tr>
+                                    <td class="font-monospace small">{{ fila.folio }}</td>
+                                    <td>{{ fila.cliente }}</td>
+                                    <td class="small">{{ fila.rfc }}</td>
+                                    <td class="small">{{ fila.vendedor }}</td>
+                                    <td class="small">{{ fila.seccion }}</td>
+                                    <td class="small">{{ fila.qna }}</td>
+                                    <td>{{ fila.tipo_venta }}</td>
+                                    <td class="text-center">{{ fila.plazo }}</td>
+                                    <td class="text-nowrap">{{ fila.monto }}</td>
+                                    <td class="text-nowrap small">{{ fila.fecha_autorizacion_label }}</td>
+                                    <td><span class="dash-badge dash-badge--muted">{{ fila.estado }}</span></td>
+                                    <td class="text-center">
+                                        {% if fila.tiene_excel %}
+                                        <span class="dash-badge dash-badge--success">Sí</span>
+                                        {% else %}
+                                        <span class="dash-badge dash-badge--muted">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if fila.tiene_pdf %}
+                                        <span class="dash-badge dash-badge--success">Sí</span>
+                                        {% else %}
+                                        <span class="dash-badge dash-badge--muted">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <a href="/casos/{{ fila.case_id }}" class="dash-link small">Ver caso</a>
+                                        {% if fila.excel_doc_id %}
+                                        · <a href="/documentos/{{ fila.excel_doc_id }}/ver" class="dash-link small" target="_blank" rel="noopener">Excel</a>
+                                        {% endif %}
+                                        {% if fila.pdf_doc_id %}
+                                        · <a href="/documentos/{{ fila.pdf_doc_id }}/ver" class="dash-link small" target="_blank" rel="noopener">PDF</a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted p-4 mb-0">
+                        No hay autorizaciones que coincidan con los filtros.
+                        Genera una autorización SNTE desde el detalle de un pedido en preparación.
+                    </p>
+                    {% endif %}
+                </div>
+            </section>
+            <p class="text-muted small mt-2 mb-0">
+                Criterio: estado «Autorización generada», documento Excel SNTE activo o evento AUTH_GENERATED / AUTH_REGENERATED.
+                RFC, sección, QNA y monto provienen de OCR cuando está disponible.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

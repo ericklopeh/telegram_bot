@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block body_class %}dash-shell-active{% endblock %}
+{% block main_class %}{% endblock %}
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+{% block content %}
+<div class="dash-app">
+    <aside class="dash-sidebar" id="dashSidebar">
+        <div class="dash-sidebar__brand"><h1>Gaman</h1><p>Ventas pendientes</p></div>
+        <nav class="dash-nav">
+            <a href="/dashboard" class="dash-nav__link"><i data-lucide="layout-dashboard"></i><span>Dashboard</span></a>
+            <a href="/ventas" class="dash-nav__link"><i data-lucide="list"></i><span>Listado ventas</span></a>
+            <a href="/ventas/pendientes" class="dash-nav__link is-active"><i data-lucide="clock"></i><span>Pendientes</span></a>
+            <a href="/control/conciliacion" class="dash-nav__link"><i data-lucide="git-compare"></i><span>Conciliación</span></a>
+        </nav>
+        <div class="dash-sidebar__footer">
+            <a href="/logout" class="dash-nav__link"><i data-lucide="log-out"></i><span>Salir</span></a>
+        </div>
+    </aside>
+    <div class="dash-main">
+        <header class="dash-topbar">
+            <div class="dash-topbar__title">
+                <h2>Ventas pendientes de registro</h2>
+                <p>Cola, errores de Excel y reintentos operativos</p>
+            </div>
+        </header>
+        <div class="dash-content">
+            <section class="dash-card mb-3">
+                <div class="dash-card__body">
+                    <form method="get" class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small">Estado registro</label>
+                            <select name="registration_status" class="form-select form-select-sm">
+                                <option value="">Todos pendientes</option>
+                                {% for key, label in registration_status_labels.items() %}
+                                {% if key in ['pending_registration','processing_registration','registration_failed'] %}
+                                <option value="{{ key }}" {% if filtros.registration_status == key %}selected{% endif %}>{{ label }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Vendedor</label>
+                            <select name="vendedor" class="form-select form-select-sm">
+                                <option value="">Todos</option>
+                                {% for v in vendedores %}
+                                <option value="{{ v }}" {% if filtros.vendedor == v %}selected{% endif %}>{{ v }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Búsqueda</label>
+                            <input type="search" name="q" class="form-control form-control-sm" value="{{ filtros.q }}" placeholder="Folio, cliente, RFC">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">Filtrar</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+            <section class="dash-card">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Folio</th>
+                                <th>Cliente</th>
+                                <th>RFC</th>
+                                <th>Vendedor</th>
+                                <th>Estado</th>
+                                <th>Intentos</th>
+                                <th>Último intento</th>
+                                <th>Error</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for v in ventas %}
+                            <tr>
+                                <td><a href="/ventas/{{ v.id }}">{{ v.folio }}</a></td>
+                                <td>{{ v.cliente }}</td>
+                                <td>{{ v.rfc or '—' }}</td>
+                                <td>{{ v.vendedor }}</td>
+                                <td>{{ registration_status_labels.get(v.registration_status, v.registration_status) }}</td>
+                                <td>{{ v.registration_attempts or 0 }}</td>
+                                <td class="small">{{ v.last_registration_attempt_at.strftime('%Y-%m-%d %H:%M') if v.last_registration_attempt_at else '—' }}</td>
+                                <td class="small text-danger">{{ v.registration_error or v.export_error or '—' }}</td>
+                                <td class="text-nowrap">
+                                    <a href="/ventas/{{ v.id }}" class="btn btn-outline-secondary btn-sm">Ver</a>
+                                    {% if v.registration_status == 'registration_failed' or v.status == 'export_failed' %}
+                                    <form method="post" action="/ventas/{{ v.id }}/reintentar-registro" class="d-inline">
+                                        <button type="submit" class="btn btn-warning btn-sm">Reintentar</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="9" class="text-muted text-center py-4">No hay ventas pendientes con los filtros actuales.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>lucide.createIcons();</script>
+{% endblock %}

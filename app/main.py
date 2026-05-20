@@ -20,11 +20,11 @@ from app.bot.handlers import (
     handle_files,
     handle_text,
     sharepoint_retry_job,
-    run_daily_operational_summary_job,
     sla_watchdog_job,
     start,
 )
 from app.bot.persistence import PostgresPersistence
+from app.services.notification_service import run_daily_operational_summary_job
 from app.config import get_settings
 from app.utils.logging_config import configure_logging
 
