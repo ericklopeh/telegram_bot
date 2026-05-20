@@ -322,6 +322,8 @@ class OCRService:
         self,
         document_id: int,
         action_user: str | None = None,
+        *,
+        source: str = "system",
     ) -> OcrResult | None:
         doc = self.db.query(Document).filter(Document.id == document_id).first()
         if not doc:
@@ -354,6 +356,21 @@ class OCRService:
             review_status=review_status,
         )
         self.db.add(result)
+        try:
+            from app.services.case_event_service import log_ocr_event
+
+            log_ocr_event(
+                self.db,
+                case_id=doc.case_id,
+                document_id=doc.id,
+                document_type=doc.document_type,
+                review_status=review_status,
+                confidence=confidence,
+                action_user=action_user,
+                source=source,
+            )
+        except Exception:
+            logger.exception("No se pudo registrar evento OCR case_id=%s", doc.case_id)
         self.db.commit()
         self.db.refresh(result)
         logger.info(

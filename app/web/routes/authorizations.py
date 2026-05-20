@@ -19,12 +19,14 @@ from app.services.refinanciamiento_service import (
 )
 from app.services.case_event_service import (
     AUTH_GENERATED,
+    AUTH_REGENERATED,
     DOCUMENT_CREATED,
     REFI_GENERATED,
+    SNTE_EXCEL_GENERATED,
+    SNTE_PDF_GENERATED,
     TELEGRAM_NOTIFIED,
     log_document_event,
     log_event,
-    log_status_change,
 )
 from app.services.sharepoint_document_service import SharePointDocumentService, SharePointUploadPayload
 from app.web.auth import get_current_user, require_roles, ROLES_AUTORIZACION_SNTE
@@ -199,12 +201,18 @@ def _log_generation_events(
     route: str,
     actor_user_id: int | None,
     actor_role: str | None,
+    is_regeneration: bool = False,
 ) -> None:
+    summary = (
+        "Autorización SNTE regenerada (Excel + PDF sindicato)"
+        if is_regeneration
+        else "Autorización SNTE generada (Excel + PDF sindicato)"
+    )
     log_event(
         db,
         case_id=case.id,
         event_type=generation_event_type,
-        message="Documentos SNTE generados",
+        message=summary,
         actor_user_id=actor_user_id,
         actor_role=actor_role,
         source="web",
@@ -213,17 +221,27 @@ def _log_generation_events(
             "generated_by": generated_by,
             "route": route,
             "document_ids": [doc.id for doc in docs],
+            "regenerated": is_regeneration,
         },
     )
     for doc in docs:
+        if doc.document_type == C.DOC_ORDEN_SNTE_PDF:
+            specific_type = SNTE_PDF_GENERATED
+            specific_msg = "PDF orden sindicato SNTE generado"
+        elif doc.document_type == C.DOC_AUTORIZACION_SNTE:
+            specific_type = SNTE_EXCEL_GENERATED
+            specific_msg = "Excel autorización SNTE generado"
+        else:
+            specific_type = DOCUMENT_CREATED
+            specific_msg = "Documento generado desde web"
         log_document_event(
             db,
             case_id=case.id,
-            event_type=DOCUMENT_CREATED,
+            event_type=specific_type,
             document_id=doc.id,
             document_type=doc.document_type,
             filename=doc.stored_filename,
-            message="Documento generado desde web",
+            message=specific_msg,
             actor_user_id=actor_user_id,
             actor_role=actor_role,
             source="web",
@@ -232,6 +250,7 @@ def _log_generation_events(
                 "generated_by": generated_by,
                 "route": route,
                 "upload_status": doc.upload_status,
+                "regenerated": is_regeneration,
             },
         )
 
@@ -293,23 +312,7 @@ def _persist_generated_status(
         C.ST_PED_AUT_GENERADA,
         notes=notes,
         action_user=action_user,
-    )
-    log_status_change(
-        db,
-        case_id=case_id,
-        old_status=old_status,
-        new_status=C.ST_PED_AUT_GENERADA,
-        message=notes,
-        actor_user_id=actor_user_id,
-        actor_role=actor_role,
         source="web",
-        metadata={
-            "case_id": case_id,
-            "generated_by": action_user,
-            "route": route,
-            "old_status": old_status,
-            "new_status": C.ST_PED_AUT_GENERADA,
-        },
     )
     try:
         db.commit()
@@ -326,6 +329,7 @@ def _persist_generated_status(
             C.ST_PED_AUT_GENERADA,
             notes=notes,
             action_user=action_user,
+            source="web",
         )
         db.commit()
     db.refresh(case)
@@ -447,11 +451,12 @@ async def generar_autorizacion(
             db=db,
             case=case,
             docs=docs,
-            generation_event_type=AUTH_GENERATED,
+            generation_event_type=AUTH_REGENERATED if is_regeneration else AUTH_GENERATED,
             generated_by=action_user,
             route="generar_autorizacion",
             actor_user_id=actor_user_id,
             actor_role=actor_role,
+            is_regeneration=is_regeneration,
         )
         _persist_generated_status(
             db=db,

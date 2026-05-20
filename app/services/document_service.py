@@ -64,10 +64,28 @@ class DocumentService:
         case: Case,
         document_type: str,
         stored_file: StoredIncomingFile,
+        *,
+        actor_role: str | None = None,
+        source: str = "telegram",
     ) -> tuple[Document, set[str]]:
+        from app.services.case_event_service import (
+            log_document_received,
+            log_pedido_checklist_after_upload,
+        )
+
         document = self.register_document_version(db, case, document_type, stored_file)
+        log_document_received(
+            db,
+            case_id=case.id,
+            document_type=document_type,
+            document_id=document.id,
+            filename=stored_file.original_filename or stored_file.stored_filename,
+            actor_role=actor_role,
+            source=source,
+        )
         self.mark_document_pending_upload(db, document.id)
         present = DocumentRepository.get_active_types_for_case(db, case.id)
+        log_pedido_checklist_after_upload(db, case, source=source, actor_role=actor_role)
         return document, present
 
     def register_revision_dictamen_upload(
@@ -75,8 +93,25 @@ class DocumentService:
         db: Session,
         case: Case,
         stored_file: StoredIncomingFile,
+        *,
+        actor_role: str | None = None,
+        source: str = "telegram",
     ) -> Document:
-        return self.register_document_version(db, case, C.DOC_REVISION_DICTAMEN, stored_file)
+        from app.services.case_event_service import log_document_received
+
+        document = self.register_document_version(
+            db, case, C.DOC_REVISION_DICTAMEN, stored_file
+        )
+        log_document_received(
+            db,
+            case_id=case.id,
+            document_type=C.DOC_REVISION_DICTAMEN,
+            document_id=document.id,
+            filename=stored_file.original_filename or stored_file.stored_filename,
+            actor_role=actor_role,
+            source=source,
+        )
+        return document
 
     def validate_active_documents_for_compulsa(self, db: Session, case: Case) -> None:
         """

@@ -11,6 +11,12 @@ from app.models.case import Case
 from app.repositories.case_repository import CaseRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.history_repository import HistoryRepository
+from app.services.case_event_service import (
+    log_case_created,
+    log_checklist_event,
+    log_document_received,
+    log_status_change,
+)
 from app.services.document_service import DocumentService
 from app.services.storage.local import LocalStorageBackend
 
@@ -81,7 +87,7 @@ class CaseService:
             C.ST_REV_EN_REVISION,
             notes="Revisión registrada",
         )
-        DocumentRepository.add_version(
+        doc = DocumentRepository.add_version(
             db,
             case.id,
             C.DOC_REVISION_EVIDENCIA,
@@ -89,6 +95,23 @@ class CaseService:
             file_abs_path,
             original_filename,
             mime_type,
+        )
+        log_case_created(
+            db,
+            case_id=case.id,
+            case_type=C.CASE_TYPE_REVISION,
+            client_name=client_name,
+            actor_role=seller_name,
+            source="telegram",
+        )
+        log_document_received(
+            db,
+            case_id=case.id,
+            document_type=C.DOC_REVISION_EVIDENCIA,
+            document_id=doc.id,
+            filename=original_filename or stored_filename,
+            actor_role=seller_name,
+            source="telegram",
         )
         return case
 
@@ -127,6 +150,15 @@ class CaseService:
             None,
             C.ST_PED_RECIBIDO,
             notes="Pedido iniciado",
+        )
+        log_case_created(
+            db,
+            case_id=case.id,
+            case_type=C.CASE_TYPE_PEDIDO,
+            client_name=client_name,
+            actor_role=seller_name,
+            source="telegram",
+            metadata={"order_type": order_type, "official_folio": folio},
         )
         return case
 
@@ -178,6 +210,21 @@ class CaseService:
             C.ST_PED_PREP_AUT,
             notes="Pedido completo, enviado a autorización",
         )
+        log_status_change(
+            db,
+            case_id=case.id,
+            old_status=old,
+            new_status=C.ST_PED_PREP_AUT,
+            message="Pedido enviado a preparación de autorización",
+            source="telegram",
+        )
+        log_checklist_event(
+            db,
+            case_id=case.id,
+            complete=True,
+            checklist_text=self.get_pedido_checklist(db, case),
+            source="telegram",
+        )
         CaseRepository.save(db, case)
         return case
 
@@ -221,6 +268,7 @@ class CaseService:
         new_status: str,
         notes: str | None = None,
         action_user: str | None = None,
+        source: str | None = None,
     ) -> Case:
         validate_case_status_transition(case, case.current_status, new_status)
         old = case.current_status
@@ -243,5 +291,16 @@ class CaseService:
             action_user=action_user,
             notes=notes,
         )
+        if old != new_status:
+            log_status_change(
+                db,
+                case_id=case.id,
+                old_status=old,
+                new_status=new_status,
+                message=notes,
+                actor_role=action_user,
+                source=source or ("telegram" if action_user else "system"),
+                metadata={"case_type": case.case_type},
+            )
         CaseRepository.save(db, case)
         return case

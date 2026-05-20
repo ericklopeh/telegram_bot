@@ -165,6 +165,10 @@ def detalle_caso(
 
     ocr_prefill = OCRService.build_case_autorizacion_prefill(db, caso.id)
 
+    from app.web.services.case_timeline import build_case_timeline
+
+    case_timeline = build_case_timeline(case_events)
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -181,6 +185,7 @@ def detalle_caso(
             "authorization_jobs": authorization_jobs,
             "upload_document_types": upload_document_types,
             "case_events": case_events,
+            "case_timeline": case_timeline,
             "pedido_checklist_ok": pedido_checklist_ok,
             "pedido_checklist_text": pedido_checklist_text,
             "snte_status_ok": snte_status_ok,
@@ -256,6 +261,29 @@ def upload_document(
         upload_status="LOCAL"
     )
     db.add(new_doc)
+    db.flush()
+
+    from app.services.case_event_service import (
+        log_document_received,
+        log_pedido_checklist_after_upload,
+    )
+
+    log_document_received(
+        db,
+        case_id=case_id,
+        document_type=document_type,
+        document_id=new_doc.id,
+        filename=file.filename or stored_filename,
+        actor_role=usuario.get("nombre"),
+        actor_user_id=usuario.get("id"),
+        source="web",
+    )
+    log_pedido_checklist_after_upload(
+        db,
+        caso,
+        source="web",
+        actor_role=usuario.get("nombre"),
+    )
 
     # Crear CaseHistory
     history_entry = CaseHistory(
@@ -278,6 +306,7 @@ def upload_document(
             OCRService(db).process_document(
                 new_doc.id,
                 action_user=usuario.get("nombre", "web_user"),
+                source="web",
             )
         except Exception:
             log.exception("OCR automático falló tras subida doc=%s", new_doc.id)
@@ -320,6 +349,7 @@ def procesar_ocr_route(
     OCRService(db).process_document(
         document_id=document_id,
         action_user=usuario.get("nombre", "web_user"),
+        source="web",
     )
     
     from app.models.case_history import CaseHistory

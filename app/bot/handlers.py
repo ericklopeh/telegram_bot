@@ -82,6 +82,7 @@ def _telegram_run_ocr_if_eligible(
         result = OCRService(db).process_document(
             document_id,
             action_user=action_user,
+            source="telegram",
         )
     except Exception:
         log.exception(
@@ -458,6 +459,7 @@ async def _resolve_group_reason(
                 status,
                 notes=reason_text,
                 action_user=_actor_name(update),
+                source="telegram",
             )
             db.refresh(case)
         await update.message.reply_text(
@@ -826,6 +828,8 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     db,
                     case,
                     StoredIncomingFile(nombre, path_str, orig, mime),
+                    actor_role=_actor_name(update),
+                    source="telegram",
                 )
                 svc.transition_case_status(
                     db,
@@ -833,6 +837,7 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     target_status,
                     notes="Dictamen con evidencia adjunta",
                     action_user=_actor_name(update),
+                    source="telegram",
                 )
                 db.refresh(case)
             await update.message.reply_text(
@@ -886,6 +891,8 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     case,
                     doc_type,
                     StoredIncomingFile(nombre, path_str, orig, mime),
+                    actor_role=seller,
+                    source="telegram",
                 )
                 document_id = document.id
                 ocr_note = _telegram_run_ocr_if_eligible(
@@ -900,6 +907,7 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     case.current_status,
                     notes=f"Documento reemplazado/cargado: {doc_type_label(doc_type)}",
                     action_user=seller,
+                    source="telegram",
                 )
                 db.refresh(case)
                 vendedor = case.seller_name or seller or "SIN VENDEDOR"
@@ -1177,6 +1185,7 @@ async def handle_group_callbacks(update: Update, context: ContextTypes.DEFAULT_T
                 new_status,
                 notes=note,
                 action_user=actor,
+                source="telegram",
             )
             db.refresh(case)
         msg = (

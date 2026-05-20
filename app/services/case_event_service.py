@@ -26,6 +26,15 @@ DOCUMENT_UPLOAD_FAILED = "DOCUMENT_UPLOAD_FAILED"
 TELEGRAM_NOTIFIED = "TELEGRAM_NOTIFIED"
 COMPULSA_APPROVED = "COMPULSA_APPROVED"
 COMPULSA_REJECTED = "COMPULSA_REJECTED"
+DOCUMENT_RECEIVED = "DOCUMENT_RECEIVED"
+OCR_PROCESSED = "OCR_PROCESSED"
+OCR_FAILED = "OCR_FAILED"
+OCR_NO_TEXT = "OCR_NO_TEXT"
+CHECKLIST_COMPLETE = "CHECKLIST_COMPLETE"
+CHECKLIST_INCOMPLETE = "CHECKLIST_INCOMPLETE"
+AUTH_REGENERATED = "AUTH_REGENERATED"
+SNTE_PDF_GENERATED = "SNTE_PDF_GENERATED"
+SNTE_EXCEL_GENERATED = "SNTE_EXCEL_GENERATED"
 
 
 def _json_default(value: Any) -> Any:
@@ -141,4 +150,152 @@ def log_document_event(
         actor_role=actor_role,
         source=source,
         metadata=event_metadata,
+    )
+
+
+def log_document_received(
+    db: Session,
+    *,
+    case_id: int,
+    document_type: str,
+    document_id: int | None = None,
+    filename: str | None = None,
+    message: str | None = None,
+    actor_user_id: int | None = None,
+    actor_role: str | None = None,
+    source: EventSource | str | None = "system",
+    metadata: dict[str, Any] | None = None,
+) -> CaseEvent | None:
+    from app.domain.constants import doc_type_label
+
+    label = doc_type_label(document_type)
+    default_msg = message or f"Documento recibido: {label}"
+    return log_document_event(
+        db,
+        case_id=case_id,
+        event_type=DOCUMENT_RECEIVED,
+        document_id=document_id,
+        document_type=document_type,
+        filename=filename,
+        message=default_msg,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        source=source,
+        metadata=metadata,
+    )
+
+
+def log_ocr_event(
+    db: Session,
+    *,
+    case_id: int,
+    document_id: int,
+    document_type: str,
+    review_status: str,
+    confidence: float | None = None,
+    action_user: str | None = None,
+    source: EventSource | str | None = "system",
+) -> CaseEvent | None:
+    from app.domain.constants import doc_type_label
+
+    label = doc_type_label(document_type)
+    if review_status == "processed":
+        event_type = OCR_PROCESSED
+        msg = f"OCR procesado en {label}"
+        if confidence is not None:
+            msg += f" ({int(confidence * 100)}% confianza)"
+    elif review_status == "error":
+        event_type = OCR_NO_TEXT
+        msg = f"OCR sin texto legible en {label}"
+    else:
+        event_type = OCR_FAILED
+        msg = f"OCR fallido en {label}"
+
+    return log_document_event(
+        db,
+        case_id=case_id,
+        event_type=event_type,
+        document_id=document_id,
+        document_type=document_type,
+        message=msg,
+        actor_role=action_user,
+        source=source,
+        metadata={
+            "review_status": review_status,
+            "confidence_score": confidence,
+        },
+    )
+
+
+def log_checklist_event(
+    db: Session,
+    *,
+    case_id: int,
+    complete: bool,
+    checklist_text: str,
+    actor_role: str | None = None,
+    source: EventSource | str | None = "system",
+) -> CaseEvent | None:
+    event_type = CHECKLIST_COMPLETE if complete else CHECKLIST_INCOMPLETE
+    if complete:
+        message = "Checklist del pedido completo — listo para enviar a autorización"
+    else:
+        message = "Checklist del pedido incompleto"
+    return log_event(
+        db,
+        case_id=case_id,
+        event_type=event_type,
+        message=message,
+        actor_role=actor_role,
+        source=source,
+        metadata={"checklist": checklist_text, "complete": complete},
+    )
+
+
+def log_pedido_checklist_after_upload(
+    db: Session,
+    case,
+    *,
+    source: EventSource | str,
+    actor_role: str | None = None,
+) -> None:
+    """Registra estado del checklist tras subir un documento de pedido."""
+    from app.config import get_settings
+    from app.domain import constants as C
+    from app.services.case_service import CaseService
+
+    if case.case_type != C.CASE_TYPE_PEDIDO or not case.order_type:
+        return
+    svc = CaseService(get_settings())
+    complete = svc.pedido_has_all_documents(db, case)
+    checklist = svc.get_pedido_checklist(db, case)
+    log_checklist_event(
+        db,
+        case_id=case.id,
+        complete=complete,
+        checklist_text=checklist,
+        actor_role=actor_role,
+        source=source,
+    )
+
+
+def log_case_created(
+    db: Session,
+    *,
+    case_id: int,
+    case_type: str,
+    client_name: str,
+    actor_role: str | None = None,
+    source: EventSource | str | None = "system",
+    metadata: dict[str, Any] | None = None,
+) -> CaseEvent | None:
+    tipo = "revisión" if case_type == "revision" else "pedido"
+    return log_event(
+        db,
+        case_id=case_id,
+        event_type=CASE_CREATED,
+        message=f"Caso de {tipo} creado — {client_name}",
+        actor_role=actor_role,
+        source=source,
+        metadata={"case_type": case_type, **(metadata or {})},
     )

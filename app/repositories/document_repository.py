@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
+from app.domain.constants import doc_type_label
 from app.services.case_event_service import (
     DOCUMENT_UPLOAD_FAILED,
     DOCUMENT_UPLOAD_QUEUED,
@@ -23,6 +24,12 @@ def _log_upload_event(
     sharepoint_path: str | None = None,
     error_message: str | None = None,
 ) -> None:
+    label = doc_type_label(doc.document_type)
+    messages = {
+        DOCUMENT_UPLOAD_QUEUED: f"Subida a SharePoint pendiente: {label}",
+        DOCUMENT_UPLOADED: f"Documento sincronizado en SharePoint: {label}",
+        DOCUMENT_UPLOAD_FAILED: f"Error al subir a SharePoint: {label}",
+    }
     try:
         with db.begin_nested():
             log_document_event(
@@ -32,6 +39,7 @@ def _log_upload_event(
                 document_id=doc.id,
                 document_type=doc.document_type,
                 filename=doc.stored_filename,
+                message=messages.get(event_type),
                 source="sharepoint",
                 metadata={
                     "case_id": doc.case_id,
