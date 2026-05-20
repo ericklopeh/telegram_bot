@@ -170,7 +170,7 @@
     <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span>Pendientes operativos</span>
+                <span>Seguimiento operativo por etapa</span>
                 <span class="text-muted small fw-normal">Hasta {{ pendientes_tabla|length }} filas · orden por actualización</span>
             </div>
             <div class="card-body border-bottom py-3">
@@ -182,7 +182,11 @@
                     <a href="/dashboard?filter=sp_pending" class="btn btn-sm rounded-pill {% if pendiente_filter == 'sp_pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}">SharePoint pendiente</a>
                     <a href="/dashboard?filter=sp_failed" class="btn btn-sm rounded-pill {% if pendiente_filter == 'sp_failed' %}btn-primary{% else %}btn-outline-secondary{% endif %}">SharePoint error</a>
                     <a href="/dashboard?filter=correction" class="btn btn-sm rounded-pill {% if pendiente_filter == 'correction' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Corrección / rechazados</a>
-                    <a href="/dashboard?filter=missing_docs" class="btn btn-sm rounded-pill {% if pendiente_filter == 'missing_docs' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Documentos faltantes</a>
+                    <a href="/dashboard?filter=missing_docs" class="btn btn-sm rounded-pill {% if pendiente_filter == 'missing_docs' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Falta documentación</a>
+                    <a href="/dashboard?filter=ready_for_auth" class="btn btn-sm rounded-pill {% if pendiente_filter == 'ready_for_auth' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Listos para autorización</a>
+                    <a href="/dashboard?filter=with_ocr" class="btn btn-sm rounded-pill {% if pendiente_filter == 'with_ocr' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Con OCR</a>
+                    <a href="/dashboard?filter=without_ocr" class="btn btn-sm rounded-pill {% if pendiente_filter == 'without_ocr' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Sin OCR</a>
+                    <a href="/dashboard?filter=stale_24h" class="btn btn-sm rounded-pill {% if pendiente_filter == 'stale_24h' %}btn-primary{% else %}btn-outline-secondary{% endif %}">&gt; 24 h sin avance</a>
                 </div>
                 {% if pendiente_filter != 'all' %}
                 <p class="small text-muted mb-0 mt-2">
@@ -192,7 +196,11 @@
                     {% elif pendiente_filter == 'sp_pending' %}casos con documento activo en subida pendiente.
                     {% elif pendiente_filter == 'sp_failed' %}casos con documento activo con error de subida.
                     {% elif pendiente_filter == 'correction' %}casos con corrección o rechazo (pedido o revisión).
-                    {% elif pendiente_filter == 'missing_docs' %}pedidos con checklist incompleto (recibido/corrección).
+                    {% elif pendiente_filter == 'missing_docs' %}pedidos con documentación obligatoria incompleta.
+                    {% elif pendiente_filter == 'ready_for_auth' %}pedidos en prep. de autorización con checklist completo.
+                    {% elif pendiente_filter == 'with_ocr' %}casos con al menos un OCR procesado en documentos elegibles.
+                    {% elif pendiente_filter == 'without_ocr' %}pedidos con documentos elegibles sin OCR procesado.
+                    {% elif pendiente_filter == 'stale_24h' %}casos abiertos sin actualización en más de 24 horas.
                     {% endif %}
                     <a href="/dashboard">Quitar filtro</a>
                 </p>
@@ -208,16 +216,21 @@
                                 <th>Cliente</th>
                                 <th>Vendedor</th>
                                 <th>Estado</th>
-                                <th>Tipo de trámite</th>
-                                <th>Última actualización</th>
-                                <th>Pendiente / problema</th>
+                                <th>Tipo pedido</th>
+                                <th>Checklist</th>
+                                <th>OCR</th>
+                                <th>Autorización</th>
+                                <th>SharePoint</th>
+                                <th>Antigüedad</th>
+                                <th>Actualización</th>
+                                <th>Siguiente acción</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for fila in pendientes_tabla %}
                             {% set c = fila.case %}
-                            <tr>
+                            <tr class="{% if fila.sin_avance_24h %}table-warning{% endif %}">
                                 <td class="font-monospace small">
                                     {{ c.public_id }}
                                     <span class="text-muted">#{{ c.id }}</span>
@@ -225,14 +238,40 @@
                                 <td>{{ c.client_name }}</td>
                                 <td>{{ c.seller_name or "—" }}</td>
                                 <td><span class="badge bg-secondary">{{ c.current_status }}</span></td>
-                                <td class="small">
-                                    {{ c.case_type }}
-                                    {% if c.order_type %}<span class="text-muted"> / </span>{{ c.order_type }}{% endif %}
+                                <td class="small">{{ fila.tipo_pedido }}</td>
+                                <td class="small text-center" title="Documentos obligatorios cargados">
+                                    {% if fila.checklist_resumen != '—' %}
+                                    <span class="{% if fila.checklist_ok %}text-success{% else %}text-danger{% endif %} fw-semibold">{{ fila.checklist_resumen }}</span>
+                                    {% else %}—{% endif %}
                                 </td>
-                                <td class="small text-nowrap">{{ c.updated_at.strftime('%d/%m/%Y %H:%M') }}</td>
-                                <td class="small">{{ fila.problema }}</td>
-                                <td class="text-end">
-                                    <a href="/casos/{{ c.id }}" class="btn btn-sm btn-outline-primary">Ver caso</a>
+                                <td class="small text-center">
+                                    {% if fila.ocr_disponible %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-light text-muted border">No</span>{% endif %}
+                                </td>
+                                <td class="small text-center">
+                                    {% if fila.autorizacion_generada %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-light text-muted border">No</span>{% endif %}
+                                </td>
+                                <td class="small">
+                                    {% if fila.sharepoint_estado == 'fallido' %}
+                                    <span class="badge bg-danger">Fallido</span>
+                                    {% elif fila.sharepoint_estado == 'pendiente' %}
+                                    <span class="badge bg-warning text-dark">Pendiente</span>
+                                    {% elif fila.sharepoint_estado == 'sincronizado' %}
+                                    <span class="badge bg-success">OK</span>
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="small text-nowrap">{{ fila.antiguedad_label }}</td>
+                                <td class="small text-nowrap">
+                                    {{ c.updated_at.strftime('%d/%m/%Y %H:%M') }}
+                                    {% if fila.sin_avance_24h %}<span class="badge bg-warning text-dark ms-1" title="Sin movimiento &gt; 24 h">24h+</span>{% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge {{ fila.accion_badge }}">{{ fila.siguiente_accion }}</span>
+                                    {% if fila.problema and fila.problema != fila.siguiente_accion %}
+                                    <small class="d-block text-muted mt-1" style="font-size:0.65rem;">{{ fila.problema }}</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <a href="/casos/{{ c.id }}" class="btn btn-sm btn-outline-primary">Ver</a>
                                 </td>
                             </tr>
                             {% endfor %}

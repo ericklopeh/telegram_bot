@@ -13,9 +13,16 @@ from app.db.session import get_db_session
 from app.domain import constants as C
 from app.models.case import Case
 from app.models.document import Document
+from app.models.ocr_result import OcrResult
 from app.services.case_service import CaseService
+from app.services.ocr_service import OCR_ELIGIBLE_DOCUMENT_TYPES
 from app.web.auth import get_current_user, require_login, web_should_scope_vendedor_cases
 from app.web.paths import TEMPLATES_DIR
+from app.web.services.operational_tracking import (
+    build_operational_row,
+    build_tracking_contexts,
+    row_matches_filter,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
@@ -51,6 +58,10 @@ _PENDING_FILTERS = frozenset(
         "sp_failed",
         "correction",
         "missing_docs",
+        "ready_for_auth",
+        "with_ocr",
+        "without_ocr",
+        "stale_24h",
     }
 )
 
@@ -199,7 +210,103 @@ def _build_pending_table(
         key=lambda it: it[1][0].updated_at,
         reverse=True,
     )[:limit]
-    return [{"case": case, "problema": " · ".join(problems)} for _, (case, problems) in sorted_items]
+
+    if fk in ("ready_for_auth", "with_ocr", "without_ocr", "stale_24h"):
+        sorted_items = _append_filter_specific_cases(
+            db, usuario, fk, tracked, cap=limit * 2
+        )
+        sorted_items = sorted(
+            sorted_items,
+            key=lambda it: it[1][0].updated_at,
+            reverse=True,
+        )[:limit]
+
+    cases = [case for _, (case, _) in sorted_items]
+    problems_by_id = {case.id: " · ".join(problems) for _, (case, problems) in sorted_items}
+    ctx_map = build_tracking_contexts(db, cases, case_svc)
+    now = datetime.now(timezone.utc)
+    umbral_24h = now - timedelta(hours=24)
+
+    rows: list[dict] = []
+    for case in cases:
+        ctx = ctx_map[case.id]
+        row = build_operational_row(
+            case,
+            ctx,
+            problema=problems_by_id.get(case.id, ""),
+            now=now,
+        )
+        if fk in ("ready_for_auth", "with_ocr", "without_ocr", "stale_24h"):
+            if not row_matches_filter(row, fk, umbral_24h):
+                continue
+        rows.append(row)
+
+    rows.sort(key=lambda r: r["case"].updated_at, reverse=True)
+    return rows[:limit]
+
+
+def _append_filter_specific_cases(
+    db: Session,
+    usuario: dict,
+    filter_key: str,
+    tracked: dict[int, tuple[Case, list[str]]],
+    *,
+    cap: int,
+) -> list[tuple[int, tuple[Case, list[str]]]]:
+    """Añade candidatos extra para filtros P14 que no salen solo del tracking de problemas."""
+    base = _cases_query(db, usuario)
+    open_filter = not_(Case.current_status.in_(_CERRADOS_OPERATIVOS))
+    extra_cases: list[Case] = []
+
+    if filter_key == "ready_for_auth":
+        extra_cases = (
+            base.filter(
+                Case.case_type == C.CASE_TYPE_PEDIDO,
+                Case.current_status == C.ST_PED_PREP_AUT,
+            )
+            .order_by(Case.updated_at.desc())
+            .limit(cap)
+            .all()
+        )
+    elif filter_key == "with_ocr":
+        stmt = (
+            select(Document.case_id)
+            .join(OcrResult, OcrResult.document_id == Document.id)
+            .join(Case, Case.id == Document.case_id)
+            .where(
+                Document.is_active.is_(True),
+                Document.document_type.in_(tuple(OCR_ELIGIBLE_DOCUMENT_TYPES)),
+                OcrResult.review_status == "processed",
+            )
+        )
+        if web_should_scope_vendedor_cases(usuario):
+            stmt = stmt.where(Case.seller_name == usuario.get("nombre"))
+        case_ids = list(db.execute(stmt.distinct().limit(cap)).scalars().all())
+        if case_ids:
+            extra_cases = base.filter(Case.id.in_(case_ids)).all()
+    elif filter_key == "without_ocr":
+        extra_cases = (
+            base.filter(
+                Case.case_type == C.CASE_TYPE_PEDIDO,
+                open_filter,
+            )
+            .order_by(Case.updated_at.desc())
+            .limit(cap)
+            .all()
+        )
+    elif filter_key == "stale_24h":
+        umbral = datetime.now(timezone.utc) - timedelta(hours=24)
+        extra_cases = (
+            base.filter(open_filter, Case.updated_at < umbral)
+            .order_by(Case.updated_at.asc())
+            .limit(cap)
+            .all()
+        )
+
+    for c in extra_cases:
+        if c.id not in tracked:
+            tracked[c.id] = (c, [])
+    return list(tracked.items())
 
 
 def _doc_status_count(db: Session, usuario: dict, upload_status: str) -> int:
