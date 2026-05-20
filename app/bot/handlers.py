@@ -67,6 +67,55 @@ def _document_service() -> DocumentService:
     return DocumentService()
 
 
+def _telegram_run_ocr_if_eligible(
+    db,
+    document_id: int,
+    doc_type: str,
+    action_user: str | None,
+) -> str:
+    """Ejecuta OCRService tras subir documento. No lanza excepciones."""
+    from app.services.ocr_service import OCRService, OCR_ELIGIBLE_DOCUMENT_TYPES
+
+    if doc_type not in OCR_ELIGIBLE_DOCUMENT_TYPES:
+        return ""
+    try:
+        result = OCRService(db).process_document(
+            document_id,
+            action_user=action_user,
+        )
+    except Exception:
+        log.exception(
+            "OCR automático Telegram falló",
+            extra={"document_id": document_id, "doc_type": doc_type},
+        )
+        return (
+            "\n🔍 OCR: no se pudo ejecutar ahora; el documento quedó guardado. "
+            "Puedes reprocesarlo desde el panel web."
+        )
+
+    if not result:
+        return ""
+
+    if result.review_status == "processed" and (result.raw_text or "").strip():
+        pct = int((result.confidence_score or 0) * 100)
+        n_fields = 0
+        parsed = result.parsed_json or {}
+        review = parsed.get("review_fields") or {}
+        n_fields = len(review) if review else len(parsed.get("percepciones", {})) + len(
+            parsed.get("deducciones", {})
+        )
+        suffix = f" ({n_fields} campos detectados)" if n_fields else ""
+        return (
+            f"\n🔍 OCR listo ({pct}% confianza){suffix}. "
+            "Revisa y edita en el panel web antes de generar la autorización."
+        )
+
+    return (
+        "\n🔍 OCR: no se extrajo texto legible de este archivo. "
+        "Prueba con un PDF más nítido o reprocesa desde el panel web."
+    )
+
+
 async def _upload_document_background(
     context: ContextTypes.DEFAULT_TYPE,
     chat_id: int,
@@ -810,6 +859,7 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
         seller = _actor_name(update)
+        ocr_note = ""
         try:
             with session_scope() as db:
                 case = CaseRepository.get_by_public_id(db, public_id)
@@ -838,6 +888,12 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     StoredIncomingFile(nombre, path_str, orig, mime),
                 )
                 document_id = document.id
+                ocr_note = _telegram_run_ocr_if_eligible(
+                    db,
+                    document_id,
+                    doc_type,
+                    seller,
+                )
                 svc.transition_case_status(
                     db,
                     case,
@@ -883,7 +939,7 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         present_set = present if isinstance(present, set) else set(present)
         checklist = checklist_lines(order_type, present_set)
         await update.message.reply_text(
-            f"Documento guardado: {doc_type_label(doc_type)}\n\nChecklist:\n{checklist}",
+            f"Documento guardado: {doc_type_label(doc_type)}{ocr_note}\n\nChecklist:\n{checklist}",
             reply_markup=pedido_document_keyboard(order_type),
         )
         return
