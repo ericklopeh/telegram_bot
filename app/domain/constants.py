@@ -30,6 +30,20 @@ DOC_REVISION_DICTAMEN = "revision_dictamen"
 DOC_AUTORIZACION_SNTE = "autorizacion_snte"
 DOC_ORDEN_SNTE_PDF = "orden_snte_pdf"
 DOC_AUTORIZACION_REFI = "autorizacion_refi"  # Excel de refinanciamiento
+DOC_INE = "ine"
+DOC_ESTADO_CUENTA = "estado_cuenta"
+DOC_OTRO = "otro"
+
+# Revisión documental (P24)
+REVIEW_PENDING = "PENDING_REVIEW"
+REVIEW_VALID = "VALID"
+REVIEW_INVALID = "INVALID"
+REVIEW_REPLACED = "REPLACED"
+
+# OCR preparación (P24, sin motor real aún)
+OCR_STATUS_PENDING = "OCR_PENDING"
+OCR_STATUS_DONE = "OCR_DONE"
+OCR_STATUS_FAILED = "OCR_FAILED"
 
 # Estados internos — revisión
 ST_REV_RECIBIDO = "Recibido"
@@ -86,7 +100,30 @@ def doc_type_label(doc_type: str) -> str:
         DOC_AUTORIZACION_SNTE: "Autorización SNTE (Excel)",
         DOC_ORDEN_SNTE_PDF: "Orden de descuento SNTE (PDF)",
         DOC_AUTORIZACION_REFI: "Autorización Refinanciamiento (Excel)",
+        DOC_INE: "INE",
+        DOC_ESTADO_CUENTA: "Estado de cuenta",
+        DOC_OTRO: "Otro documento",
     }.get(doc_type, doc_type)
+
+
+def p24_required_doc_types_for_pedido(
+    order_type: str,
+    *,
+    has_refinanciamiento: bool = False,
+) -> list[str]:
+    """Checklist P24 para workflow (mueble / préstamo / refinanciamiento)."""
+    if has_refinanciamiento:
+        return [
+            DOC_PEDIDO,
+            DOC_ORDEN_DESCUENTO,
+            DOC_ORDEN_SNTE_PDF,
+            DOC_AUTORIZACION_REFI,
+        ]
+    if order_type == ORDER_TYPE_MUEBLE:
+        return [DOC_PEDIDO, DOC_ORDEN_DESCUENTO, DOC_AUTORIZACION_SNTE]
+    if order_type == ORDER_TYPE_PRESTAMO:
+        return [DOC_PEDIDO, DOC_ORDEN_DESCUENTO, DOC_ORDEN_SNTE_PDF]
+    return [DOC_PEDIDO, DOC_ORDEN_DESCUENTO]
 
 
 def checklist_lines(order_type: str, present: set[str]) -> str:

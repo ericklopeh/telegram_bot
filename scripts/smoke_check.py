@@ -90,8 +90,6 @@ def check_env() -> bool:
     return good
 
 
-_MASTER_XLSX = Path("storage") / "templates" / "plantilla_master_autorizaciones.xlsx"
-
 _MASTER_HINT = (
     "Copia plantilla_master_autorizaciones.xlsx desde el repo / paquete de autorización SNTE de "
     "referencia a storage/templates/ (mismo nombre de archivo). "
@@ -102,19 +100,32 @@ _MASTER_HINT = (
 
 
 def check_templates() -> bool:
-    rels = (
-        Path("storage") / "templates" / "plantilla_orden_snte.pdf",
-        Path("storage") / "templates" / "plantilla_refinanciamiento.xlsx",
-        _MASTER_XLSX,
+    from app.core.paths import (
+        CONTRATOS_MASTER_PATH,
+        MASTER_AUTORIZACIONES_PATH,
+        ORDEN_SNTE_PDF_PATH,
+        REFINANCIAMIENTO_TEMPLATE_PATH,
+        VENTAS_MASTER_PATH,
+    )
+
+    required = (
+        ("plantilla_master_autorizaciones.xlsx", MASTER_AUTORIZACIONES_PATH, True),
+        ("plantilla_orden_snte.pdf", ORDEN_SNTE_PDF_PATH, False),
+        ("plantilla_refinanciamiento.xlsx", REFINANCIAMIENTO_TEMPLATE_PATH, False),
+        ("Ventas_2026_COMISION_FINAL_v15.xlsx", VENTAS_MASTER_PATH, False),
+        ("PLANTILLA_RELACION_DE_CONTRATOS.xlsx", CONTRATOS_MASTER_PATH, False),
     )
     good = True
-    for rel in rels:
-        p = ROOT / rel
-        if p.is_file():
+    for label, path, show_master_hint in required:
+        try:
+            rel = path.relative_to(ROOT)
+        except ValueError:
+            rel = path
+        if path.is_file():
             ok(f"Plantilla {rel.as_posix()}")
         else:
-            fail(f"Plantilla ausente: {rel.as_posix()}")
-            if rel == _MASTER_XLSX:
+            fail(f"Plantilla ausente: {rel.as_posix()} ({label})")
+            if show_master_hint:
                 warn(_MASTER_HINT)
             good = False
     return good

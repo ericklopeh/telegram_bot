@@ -92,8 +92,20 @@ class DocumentRepository:
         file_path: str,
         original_filename: str | None,
         mime_type: str | None,
+        *,
+        size_bytes: int | None = None,
+        version: int = 1,
+        uploaded_by: str | None = None,
+        review_status: str | None = None,
+        ocr_status: str | None = None,
     ) -> Document:
+        from app.domain import constants as C
+
         replaced_id = DocumentRepository.deactivate_active(db, case_id, document_type)
+        if replaced_id:
+            old = db.get(Document, replaced_id)
+            if old:
+                old.review_status = C.REVIEW_REPLACED
         doc = Document(
             case_id=case_id,
             document_type=document_type,
@@ -103,10 +115,23 @@ class DocumentRepository:
             mime_type=mime_type,
             is_active=True,
             replaced_document_id=replaced_id,
+            size_bytes=size_bytes,
+            version=version,
+            uploaded_by=uploaded_by,
+            review_status=review_status or C.REVIEW_PENDING,
+            ocr_status=ocr_status or C.OCR_STATUS_PENDING,
+            upload_status="LOCAL",
         )
         db.add(doc)
         db.flush()
         return doc
+
+    @staticmethod
+    def list_by_case(db: Session, case_id: int, *, active_only: bool = False) -> list[Document]:
+        q = select(Document).where(Document.case_id == case_id)
+        if active_only:
+            q = q.where(Document.is_active.is_(True))
+        return list(db.scalars(q.order_by(Document.document_type, Document.version.desc())).all())
 
     @staticmethod
     def get_active_document(db: Session, case_id: int, document_type: str) -> Document | None:

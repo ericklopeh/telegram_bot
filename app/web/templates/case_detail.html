@@ -113,6 +113,23 @@
             </div>
         </div>
 
+        {% if doc_p24_summary %}
+        <div class="card shadow-sm border-0 mt-4 border-start border-4 border-primary">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold">Documentos (P24)</span>
+                <a href="/casos/{{ caso.id }}/documentos" class="btn btn-sm btn-primary">Gestionar documentos</a>
+            </div>
+            <div class="card-body py-3">
+                <div class="row text-center g-2">
+                    <div class="col-3"><span class="fw-bold text-success">{{ doc_p24_summary.complete }}</span><div class="small text-muted">Completos</div></div>
+                    <div class="col-3"><span class="fw-bold text-warning">{{ doc_p24_summary.pending }}</span><div class="small text-muted">Pendientes</div></div>
+                    <div class="col-3"><span class="fw-bold text-danger">{{ doc_p24_summary.invalid }}</span><div class="small text-muted">Inválidos</div></div>
+                    <div class="col-3"><span class="fw-bold">{{ doc_p24_summary.missing }}</span><div class="small text-muted">Faltantes</div></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card shadow-sm border-0 mt-4">
             <div class="card-header bg-white fw-bold">
                 Documentos del caso

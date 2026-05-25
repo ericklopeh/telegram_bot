@@ -16,6 +16,7 @@ from app.web.paths import STATIC_DIR, TEMPLATES_DIR
 from app.web.routes import (
     approved_authorizations,
     authorizations,
+    case_documents,
     cases,
     admin_workflow,
     commercial_reconciliation,
@@ -158,6 +159,7 @@ def logout(request: Request):
 web_app.include_router(dashboard.router)
 web_app.include_router(admin_workflow.router)
 web_app.include_router(cases.router)
+web_app.include_router(case_documents.router)
 web_app.include_router(revision_talon.router)
 web_app.include_router(authorizations.router)
 web_app.include_router(approved_authorizations.router)

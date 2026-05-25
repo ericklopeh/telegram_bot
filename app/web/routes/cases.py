@@ -191,6 +191,10 @@ def detalle_caso(
         getattr(caso, "workflow_state", None), legacy_status=caso.current_status
     )
 
+    from app.services.case_document_service import CaseDocumentService
+
+    doc_p24_summary = CaseDocumentService().summarize(db, caso)
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -218,6 +222,7 @@ def detalle_caso(
             "workflow_state_label": WORKFLOW_STATE_LABELS.get(wf_state, wf_state),
             "can_recalc_workflow": (usuario or {}).get("rol") in ROLES_ADMIN_SISTEMAS
             or get_settings().web_rbac_relaxed,
+            "doc_p24_summary": doc_p24_summary,
         }
     )
 

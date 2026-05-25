@@ -21,6 +21,7 @@ from app.core.paths import (
     VENTAS_MASTER_PATH,
 )
 from app.models.sale_capture import SaleCapture
+from app.services.excel_path_guard import assert_writable_excel_path, is_under_excel_masters
 
 log = logging.getLogger(__name__)
 
@@ -207,6 +208,11 @@ class ExcelRegistryService:
         return path
 
     def ensure_copy(self, master: Path, dest: Path) -> Path:
+        if is_under_excel_masters(dest):
+            raise ExcelRegistryError(
+                "No se puede escribir sobre el archivo maestro original.",
+                code="master_write_forbidden",
+            )
         if not master.is_file():
             raise ExcelRegistryError(
                 f"Plantilla maestra no encontrada: {master.name}",
@@ -338,6 +344,7 @@ class ExcelRegistryService:
             _copy_row_formulas_and_styles(ws, template_row, new_row, _VENTAS_MAX_COL)
         _write_ventas_values(ws, new_row, sale, semana)
         try:
+            assert_writable_excel_path(path)
             wb.save(path)
         except PermissionError as exc:
             wb.close()
@@ -389,6 +396,7 @@ class ExcelRegistryService:
         ws.cell(new_row, 2).value = "N"
         _write_contratos_values(ws, new_row, sale)
         try:
+            assert_writable_excel_path(path)
             wb.save(path)
         except PermissionError as exc:
             wb.close()

@@ -163,6 +163,22 @@ def request_transition(
         return case, msg
 
     missing = check_dependencies_for_state(ctx, target_state)
+    try:
+        from app.services.case_document_service import CaseDocumentService
+
+        doc_missing = CaseDocumentService().missing_for_workflow_target(db, case, target_state)
+        if doc_missing:
+            from app.domain.constants import doc_type_label
+
+            labels = ", ".join(doc_type_label(dt) for dt in doc_missing)
+            doc_msg = (
+                f"Documentos obligatorios incompletos o sin validar ({labels}). "
+                "Gestione documentos en el caso."
+            )
+            missing = list(missing) + [doc_msg]
+    except Exception:
+        log.exception("Error comprobando documentos P24 en transición workflow")
+
     if missing:
         msg = transition_block_message(current, target_state, missing)
         _log_workflow(

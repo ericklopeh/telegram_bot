@@ -74,6 +74,7 @@ class WorkflowContext:
     sharepoint_pending: bool = False
     sharepoint_failed: bool = False
     has_critical_timeline_error: bool = False
+    p24_missing_docs: list[str] = field(default_factory=list)
 
 
 def build_workflow_context(db: Session, case: Case) -> WorkflowContext:
@@ -131,6 +132,12 @@ def build_workflow_context(db: Session, case: Case) -> WorkflowContext:
         case.case_type == C.CASE_TYPE_PEDIDO and case_svc.pedido_has_all_documents(db, case)
     )
 
+    from app.services.case_document_service import CaseDocumentService
+
+    p24_missing: list[str] = []
+    if case.case_type == C.CASE_TYPE_PEDIDO:
+        p24_missing = CaseDocumentService().missing_required_types(db, case)
+
     return WorkflowContext(
         case=case,
         documents=docs,
@@ -145,10 +152,13 @@ def build_workflow_context(db: Session, case: Case) -> WorkflowContext:
         sharepoint_pending=sharepoint_pending,
         sharepoint_failed=sharepoint_failed,
         has_critical_timeline_error=has_critical_timeline_error,
+        p24_missing_docs=p24_missing,
     )
 
 
 def _missing_pedido_docs(ctx: WorkflowContext) -> list[str]:
+    if ctx.p24_missing_docs:
+        return ctx.p24_missing_docs
     if ctx.checklist_ok:
         return []
     required = C.required_doc_types_for_order(ctx.case.order_type or C.ORDER_TYPE_MUEBLE)

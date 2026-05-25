@@ -50,6 +50,11 @@ from app.services.case_event_service import (
     WORKFLOW_DEPENDENCY_MISSING,
     WORKFLOW_STATE_RECALCULATED,
     SNTE_UNLOCKED_AFTER_APPROVAL,
+    CASE_DOCUMENT_UPLOADED,
+    CASE_DOCUMENT_REPLACED,
+    CASE_DOCUMENT_VALIDATED,
+    CASE_DOCUMENT_REJECTED,
+    DOCUMENT_MISSING_BLOCKED,
 )
 
 _ICON: dict[str, str] = {
@@ -95,6 +100,11 @@ _ICON: dict[str, str] = {
     WORKFLOW_DEPENDENCY_MISSING: "bi-exclamation-triangle",
     WORKFLOW_STATE_RECALCULATED: "bi-arrow-repeat",
     SNTE_UNLOCKED_AFTER_APPROVAL: "bi-unlock",
+    CASE_DOCUMENT_UPLOADED: "bi-file-earmark-arrow-up",
+    CASE_DOCUMENT_REPLACED: "bi-arrow-repeat",
+    CASE_DOCUMENT_VALIDATED: "bi-patch-check",
+    CASE_DOCUMENT_REJECTED: "bi-x-circle",
+    DOCUMENT_MISSING_BLOCKED: "bi-folder-x",
 }
 
 _BADGE: dict[str, str] = {
@@ -140,6 +150,11 @@ _BADGE: dict[str, str] = {
     WORKFLOW_DEPENDENCY_MISSING: "bg-warning text-dark",
     WORKFLOW_STATE_RECALCULATED: "bg-primary",
     SNTE_UNLOCKED_AFTER_APPROVAL: "bg-success",
+    CASE_DOCUMENT_UPLOADED: "bg-info text-dark",
+    CASE_DOCUMENT_REPLACED: "bg-primary",
+    CASE_DOCUMENT_VALIDATED: "bg-success",
+    CASE_DOCUMENT_REJECTED: "bg-danger",
+    DOCUMENT_MISSING_BLOCKED: "bg-warning text-dark",
 }
 
 _CERRADOS_PEDIDO = {C.ST_PED_CERRADO, C.ST_PED_RECHAZADO, C.ST_PED_COMPRA}
@@ -188,6 +203,11 @@ _LABEL: dict[str, str] = {
     WORKFLOW_DEPENDENCY_MISSING: "Dependencia de workflow faltante",
     WORKFLOW_STATE_RECALCULATED: "Estado de workflow recalculado",
     SNTE_UNLOCKED_AFTER_APPROVAL: "SNTE habilitado tras aprobación",
+    CASE_DOCUMENT_UPLOADED: "Documento cargado (revisión)",
+    CASE_DOCUMENT_REPLACED: "Documento reemplazado",
+    CASE_DOCUMENT_VALIDATED: "Documento validado",
+    CASE_DOCUMENT_REJECTED: "Documento rechazado",
+    DOCUMENT_MISSING_BLOCKED: "Bloqueo por documentos faltantes",
 }
 
 
