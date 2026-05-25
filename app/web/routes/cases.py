@@ -26,6 +26,8 @@ from app.services.sharepoint_document_service import (
     SharePointDocumentService,
     SharePointUploadPayload,
 )
+from app.security.rbac import Permission
+from app.services.rbac_service import RbacService
 from app.web.auth import (
     ROLES_ADMIN_SISTEMAS,
     get_current_user,
@@ -33,6 +35,7 @@ from app.web.auth import (
     require_roles,
     web_should_scope_vendedor_cases,
 )
+from app.web.rbac_helpers import check_case_ownership_vendedor, require_permission
 from app.web.jinja_helpers import register_web_template_filters
 from app.web.paths import TEMPLATES_DIR
 
@@ -41,6 +44,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 register_web_template_filters(templates)
 
 log = logging.getLogger(__name__)
+_rbac = RbacService()
 
 
 def get_web_db() -> Generator[Session, None, None]:
@@ -237,6 +241,7 @@ def detalle_caso(
             "doc_p24_summary": doc_p24_summary,
             "guided_flow": guided_flow,
             "breadcrumbs": breadcrumbs,
+            "rbac_flags": request.state.rbac_flags if hasattr(request.state, "rbac_flags") else None,
         },
     )
 
@@ -322,13 +327,24 @@ def upload_document(
     if redirect:
         return redirect
 
+    perm_redirect = require_permission(
+        request,
+        db,
+        Permission.CREATE,
+        action="upload_document",
+        entity_type="case",
+        entity_id=case_id,
+    )
+    if perm_redirect:
+        return perm_redirect
+
     usuario = get_current_user(request, db)
     caso = db.query(Case).filter(Case.id == case_id).first()
 
     if not caso:
         return RedirectResponse(url="/casos", status_code=302)
 
-    if not _can_upload_document_web(usuario, caso):
+    if not check_case_ownership_vendedor(usuario, caso) or not _can_upload_document_web(usuario, caso):
         log.warning(
             "Subida de documento rechazada: rol no autorizado o caso no propio del vendedor",
             extra={
@@ -390,6 +406,17 @@ def upload_document(
             url=f"/casos/{case_id}?error={urllib.parse.quote(str(exc))}",
             status_code=302,
         )
+
+    _rbac.record_audit(
+        db,
+        user=usuario,
+        action="document_upload",
+        entity_type="case",
+        entity_id=case_id,
+        allowed=True,
+        permission=Permission.CREATE,
+        detail={"document_type": document_type, "document_id": new_doc.id},
+    )
 
     # Crear CaseHistory
     history_entry = CaseHistory(
@@ -486,6 +513,17 @@ def ver_documento_route(
     redirect = require_login(request, db)
     if redirect:
         return redirect
+
+    perm_redirect = require_permission(
+        request,
+        db,
+        Permission.DOWNLOAD,
+        action="view_document",
+        entity_type="document",
+        entity_id=document_id,
+    )
+    if perm_redirect:
+        return perm_redirect
 
     from app.models.document import Document
     doc = db.query(Document).filter(Document.id == document_id).first()

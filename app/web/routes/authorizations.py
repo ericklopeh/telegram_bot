@@ -351,6 +351,21 @@ async def generar_autorizacion(
     if redirect:
         return redirect
 
+    from app.security.rbac import Permission
+    from app.web.rbac_helpers import require_permission
+
+    perm_redirect = require_permission(
+        request,
+        db,
+        Permission.APPROVE,
+        roles_fallback=ROLES_AUTORIZACION_SNTE,
+        action="generate_authorization",
+        entity_type="case",
+        entity_id=case_id,
+    )
+    if perm_redirect:
+        return perm_redirect
+
     user = get_current_user(request, db)
     action_user = user.get("nombre", "web_user") if user else "web_user"
     actor_user_id = user.get("id") if user else None

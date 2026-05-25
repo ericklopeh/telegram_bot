@@ -467,6 +467,20 @@ def descargar_excel_venta(
     if redirect:
         return redirect
 
+    from app.security.rbac import Permission
+    from app.web.rbac_helpers import require_permission
+
+    perm_redirect = require_permission(
+        request,
+        db,
+        Permission.EXPORT,
+        action="download_sale_export",
+        entity_type="sale_capture",
+        entity_id=sale_id,
+    )
+    if perm_redirect:
+        return perm_redirect
+
     usuario = get_current_user(request, db)
     sale = SaleCaptureRepository.get_by_id(db, sale_id)
     if not sale:

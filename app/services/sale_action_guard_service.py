@@ -22,8 +22,12 @@ from app.models.sale_capture import (
 )
 from app.models.user import UserRole
 from app.repositories.sale_capture_repository import SaleCaptureRepository
+from app.security.rbac import Permission
+from app.services.rbac_service import RbacService
 from app.services.sale_capture_checklist import build_sale_checklist
 from app.services.sale_capture_validation import parse_sale_form
+
+_rbac = RbacService()
 
 _ROLES_REGISTER = frozenset(
     {
@@ -66,6 +70,28 @@ def _rbac_relaxed() -> bool:
     return bool(get_settings().web_rbac_relaxed)
 
 
+def _apply_rbac_sale_overlay(perms: SaleActionPermissions, user: dict[str, Any] | None) -> None:
+    """P81 — capa RBAC sobre permisos de venta (UI + POST)."""
+    if _rbac.is_relaxed():
+        return
+    if not _rbac.has_permission(user, Permission.EDIT):
+        perms.can_edit = False
+        perms.can_save_draft = False
+        perms.can_submit_validation = False
+        if not perms.edit_reason:
+            perms.edit_reason = "Sin permiso de edición (RBAC)."
+    if not _rbac.has_permission(user, Permission.APPROVE):
+        perms.can_register_definitive = False
+        perms.can_retry_registration = False
+        if not perms.register_reason:
+            perms.register_reason = "Sin permiso de aprobación/registro (RBAC)."
+    if not _rbac.has_permission(user, Permission.EXPORT):
+        perms.can_download_ventas = False
+        perms.can_download_contratos = False
+        if not perms.download_reason:
+            perms.download_reason = "Sin permiso de exportación/descarga (RBAC)."
+
+
 def get_sale_action_permissions(
     db: Session,
     user: dict[str, Any] | None,
@@ -93,6 +119,7 @@ def get_sale_action_permissions(
         if not perms.can_download_ventas and not perms.can_download_contratos:
             perms.download_reason = "No hay archivos exportados disponibles."
         perms.register_reason = "La venta ya está registrada."
+        _apply_rbac_sale_overlay(perms, user)
         return perms
 
     is_vendor = role == UserRole.VENDEDOR.value
@@ -121,6 +148,7 @@ def get_sale_action_permissions(
             perms.register_reason = "Solo autorización, admin o sistemas puede registrar definitivo."
         if can_register_role and can_retry_registration(sale):
             perms.can_retry_registration = True
+        _apply_rbac_sale_overlay(perms, user)
         return perms
 
     can_edit = True
@@ -145,6 +173,7 @@ def get_sale_action_permissions(
         perms.register_reason = perms.register_reason or (
             "Solo autorización, admin o sistemas puede registrar definitivo."
         )
+        _apply_rbac_sale_overlay(perms, user)
         return perms
 
     eval_sale = sale
@@ -152,12 +181,14 @@ def get_sale_action_permissions(
         data, errs = parse_sale_form(form)
         if errs:
             perms.register_reason = "; ".join(errs[:2])
+            _apply_rbac_sale_overlay(perms, user)
             return perms
 
     if form and sale:
         data, errs = parse_sale_form(form)
         if errs:
             perms.register_reason = "; ".join(errs[:2])
+            _apply_rbac_sale_overlay(perms, user)
             return perms
 
     checklist = build_sale_checklist(db, eval_sale)
@@ -168,6 +199,7 @@ def get_sale_action_permissions(
         perms.register_reason = "La venta ya está registrada."
         if can_register_role and can_retry_registration(eval_sale):
             perms.can_retry_registration = False
+        _apply_rbac_sale_overlay(perms, user)
         return perms
 
     if checklist.ready_to_register:
@@ -194,6 +226,7 @@ def get_sale_action_permissions(
     if sale and can_register_role and can_retry_registration(sale):
         perms.can_retry_registration = True
 
+    _apply_rbac_sale_overlay(perms, user)
     return perms
 
 

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Auditoría RBAC{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="h4 mb-3"><i class="bi bi-shield-check me-2"></i>Auditoría de acciones</h1>
+  <p class="text-muted small">Registro centralizado (P81). Últimos {{ limit }} eventos.</p>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Fecha</th>
+          <th>Actor</th>
+          <th>Acción</th>
+          <th>Entidad</th>
+          <th>Hash</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td>{{ e.id }}</td>
+          <td class="small">{{ e.created_at or '—' }}</td>
+          <td class="small">{{ e.actor_label or '—' }}</td>
+          <td><code>{{ e.action }}</code></td>
+          <td>{{ e.entity_type }}{% if e.entity_id %} #{{ e.entity_id }}{% endif %}</td>
+          <td class="small text-muted">{{ e.hash }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-muted">Sin registros de auditoría.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <a href="/dashboard" class="btn btn-outline-secondary btn-sm">Volver al dashboard</a>
+</div>
+{% endblock %}

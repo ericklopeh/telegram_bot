@@ -10,10 +10,14 @@ from app.db.base import Base
 class UserRole(str, Enum):
     ADMIN = "admin"
     SISTEMAS = "sistemas"
+    SUPERVISOR = "supervisor"
     AUTORIZACION = "autorizacion"
+    AUTORIZACIONES = "autorizaciones"
     COMPRAS = "compras"
+    COMPULSA = "compulsa"
     VENDEDOR = "vendedor"
     CONSULTA = "consulta"
+    READONLY = "readonly"
 
 
 class User(Base):
