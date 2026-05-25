@@ -34,6 +34,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create temporary .env for Docker Compose
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=test
+          POSTGRES_PASSWORD=test
+          POSTGRES_DB=test
+          DATABASE_URL=postgresql://test:test@db:5432/test
+          TELEGRAM_BOT_TOKEN=dummy_ci_token
+          WEB_SESSION_SECRET=dummy_ci_secret
+          EOF
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -48,9 +59,6 @@ jobs:
 
       - name: Lint (ruff check)
         run: ruff check app tests --ignore E501 || true
-
-      - name: Prepare CI .env for compose validation
-        run: cp .env.example .env
 
       - name: Validate compose files
         run: |
