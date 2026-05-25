@@ -1,10 +1,10 @@
-"""P47/P61 — realtime: WebSocket hub, Redis pub/sub opcional, polling."""
+"""P47/P61/P69 — realtime: WebSocket hub, Redis pub/sub opcional, polling, hardening."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
@@ -24,6 +24,10 @@ CHANNELS = (
     "heartbeat",
 )
 
+_MAX_SUBSCRIBERS_PER_CHANNEL = 256
+_PUBLISH_RATE_WINDOW_SEC = 1.0
+_MAX_PUBLISH_PER_WINDOW = 120
+
 
 class RealtimeHub:
     """Broker en memoria por canal; Redis opcional para multi-worker."""
@@ -31,41 +35,43 @@ class RealtimeHub:
     def __init__(self) -> None:
         self._subscribers: dict[str, list[asyncio.Queue]] = defaultdict(list)
         self._last_payload: dict[str, dict[str, Any]] = {}
-        self._redis = None
-
-    def _redis_client(self):
-        if self._redis is not False and self._redis is None:
-            url = get_settings().redis_url
-            if url:
-                try:
-                    from redis import Redis
-
-                    self._redis = Redis.from_url(url, decode_responses=True)
-                    self._redis.ping()
-                except Exception:
-                    self._redis = False
-                    log.debug("Redis realtime no disponible", exc_info=True)
-            else:
-                self._redis = False
-        return self._redis if self._redis is not False else None
+        self._publish_timestamps: list[float] = []
 
     def _redis_publish(self, channel: str, message: dict[str, Any]) -> None:
-        client = self._redis_client()
-        if not client:
-            return
         try:
-            client.publish(f"gaman:rt:{channel}", json.dumps(message, default=str))
+            from app.services.redis_client import get_redis_enterprise
+
+            get_redis_enterprise().publish(channel, message)
         except Exception:
             log.debug("Redis publish falló", exc_info=True)
+
+    def _allow_publish(self) -> bool:
+        """Rate limit básico global anti-flood."""
+        now = time.monotonic()
+        self._publish_timestamps = [
+            t for t in self._publish_timestamps if now - t < _PUBLISH_RATE_WINDOW_SEC
+        ]
+        if len(self._publish_timestamps) >= _MAX_PUBLISH_PER_WINDOW:
+            log.warning("Realtime publish rate limit alcanzado")
+            return False
+        self._publish_timestamps.append(now)
+        return True
 
     async def subscribe(self, channel: str) -> asyncio.Queue:
         if channel not in CHANNELS:
             channel = "activity"
-        q: asyncio.Queue = asyncio.Queue(maxsize=128)
-        self._subscribers[channel].append(q)
+        self.cleanup_stale_subscribers(channel)
+        q: asyncio.Queue = asyncio.Queue(maxsize=64)
+        subs = self._subscribers[channel]
+        if len(subs) >= _MAX_SUBSCRIBERS_PER_CHANNEL:
+            subs.pop(0)
+        subs.append(q)
         cached = self._last_payload.get(channel)
         if cached:
-            await q.put(cached)
+            try:
+                await q.put(cached)
+            except asyncio.QueueFull:
+                pass
         return q
 
     def unsubscribe(self, channel: str, queue: asyncio.Queue) -> None:
@@ -73,8 +79,24 @@ class RealtimeHub:
         if queue in subs:
             subs.remove(queue)
 
+    def cleanup_stale_subscribers(self, channel: str | None = None) -> int:
+        """Elimina colas llenas o huérfanas (P69)."""
+        channels = [channel] if channel else list(self._subscribers.keys())
+        removed = 0
+        for ch in channels:
+            kept: list[asyncio.Queue] = []
+            for q in self._subscribers.get(ch, []):
+                if q.qsize() >= q.maxsize:
+                    removed += 1
+                    continue
+                kept.append(q)
+            self._subscribers[ch] = kept
+        return removed
+
     def publish(self, channel: str, event_type: str, payload: dict[str, Any] | None = None) -> None:
         if channel not in CHANNELS:
+            return
+        if not self._allow_publish():
             return
         message = {
             "channel": channel,
@@ -89,6 +111,12 @@ class RealtimeHub:
             except asyncio.QueueFull:
                 pass
         self._redis_publish(channel, message)
+        try:
+            from app.observability.metrics import inc
+
+            inc("realtime_publish_total")
+        except Exception:
+            pass
 
     def get_poll_snapshot(self, channel: str) -> dict[str, Any]:
         return self._last_payload.get(channel) or {

@@ -180,6 +180,43 @@ class PerformanceService:
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def build_summary(self) -> dict[str, Any]:
+        """Resumen P69 para admin/performance/summary."""
+        settings = get_settings()
+        report = self.build_report()
+        with _stats_lock:
+            recent = list(_query_stats[-20:])
+        avg_slow = 0.0
+        slow = report.slow_queries
+        if slow:
+            avg_slow = sum(s["elapsed_ms"] for s in slow) / len(slow)
+        return {
+            "generated_at": report.generated_at,
+            "cache_entries": report.cache_entries,
+            "slow_query_threshold_ms": settings.slow_query_ms,
+            "slow_query_count": len(slow),
+            "slow_query_avg_ms": round(avg_slow, 1),
+            "recent_operations": recent,
+            "recommendations": self._recommendations(slow),
+            "caps": {
+                "activity_feed_max": 80,
+                "jobs_list_max": 100,
+                "search_results_max": 40,
+                "poll_interval_sec": 15,
+            },
+        }
+
+    @staticmethod
+    def _recommendations(slow: list[dict[str, Any]]) -> list[str]:
+        tips: list[str] = []
+        if len(slow) > 10:
+            tips.append("Revisar consultas lentas en dashboard/BI; considerar índices o cache.")
+        if len(slow) > 25:
+            tips.append("Ejecutar alembic upgrade head y revisar /admin/performance.")
+        if not tips:
+            tips.append("Rendimiento dentro de umbrales configurados.")
+        return tips
+
     def optimize_session_reads(self, db: Session, stmt, *, limit: int | None = None):
         """Ejecuta select con límite explícito para evitar cargas masivas."""
         if limit is not None:

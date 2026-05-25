@@ -20,6 +20,7 @@ from app.services.command_palette_service import CommandPaletteService
 from app.services.compliance_service import ComplianceService
 from app.services.notification_center_service import NotificationCenterService
 from app.services.rule_engine import RuleEngine
+from app.services.performance_service import PerformanceService
 from app.services.supervisor_cockpit_service import SupervisorCockpitService
 from app.web.auth import get_current_user, require_login, require_roles
 from app.web.paths import TEMPLATES_DIR
@@ -36,6 +37,20 @@ def get_web_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+@router.get("/admin/performance/summary")
+def performance_summary_api(
+    request: Request,
+    db: Session = Depends(get_web_db),
+):
+    redirect = require_login(request, db)
+    if redirect:
+        return redirect
+    role_redirect = require_roles(request, db, ["admin", "sistemas"])
+    if role_redirect:
+        return role_redirect
+    return JSONResponse(PerformanceService().build_summary())
 
 
 @router.get("/activity")
@@ -55,11 +70,11 @@ def activity_page_enhanced(
     svc = ActivityFeedService()
     if grouped:
         feed = svc.list_feed_grouped(
-            db, limit=60, company_id=cid, entity_type=entity_type, tone=tone, source=source
+            db, limit=80, company_id=cid, entity_type=entity_type, tone=tone, source=source
         )
     else:
         feed = svc.list_feed(
-            db, limit=60, company_id=cid, entity_type=entity_type, tone=tone, source=source
+            db, limit=80, company_id=cid, entity_type=entity_type, tone=tone, source=source
         )
     return templates.TemplateResponse(
         request,

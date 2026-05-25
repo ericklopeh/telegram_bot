@@ -45,17 +45,27 @@ def get_web_db() -> Generator[Session, None, None]:
 
 
 async def _ws_channel(websocket: WebSocket, channel: str) -> None:
+    import asyncio
+
     await websocket.accept()
     hub = get_realtime_hub()
     queue = await hub.subscribe(channel)
+    hub.heartbeat()
     try:
         while True:
-            data = await queue.get()
-            await websocket.send_text(RealtimeService.format_ws_message(data))
+            try:
+                data = await asyncio.wait_for(queue.get(), timeout=30.0)
+                await websocket.send_text(RealtimeService.format_ws_message(data))
+            except asyncio.TimeoutError:
+                ping = hub.heartbeat()
+                await websocket.send_text(RealtimeService.format_ws_message(ping))
     except WebSocketDisconnect:
         pass
+    except Exception as exc:
+        _log.debug("WebSocket %s cerrado: %s", channel, exc)
     finally:
         hub.unsubscribe(channel, queue)
+        hub.cleanup_stale_subscribers(channel)
 
 
 @router.websocket("/ws/activity")

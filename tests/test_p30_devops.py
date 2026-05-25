@@ -147,10 +147,19 @@ def test_staging_compose_has_nginx_and_healthchecks():
     assert "pg_data_staging" in text
 
 
+def test_prod_compose_has_redis_worker_nginx():
+    text = (Path(__file__).parent.parent / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    assert "nginx:" in text
+    assert "redis:" in text
+    assert "worker:" in text
+    assert "gaman_internal" in text
+
+
 def test_nginx_config_proxy_and_upload_timeouts():
     app_conf = (Path(__file__).parent.parent / "nginx" / "app.conf").read_text(encoding="utf-8")
     assert "proxy_read_timeout 300s" in app_conf
     assert "gaman_web" in app_conf
+    assert "/ws/" in app_conf
     nginx_conf = (Path(__file__).parent.parent / "nginx" / "nginx.conf").read_text(encoding="utf-8")
     assert "gzip" in nginx_conf
     assert "client_max_body_size 64m" in nginx_conf

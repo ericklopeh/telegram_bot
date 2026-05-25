@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
 from app.db.session import get_db_session
-from app.services.activity_feed_service import ActivityFeedService
 from app.services.analytics_service import AnalyticsService
 from app.services.enterprise_notification_service import EnterpriseNotificationService
 from app.services.global_search_service import GlobalSearchService
@@ -107,35 +106,7 @@ def jobs_retry(
     return RedirectResponse("/jobs", status_code=302)
 
 
-@router.get("/activity")
-def activity_page(
-    request: Request,
-    db: Session = Depends(get_web_db),
-    entity_type: str | None = None,
-    entity_id: int | None = None,
-):
-    redirect = require_login(request, db)
-    if redirect:
-        return redirect
-    user = get_current_user(request, db)
-    ctx = TenantService().resolve_from_session(user)
-    feed = ActivityFeedService().list_feed(
-        db,
-        limit=50,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        company_id=ctx.company_id,
-    )
-    return templates.TemplateResponse(
-        request,
-        "activity.html",
-        {
-            "usuario": user,
-            "feed": feed,
-            "entity_type": entity_type,
-            "entity_id": entity_id,
-        },
-    )
+# /activity — definido en cohesion.py (feed agrupado P61+)
 
 
 @router.get("/search")

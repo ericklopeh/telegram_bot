@@ -1,0 +1,5 @@
+# Dependencias opcionales producción (P70)
+# pip install -r requirements-web.txt -r requirements-prod.txt
+redis>=5.0.0
+rq>=2.0.0
+sentry-sdk>=2.0.0

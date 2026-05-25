@@ -1,13 +1,14 @@
-"""P37 — cola de jobs en BD con ejecución async opcional (thread / Redis RQ)."""
+"""P37/P69 — cola de jobs en BD con ejecución async, retries e idempotencia."""
 
 from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -25,6 +26,9 @@ JOB_TYPES = (
     "reconciliation_heavy",
     "bi_refresh",
 )
+
+JOB_TIMEOUT_SECONDS = 900
+STALE_RUNNING_MINUTES = 30
 
 
 class JobService:
@@ -106,44 +110,103 @@ class JobService:
         with session_scope() as db:
             try:
                 self.process_job(db, job_id)
+                db.commit()
             except Exception:
+                db.rollback()
                 log.exception("Job %s falló en worker", job_id)
 
     def process_job(self, db: Session, job_id: int) -> BackgroundJob:
         job = db.get(BackgroundJob, job_id)
         if not job:
             raise ValueError(f"Job {job_id} no encontrado")
-        if job.status in ("completed", "running"):
+        if job.status == "completed":
+            return job
+        if job.status == "running":
+            log.info("Job %s ya en ejecución; omitiendo duplicado", job_id)
+            return job
+        if job.status in ("failed", "cancelled"):
+            return job
+        if job.status != "pending":
             return job
 
         job.status = "running"
         job.started_at = datetime.now(timezone.utc)
-        job.attempts += 1
+        job.attempts = (job.attempts or 0) + 1
         db.flush()
 
+        started = time.monotonic()
         try:
             result = run_job_by_type(db, job.job_type, job.payload_json or {})
+            elapsed = time.monotonic() - started
+            if elapsed > JOB_TIMEOUT_SECONDS:
+                raise TimeoutError(f"Job excedió {JOB_TIMEOUT_SECONDS}s")
             job.status = "completed"
             job.result_json = result
             job.error_message = None
+            log.info("Job %s completado en %.1fs", job_id, elapsed)
+            try:
+                from app.observability.metrics import inc
+
+                inc("jobs_processed_total")
+            except Exception:
+                pass
         except Exception as exc:
             job.error_message = str(exc)[:2000]
             if job.attempts >= job.max_attempts:
                 job.status = "failed"
             else:
                 job.status = "pending"
-            log.exception("Job %s error", job_id)
+            log.exception("Job %s error (intento %s)", job_id, job.attempts)
         finally:
             job.finished_at = datetime.now(timezone.utc)
             db.flush()
+            try:
+                from app.services.realtime_service import RealtimeService
+
+                RealtimeService().publish_jobs(
+                    "job_finished",
+                    {"job_id": job_id, "status": job.status},
+                )
+            except Exception:
+                pass
+        return job
+
+    def reconcile_stale_jobs(self, db: Session, *, stale_minutes: int = STALE_RUNNING_MINUTES) -> int:
+        """Resetea jobs 'running' huérfanos (P69)."""
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        stmt = select(BackgroundJob).where(
+            BackgroundJob.status == "running",
+            BackgroundJob.started_at < cutoff,
+        )
+        stale = list(db.scalars(stmt).all())
+        for job in stale:
+            job.status = "pending"
+            job.error_message = (job.error_message or "")[:500] + " [stale reset P69]"
+            job.finished_at = datetime.now(timezone.utc)
+            log.warning("Job %s reset por stale running", job.id)
+        if stale:
+            db.flush()
+        return len(stale)
+
+    def cancel_job(self, db: Session, job_id: int) -> BackgroundJob:
+        job = db.get(BackgroundJob, job_id)
+        if not job:
+            raise ValueError("Job no encontrado")
+        if job.status in ("completed", "failed", "cancelled"):
+            return job
+        job.status = "cancelled"
+        job.finished_at = datetime.now(timezone.utc)
+        job.error_message = "Cancelado por usuario"
+        db.flush()
         return job
 
     def process_pending(self, db: Session, limit: int = 10) -> int:
+        self.reconcile_stale_jobs(db)
         stmt = (
             select(BackgroundJob)
             .where(BackgroundJob.status == "pending")
             .order_by(BackgroundJob.priority.asc(), BackgroundJob.id.asc())
-            .limit(limit)
+            .limit(min(limit, 25))
         )
         jobs = list(db.scalars(stmt).all())
         for job in jobs:
@@ -157,6 +220,7 @@ class JobService:
         status: str | None = None,
         limit: int = 50,
     ) -> list[BackgroundJob]:
+        limit = min(max(1, limit), 100)
         stmt = select(BackgroundJob).order_by(BackgroundJob.id.desc()).limit(limit)
         if status:
             stmt = stmt.where(BackgroundJob.status == status)
@@ -169,9 +233,12 @@ class JobService:
         job = db.get(BackgroundJob, job_id)
         if not job:
             raise ValueError("Job no encontrado")
+        if job.status == "running":
+            raise ValueError("Job aún en ejecución")
         job.status = "pending"
         job.error_message = None
         job.finished_at = None
+        job.started_at = None
         db.flush()
         self._dispatch_async(job.id)
         return job
@@ -184,3 +251,4 @@ def run_rq_worker(job_id: int) -> None:
     svc = JobService()
     with session_scope() as db:
         svc.process_job(db, job_id)
+        db.commit()

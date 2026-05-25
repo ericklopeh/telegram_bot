@@ -1,0 +1,38 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Docker build (web)
+        run: docker build -f Dockerfile.web -t gaman-web:ci .
+
+      - name: Validate compose staging
+        run: docker compose -f docker-compose.staging.yml config -q
+
+      - name: Validate compose prod
+        run: docker compose -f docker-compose.prod.yml config -q
+
+      - name: Install and pytest
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          pip install --upgrade pip
+          pip install -r requirements-web.txt pytest
+        env:
+          TELEGRAM_BOT_TOKEN: ci-token
+          DATABASE_URL: postgresql+psycopg://u:p@localhost/db
+          WEB_SESSION_SECRET: ci-secret-minimum-32-characters-long
+      - run: python -m pytest -q tests/test_p30_devops.py tests/test_p70_production.py
+
+      - name: Deploy note
+        run: |
+          echo "Deploy VPS: ejecutar scripts/deploy_staging.sh en el servidor con .env configurado."

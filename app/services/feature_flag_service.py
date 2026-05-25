@@ -78,6 +78,15 @@ class FeatureFlagService:
             for f in db.scalars(select(FeatureFlag).order_by(FeatureFlag.flag_key)).all()
         ]
 
+    def validate_defaults(self, db: Session) -> list[str]:
+        """P69 — reporta flags críticos deshabilitados."""
+        self.seed_defaults(db)
+        warnings: list[str] = []
+        for key, _, default in DEFAULT_FLAGS:
+            if default and not self.is_enabled(db, flag_key=key):
+                warnings.append(f"{key} deshabilitado (default on)")
+        return warnings
+
     def set_flag(self, db: Session, flag_key: str, enabled: bool) -> FeatureFlag:
         flag = db.scalar(
             select(FeatureFlag).where(

@@ -54,6 +54,9 @@ async def _lifespan(app: FastAPI):
     from app.services.performance_service import install_slow_query_logging
 
     install_slow_query_logging()
+    from app.observability.sentry_init import init_sentry
+
+    init_sentry()
     paths = [getattr(r, "path", None) for r in app.routes]
     paths = [p for p in paths if p]
     _log.warning(
@@ -72,7 +75,7 @@ web_app.add_middleware(
     SessionMiddleware,
     secret_key=settings.web_session_secret,
     same_site="lax",
-    https_only=False,
+    https_only=settings.session_https_only,
 )
 
 
@@ -103,6 +106,21 @@ async def _beta_ui_middleware(request: Request, call_next):
 
 
 @web_app.middleware("http")
+async def _production_rate_limit(request: Request, call_next):
+    from app.web.middleware.production import rate_limit_middleware
+
+    return await rate_limit_middleware(request, call_next)
+
+
+@web_app.middleware("http")
+async def _metrics_middleware(request: Request, call_next):
+    from app.observability.metrics import inc
+
+    inc("http_requests_total")
+    return await call_next(request)
+
+
+@web_app.middleware("http")
 async def _request_id_middleware(request: Request, call_next):
     rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:12]
     set_request_id(rid)
@@ -118,6 +136,8 @@ async def _security_headers_middleware(request: Request, call_next):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if settings.is_production:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
 

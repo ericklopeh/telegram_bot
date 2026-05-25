@@ -109,6 +109,24 @@ class Settings(BaseSettings):
     default_company_id: int = Field(default=1, alias="DEFAULT_COMPANY_ID")
     default_branch_id: int = Field(default=1, alias="DEFAULT_BRANCH_ID")
 
+    # P70 — producción
+    sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
+    metrics_enabled: bool = Field(default=True, alias="METRICS_ENABLED")
+    secure_cookies: bool | None = Field(default=None, alias="SECURE_COOKIES")
+    max_upload_bytes: int = Field(default=128 * 1024 * 1024, alias="MAX_UPLOAD_BYTES")
+    backup_retention_days: int = Field(default=14, alias="BACKUP_RETENTION_DAYS")
+    trusted_proxy: bool = Field(default=False, alias="TRUSTED_PROXY")
+
+    @property
+    def session_https_only(self) -> bool:
+        if self.secure_cookies is not None:
+            return self.secure_cookies
+        return self.environment == "production"
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         return self.database_url.strip().strip('"').strip("'")

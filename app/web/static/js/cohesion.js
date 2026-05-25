@@ -1,14 +1,15 @@
 /**
- * P61-P68 — realtime client, command palette, toasts, live indicator
+ * P61-P69 — realtime client, command palette, toasts, reconnect, polling fallback
  */
 (function () {
     "use strict";
 
     var pollInterval = 15000;
-    var wsUrls = {
-        activity: "/ws/activity",
-        notifications: "/ws/notifications",
-    };
+    var pollBackoff = 15000;
+    var maxPollBackoff = 60000;
+    var wsReconnectDelay = 3000;
+    var wsMaxReconnect = 8;
+    var wsConnections = [];
 
     function showToast(message, tone) {
         var c = document.getElementById("cohToastContainer");
@@ -28,20 +29,31 @@
         }, 4500);
     }
 
+    function setLive(ok) {
+        var dot = document.getElementById("cohLiveDot");
+        if (!dot) return;
+        dot.style.display = "inline-block";
+        dot.style.background = ok ? "#22c55e" : "#94a3b8";
+    }
+
     function pollRealtime() {
-        fetch("/api/realtime/poll?channels=activity,notifications,dashboard,jobs,ops")
+        fetch("/api/realtime/poll?channels=activity,notifications,dashboard,jobs,ops,heartbeat")
             .then(function (r) {
+                if (!r.ok) throw new Error("poll " + r.status);
                 return r.json();
             })
             .then(function (data) {
-                var dot = document.getElementById("cohLiveDot");
-                if (dot) dot.style.display = "inline-block";
+                pollBackoff = pollInterval;
+                setLive(true);
                 if (data.notifications && data.notifications.event === "new") {
                     showToast(data.notifications.payload.title || "Nueva notificación", "info");
                     refreshNotifBadge();
                 }
             })
-            .catch(function () {});
+            .catch(function () {
+                setLive(false);
+                pollBackoff = Math.min(pollBackoff * 1.5, maxPollBackoff);
+            });
     }
 
     function refreshNotifBadge() {
@@ -54,6 +66,43 @@
                 if (badge) badge.setAttribute("data-count", String(data.unread || 0));
             })
             .catch(function () {});
+    }
+
+    function connectWs(url, label) {
+        var attempts = 0;
+        var socket = null;
+
+        function connect() {
+            if (typeof WebSocket === "undefined") return;
+            try {
+                var proto = location.protocol === "https:" ? "wss:" : "ws:";
+                socket = new WebSocket(proto + "//" + location.host + url);
+            } catch (e) {
+                return;
+            }
+            socket.onopen = function () {
+                attempts = 0;
+                setLive(true);
+            };
+            socket.onmessage = function () {
+                setLive(true);
+            };
+            socket.onclose = function () {
+                setLive(false);
+                if (attempts < wsMaxReconnect) {
+                    attempts += 1;
+                    setTimeout(connect, wsReconnectDelay * attempts);
+                }
+            };
+            socket.onerror = function () {
+                try {
+                    socket.close();
+                } catch (e) {}
+            };
+        }
+
+        connect();
+        wsConnections.push({ label: label, reconnect: connect });
     }
 
     function initCommandPalette() {
@@ -103,6 +152,9 @@
                         });
                     });
                     results.innerHTML = html || '<div class="p-3 text-muted">Sin resultados</div>';
+                })
+                .catch(function () {
+                    results.innerHTML = '<div class="p-3 text-muted">Búsqueda no disponible</div>';
                 });
         }
 
@@ -123,12 +175,26 @@
         }
     }
 
-    document.addEventListener("DOMContentLoaded", function () {
+    function schedulePoll() {
         pollRealtime();
-        setInterval(pollRealtime, pollInterval);
+        setTimeout(schedulePoll, pollBackoff);
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        schedulePoll();
         refreshNotifBadge();
         initCommandPalette();
+        connectWs("/ws/notifications", "notifications");
+        connectWs("/ws/activity", "activity");
     });
 
-    window.CohCohesion = { showToast: showToast, pollRealtime: pollRealtime };
+    window.CohCohesion = {
+        showToast: showToast,
+        pollRealtime: pollRealtime,
+        reconnectAll: function () {
+            wsConnections.forEach(function (c) {
+                if (c.reconnect) c.reconnect();
+            });
+        },
+    };
 })();

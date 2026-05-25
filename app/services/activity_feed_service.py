@@ -127,6 +127,7 @@ class ActivityFeedService:
         source: str | None = None,
         event_type: str | None = None,
     ) -> list[dict[str, Any]]:
+        limit = min(max(1, limit), 80)
         cache_key = f"activity:{entity_type}:{entity_id}:{actor_user_id}:{tone}:{source}:{limit}"
         from app.services.performance_service import cache_get, cache_set
 

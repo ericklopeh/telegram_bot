@@ -152,7 +152,42 @@ body.cohesion-ui { background: var(--coh-surface); }
     border-radius: 10px;
 }
 
+/* P69 — unificación global */
+body.cohesion-ui a:not(.btn):not(.nav-link):not(.list-group-item) {
+    color: var(--coh-primary);
+    text-decoration: none;
+}
+body.cohesion-ui a:not(.btn):hover { text-decoration: underline; }
+
+body.cohesion-ui .table {
+    --bs-table-bg: var(--coh-card);
+    border-radius: var(--coh-radius);
+    overflow: hidden;
+}
+body.cohesion-ui .table thead th {
+    background: #eef2f7;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+body.cohesion-ui .btn { border-radius: 8px; }
+body.cohesion-ui .alert { border-radius: var(--coh-radius); border: none; }
+body.cohesion-ui .modal-content { border-radius: var(--coh-radius); }
+body.cohesion-ui h1, body.cohesion-ui .h4 { color: #0f172a; font-weight: 600; }
+
+.coh-loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.6);
+    z-index: 9000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+.coh-loading-overlay.is-active { display: flex; }
+
 @media (max-width: 768px) {
     .coh-wf-pipeline { flex-direction: column; }
     .coh-palette__box { width: 96vw; }
+    body.cohesion-ui .table { font-size: 0.85rem; }
 }
