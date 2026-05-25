@@ -15,7 +15,9 @@ _buckets: dict[str, list[float]] = defaultdict(list)
 
 async def rate_limit_middleware(request: Request, call_next):
     settings = get_settings()
-    if request.url.path.startswith(("/static", "/health", "/ping", "/metrics")):
+    if request.url.path.startswith(
+        ("/static", "/health", "/ping", "/metrics", "/telegram/webhook")
+    ):
         return await call_next(request)
 
     limit = settings.api_rate_limit_per_min

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     telegram_bot_token: str = Field(..., alias="TELEGRAM_BOT_TOKEN")
+    # polling (local/dev) | webhook (producción 24/7 vía servicio web)
+    telegram_run_mode: str = Field(default="polling", alias="TELEGRAM_RUN_MODE")
+    telegram_webhook_base_url: str = Field(default="", alias="WEBHOOK_BASE_URL")
+    telegram_webhook_secret: str = Field(default="", alias="WEBHOOK_SECRET")
     # Si es True, la semana se calcula con la fecha actual en DISPLAY_TIMEZONE (ISO). Si es False, usa SEMANA_ACTIVA.
     semana_activa_auto: bool = Field(default=True, alias="SEMANA_ACTIVA_AUTO")
     semana_activa: str = Field(default="SEM 00-0000", alias="SEMANA_ACTIVA")

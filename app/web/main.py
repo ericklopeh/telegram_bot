@@ -31,6 +31,7 @@ from app.web.routes import (
     erp,
     bi,
     health,
+    telegram_webhook,
     operational,
     sales,
     revision_talon,
@@ -40,6 +41,7 @@ from app.web.routes import (
     platform,
     enterprise_advanced,
     cohesion,
+    rbac_admin,
 )
 from app.api.v1 import api_v1_router
 
@@ -80,6 +82,19 @@ web_app.add_middleware(
 
 
 @web_app.middleware("http")
+async def _rbac_context_middleware(request: Request, call_next):
+    """P81 — flags de permisos en request.state para plantillas."""
+    request.state.rbac_flags = None
+    if "session" in request.scope:
+        session_user = request.session.get("usuario")
+        if session_user:
+            from app.web.rbac_helpers import rbac_flags_for_user
+
+            request.state.rbac_flags = rbac_flags_for_user(session_user)
+    return await call_next(request)
+
+
+@web_app.middleware("http")
 async def _beta_ui_middleware(request: Request, call_next):
     """Badges operativos P34 para admin/sistemas."""
     request.state.beta_ui = None
@@ -87,7 +102,9 @@ async def _beta_ui_middleware(request: Request, call_next):
         return await call_next(request)
     session_user = request.session.get("usuario")
     if session_user and session_user.get("rol") in ("admin", "sistemas"):
-        if request.method == "GET" and not request.url.path.startswith(("/static", "/health", "/ping")):
+        if request.method == "GET" and not request.url.path.startswith(
+            ("/static", "/health", "/ping", "/telegram/webhook")
+        ):
             try:
                 from app.db.session import session_scope
                 from app.services.beta_readiness_service import BetaReadinessService
@@ -177,6 +194,17 @@ from app.services.beta_safe_mode_service import BetaSafeModeService as _BetaSafe
 templates.env.globals["beta_safe_mode"] = lambda: _BetaSafeModeService().is_enabled()
 
 
+def _jinja_rbac_can(request: Request, permission: str) -> bool:
+    """Uso en plantillas: {% if rbac_can(request, 'export') %}."""
+    flags = getattr(request.state, "rbac_flags", None) if request else None
+    if flags is None:
+        return True
+    return bool(flags.get(permission, False))
+
+
+templates.env.globals["rbac_can"] = _jinja_rbac_can
+
+
 @web_app.get("/ping")
 def ping():
     """Comprueba que esta instancia es la app web (sin BD)."""
@@ -258,6 +286,7 @@ def logout(request: Request):
 
 
 web_app.include_router(health.router)
+web_app.include_router(telegram_webhook.router)
 web_app.include_router(dashboard.router)
 web_app.include_router(admin_workflow.router)
 web_app.include_router(cases.router)
@@ -280,6 +309,7 @@ web_app.include_router(beta_readiness.router)
 web_app.include_router(platform.router)
 web_app.include_router(enterprise_advanced.router)
 web_app.include_router(cohesion.router)
+web_app.include_router(rbac_admin.router)
 web_app.include_router(api_v1_router)
 
 # Montar estáticos al final (recomendación FastAPI/Starlette) para no interferir con rutas HTTP.

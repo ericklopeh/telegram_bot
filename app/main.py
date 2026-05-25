@@ -3,28 +3,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram.error import InvalidToken
-from telegram.ext import (
-    ApplicationBuilder,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
 
-from app.bot.handlers import (
-    admin_sessions,
-    compulsa_reminder_job,
-    error_handler,
-    handle_callbacks,
-    handle_files,
-    handle_text,
-    sharepoint_retry_job,
-    sla_watchdog_job,
-    start,
-)
-from app.bot.persistence import PostgresPersistence
-from app.services.notification_service import run_daily_operational_summary_job
+from app.bot.application_factory import build_telegram_application
 from app.config import get_settings
 from app.utils.logging_config import configure_logging
 
@@ -46,37 +26,15 @@ def main() -> None:
                 "TELEGRAM_BOT_TOKEN no parece valido. Configuralo en .env con el token real de BotFather."
             )
 
-        Path(settings.effective_pedidos_path).mkdir(parents=True, exist_ok=True)
-        Path(settings.effective_revisiones_path).mkdir(parents=True, exist_ok=True)
-
-        app = ApplicationBuilder().token(token).persistence(PostgresPersistence()).build()
-        app.add_error_handler(error_handler)
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("sessions", admin_sessions))
-        app.add_handler(CallbackQueryHandler(handle_callbacks))
-        app.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, handle_files))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-        if app.job_queue is not None:
-            interval_seconds = max(settings.compulsa_reminder_minutes, 1) * 60
-            app.job_queue.run_repeating(compulsa_reminder_job, interval=interval_seconds, first=120)
-            retry_interval = max(settings.sharepoint_retry_interval_minutes, 1) * 60
-            app.job_queue.run_repeating(sharepoint_retry_job, interval=retry_interval, first=90)
-            app.job_queue.run_repeating(sla_watchdog_job, interval=300, first=150)
-            if get_settings().operational_alerts_telegram:
-                app.job_queue.run_repeating(
-                    run_daily_operational_summary_job,
-                    interval=21600,
-                    first=300,
-                )
-                log.info("JobQueue: resumen operativo P16 cada 6h (Telegram)")
-            log.info("JobQueue habilitado. Intervalo compulsa=%s segundos", interval_seconds)
-        else:
+        if settings.telegram_run_mode == "webhook":
             log.warning(
-                "JobQueue no disponible. Instala python-telegram-bot[job-queue] "
-                "para habilitar recordatorios automáticos de compulsa."
+                "TELEGRAM_RUN_MODE=webhook: el servicio bot no debe usar polling. "
+                "Use el endpoint POST /telegram/webhook en el servicio web."
             )
+            return
 
-        log.info("Bot corriendo (PostgreSQL + persistencia activa).")
+        app = build_telegram_application()
+        log.info("Bot corriendo (PostgreSQL + persistencia activa, modo polling).")
         log.info("Iniciando run_polling()...")
         app.run_polling()
         log.info("run_polling() finalizo.")
