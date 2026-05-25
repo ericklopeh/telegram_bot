@@ -1,0 +1,68 @@
+{% extends "base_dashboard.html" %}
+{% block title %}ERP — Dashboard{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">ERP — Panel comercial</h1>
+        <div class="d-flex gap-2">
+            <a href="/erp/conciliacion" class="btn btn-sm btn-outline-secondary">Conciliación ERP</a>
+            <form method="post" action="/erp/export/ejecutivo" class="m-0"><button class="btn btn-sm btn-outline-success">Ejecutivo</button></form>
+            <form method="post" action="/erp/export/cobranza" class="m-0"><button class="btn btn-sm btn-outline-warning">Cobranza</button></form>
+            <form method="post" action="/erp/export/vendedores" class="m-0"><button class="btn btn-sm btn-outline-primary">Vendedores</button></form>
+            <form method="post" action="/erp/export/recovery" class="m-0"><button class="btn btn-sm btn-outline-info">Recovery</button></form>
+            <form method="post" action="/erp/export/refin" class="m-0"><button class="btn btn-sm btn-outline-secondary">Refin</button></form>
+        </div>
+    </div>
+
+    {% if request.query_params.get('success') %}
+    <div class="alert alert-success">{{ request.query_params.get('success') }}</div>
+    {% endif %}
+
+    <form method="get" action="/erp/dashboard" class="row g-2 mb-4">
+        <div class="col-md-8"><input type="search" name="q" class="form-control" placeholder="Buscar nombre, RFC, CURP, folio, contrato…" value="{{ search_q }}"></div>
+        <div class="col-md-4"><button class="btn btn-primary w-100">Buscar</button></div>
+    </form>
+    {% if search_hits %}
+    <ul class="list-group mb-4">
+        {% for h in search_hits %}
+        <li class="list-group-item d-flex justify-content-between">
+            <span><strong>{{ h.kind }}</strong> — {{ h.label }}<br><small class="text-muted">{{ h.detail }}</small></span>
+            <a href="{{ h.url }}" class="btn btn-sm btn-link">Ver</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="card"><div class="card-body text-center"><div class="fs-4">{{ kpis.active_contracts }}</div><small>Contratos activos</small></div></div></div>
+        <div class="col-md-3"><div class="card border-primary"><div class="card-body text-center"><div class="fs-4">${{ "%.2f"|format(kpis.total_balance) }}</div><small>Saldo total</small></div></div></div>
+        <div class="col-md-3"><div class="card"><div class="card-body text-center"><div class="fs-4">${{ "%.2f"|format(kpis.total_refinanced) }}</div><small>Refinanciado</small></div></div></div>
+        <div class="col-md-3"><div class="card border-success"><div class="card-body text-center"><div class="fs-4">{{ kpis.total_recovery_pct }}%</div><small>Recovery</small></div></div></div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card"><div class="card-header">Top vendedores (venta)</div>
+            <ul class="list-group list-group-flush">{% for v, m in kpis.top_vendedores %}<li class="list-group-item d-flex justify-content-between"><span>{{ v }}</span><span>${{ "%.2f"|format(m) }}</span></li>{% else %}<li class="list-group-item text-muted">Sin datos</li>{% endfor %}</ul></div>
+        </div>
+        <div class="col-md-6">
+            <div class="card"><div class="card-header">Top secciones</div>
+            <ul class="list-group list-group-flush">{% for s, m in kpis.top_secciones %}<li class="list-group-item d-flex justify-content-between"><span>{{ s }}</span><span>${{ "%.2f"|format(m) }}</span></li>{% else %}<li class="list-group-item text-muted">Sin datos</li>{% endfor %}</ul></div>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">Pagos recientes · Mora: ${{ "%.2f"|format(kpis.overdue_amount) }}</div>
+        <table class="table table-sm mb-0">
+            <thead><tr><th>ID</th><th>Venta</th><th>Monto</th><th>Fecha</th></tr></thead>
+            <tbody>
+                {% for p in recent_payments %}
+                <tr><td>{{ p.id }}</td><td>{{ p.sale_id or '—' }}</td><td>${{ p.amount }}</td><td>{{ p.payment_date or '' }}</td></tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted text-center">Sin pagos</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

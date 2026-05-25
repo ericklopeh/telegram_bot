@@ -2,7 +2,10 @@
 {% block title %}Admin SharePoint{% endblock %}
 {% block content %}
 <div class="container py-4">
-    <h1 class="h4 mb-3">SharePoint / Microsoft Graph</h1>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">SharePoint / Microsoft Graph</h1>
+        <a href="/admin/sharepoint/health" class="btn btn-sm btn-outline-primary">Health check Graph</a>
+    </div>
 
     {% if config_error %}
     <div class="alert alert-warning">{{ config_error }}</div>

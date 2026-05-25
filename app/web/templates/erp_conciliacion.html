@@ -1,0 +1,27 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Conciliación ERP{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between mb-3">
+        <h1 class="h4">Conciliación ERP avanzada</h1>
+        <div class="d-flex gap-2">
+            <a href="/erp/dashboard" class="btn btn-sm btn-outline-secondary">Dashboard ERP</a>
+            <form method="post" action="/erp/conciliacion/export"><button class="btn btn-sm btn-primary">Export Excel</button></form>
+        </div>
+    </div>
+    {% if export_msg %}<div class="alert alert-info">Export guardado: {{ export_msg }}</div>{% endif %}
+    <p class="text-muted">Contratos revisados: {{ report.contracts_checked }} · Pagos: {{ report.payments_checked }}</p>
+    <table class="table table-sm">
+        <thead><tr><th>Severidad</th><th>Código</th><th>Mensaje</th><th>Entidad</th></tr></thead>
+        <tbody>
+            {% for i in report.issues %}
+            <tr class="{% if i.severity == 'error' %}table-danger{% elif i.severity == 'warning' %}table-warning{% endif %}">
+                <td>{{ i.severity }}</td><td>{{ i.code }}</td><td>{{ i.message }}</td><td>{{ i.entity_type }} #{{ i.entity_id or '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted">Sin inconsistencias detectadas.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

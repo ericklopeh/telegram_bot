@@ -22,7 +22,7 @@ _CACHED_DRIVE_ID: str | None = None
 _FOLDER_CACHE: dict[str, str] = {}
 
 
-from app.services.sharepoint_graph_client import GraphUploadError  # noqa: F401 — reexport P25
+from app.services.sharepoint_graph_errors import GraphUploadError  # noqa: F401 — reexport
 
 
 @dataclass

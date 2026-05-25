@@ -14,6 +14,7 @@ from starlette.responses import RedirectResponse
 from app.db.session import get_db_session
 from app.models.case import Case
 from app.services.sharepoint_graph_client import GraphConfigError
+from app.services.sharepoint_health_service import SharePointHealthService
 from app.services.sharepoint_sync_service import SharePointSyncService
 from app.web.auth import ROLES_ADMIN_SISTEMAS, get_current_user, require_login, require_roles
 from app.web.paths import TEMPLATES_DIR
@@ -96,6 +97,24 @@ def retry_case_sharepoint(
     return RedirectResponse(
         url=f"/casos/{case_id}/documentos?success={urllib.parse.quote(msg)}",
         status_code=302,
+    )
+
+
+@router.get("/admin/sharepoint/health")
+def admin_sharepoint_health(request: Request, db: Session = Depends(get_web_db)):
+    redirect = require_login(request, db)
+    if redirect:
+        return redirect
+    denied = require_roles(request, db, ROLES_ADMIN_SISTEMAS)
+    if denied:
+        return denied
+
+    usuario = get_current_user(request, db)
+    report = SharePointHealthService().run_check(db)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_sharepoint_health.html",
+        context={"usuario": usuario, "report": report},
     )
 
 

@@ -20,10 +20,12 @@ from app.web.routes import (
     cases,
     sharepoint,
     admin_workflow,
+    clients,
     commercial_reconciliation,
     commercial_reports,
     commissions,
     dashboard,
+    erp,
     sales,
     revision_talon,
 )
@@ -169,6 +171,8 @@ web_app.include_router(commercial_reports.router)
 web_app.include_router(commercial_reconciliation.router)
 web_app.include_router(commissions.router)
 web_app.include_router(sales.router)
+web_app.include_router(erp.router)
+web_app.include_router(clients.router)
 
 # Montar estáticos al final (recomendación FastAPI/Starlette) para no interferir con rutas HTTP.
 web_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

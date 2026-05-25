@@ -1,4 +1,4 @@
-"""Cliente Microsoft Graph para SharePoint/OneDrive (P25)."""
+"""Cliente Microsoft Graph para SharePoint/OneDrive (P25 / P25.1)."""
 
 from __future__ import annotations
 
@@ -6,36 +6,46 @@ import logging
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
 
 from app.config import Settings, get_settings
+from app.services.sharepoint_graph_errors import (
+    GraphApiError,
+    GraphConfigError,
+    GraphErrorKind,
+    GraphUploadError,
+    graph_request_id,
+    parse_graph_response,
+)
+from app.services.sharepoint_graph_logging import log_graph_operation
+from app.services.sharepoint_graph_retry import RetryPolicy
+
+# Reexport compat P25
+__all__ = [
+    "GraphUploadError",
+    "GraphConfigError",
+    "GraphApiError",
+    "GraphUploadResult",
+    "SharePointGraphClient",
+    "sanitize_graph_name",
+]
 
 log = logging.getLogger(__name__)
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 INVALID_NAME_CHARS = r'[~"#%&*:<>?/\\{|}]'
 SPACE_RE = re.compile(r"\s+")
-_SMALL_FILE_MAX_BYTES = 4 * 1024 * 1024
-_DEFAULT_TIMEOUT = 30
-_UPLOAD_TIMEOUT = 120
-_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
-_MAX_RETRIES = 3
+_GRAPH_CHUNK_UNIT = 320 * 1024  # 320 KiB — requisito Graph upload session
 
 _CACHE_LOCK = threading.Lock()
 _CACHED_SITE_ID: str | None = None
 _CACHED_DRIVE_ID: str | None = None
 _FOLDER_CACHE: dict[str, str] = {}
-
-
-class GraphUploadError(RuntimeError):
-    """Error controlado para fallos de Microsoft Graph."""
-
-
-class GraphConfigError(GraphUploadError):
-    """Configuración Graph incompleta o inválida."""
+_LAST_TOKEN_OK_AT: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +56,14 @@ class GraphUploadResult:
     site_id: str | None
     folder_path: str
     name: str | None
+    size_bytes: int | None = None
+
+
+@dataclass
+class GraphLogContext:
+    document_id: int | None = None
+    case_id: int | None = None
+    upload_attempt: int = 1
 
 
 def sanitize_graph_name(value: str) -> str:
@@ -55,11 +73,23 @@ def sanitize_graph_name(value: str) -> str:
     return cleaned or "SIN_NOMBRE"
 
 
+def aligned_chunk_size(settings: Settings | None = None) -> int:
+    s = settings or get_settings()
+    raw = max(s.ms_graph_upload_chunk_bytes, _GRAPH_CHUNK_UNIT)
+    units = max(1, raw // _GRAPH_CHUNK_UNIT)
+    return units * _GRAPH_CHUNK_UNIT
+
+
 class SharePointGraphClient:
-    """Wrapper Graph con token, carpetas y subida (simple o por sesión)."""
+    """Wrapper Graph: token, carpetas, upload simple/sesión, retries y errores tipados."""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
+        self._retry = RetryPolicy.from_settings(self.settings)
+
+    @property
+    def last_token_ok_at(self) -> datetime | None:
+        return _LAST_TOKEN_OK_AT
 
     def validate_config(self) -> None:
         s = self.settings
@@ -81,8 +111,11 @@ class SharePointGraphClient:
                 f"Faltan variables de entorno para Microsoft Graph: {', '.join(missing)}"
             )
 
-    def get_access_token(self) -> str:
+    def get_access_token(self, *, force_refresh: bool = False) -> str:
+        global _LAST_TOKEN_OK_AT
         self.validate_config()
+        if force_refresh:
+            pass  # client credentials: cada llamada obtiene token nuevo
         token_url = (
             f"https://login.microsoftonline.com/{self.settings.ms_tenant_id}/oauth2/v2.0/token"
         )
@@ -92,17 +125,20 @@ class SharePointGraphClient:
             "scope": "https://graph.microsoft.com/.default",
             "grant_type": "client_credentials",
         }
-        data = self._request(
+        data = self._request_json(
             "POST",
             token_url,
             token=None,
             data_payload=payload,
             expected_status=(200,),
-            timeout=_DEFAULT_TIMEOUT,
+            log_ctx=None,
+            allow_token_retry=False,
         )
         token = data.get("access_token", "")
         if not token:
             raise GraphUploadError("No se recibió access_token de Graph")
+        with _CACHE_LOCK:
+            _LAST_TOKEN_OK_AT = datetime.now(timezone.utc)
         return token
 
     def get_site_id(self, *, token: str | None = None) -> str:
@@ -117,7 +153,7 @@ class SharePointGraphClient:
             raise GraphConfigError("Faltan MS_SITE_HOSTNAME/MS_SITE_PATH")
         tok = token or self.get_access_token()
         endpoint = f"{GRAPH_BASE}/sites/{self.settings.ms_site_hostname}:{self.settings.ms_site_path}"
-        data = self._request("GET", endpoint, token=tok, expected_status=(200,))
+        data = self._request_json("GET", endpoint, token=tok, log_ctx=None)
         site_id = data.get("id", "")
         if not site_id:
             raise GraphUploadError("No se encontró site_id")
@@ -137,8 +173,8 @@ class SharePointGraphClient:
             raise GraphConfigError("Falta MS_DRIVE_NAME")
         tok = token or self.get_access_token()
         site_id = self.get_site_id(token=tok)
-        drives_data = self._request(
-            "GET", f"{GRAPH_BASE}/sites/{site_id}/drives", token=tok, expected_status=(200,)
+        drives_data = self._request_json(
+            "GET", f"{GRAPH_BASE}/sites/{site_id}/drives", token=tok, log_ctx=None
         )
         for drive in drives_data.get("value", []):
             if drive.get("name") == self.settings.ms_drive_name:
@@ -152,7 +188,6 @@ class SharePointGraphClient:
         )
 
     def build_remote_documents_folder(self, case_relative_path: str) -> str:
-        """MS_ROOT_FOLDER + ruta relativa P24 (year/SEM_.../documents)."""
         root = "/".join(
             sanitize_graph_name(p)
             for p in (self.settings.ms_root_folder or "").split("/")
@@ -165,7 +200,53 @@ class SharePointGraphClient:
             raise GraphConfigError("Falta MS_ROOT_FOLDER")
         return f"{root}/{rel}" if rel else root
 
-    def ensure_folder_path(self, drive_id: str, folder_path: str, *, token: str | None = None) -> str:
+    def probe_root_folder_readable(self, drive_id: str, *, token: str | None = None) -> bool:
+        """Comprueba que la primera parte de MS_ROOT_FOLDER existe o es creable."""
+        tok = token or self.get_access_token()
+        parts = [
+            sanitize_graph_name(p)
+            for p in (self.settings.ms_root_folder or "").split("/")
+            if p.strip()
+        ]
+        if not parts:
+            return False
+        endpoint = f"{GRAPH_BASE}/drives/{drive_id}/root:/{parts[0]}"
+        try:
+            self._request_json("GET", endpoint, token=tok, expected_status=(200,), log_ctx=None)
+            return True
+        except GraphApiError as exc:
+            if exc.parsed.kind == GraphErrorKind.NOT_FOUND:
+                return False
+            raise
+
+    def probe_write_permission(
+        self, drive_id: str, folder_path: str, *, token: str | None = None
+    ) -> bool:
+        """Sube un archivo de prueba mínimo (.healthcheck) y lo elimina si es posible."""
+        tok = token or self.get_access_token()
+        probe_name = f".gaman_healthcheck_{int(time.time())}.txt"
+        probe_bytes = b"healthcheck"
+        try:
+            self.ensure_folder_path(drive_id, folder_path, token=tok)
+            result = self._upload_small(
+                drive_id, folder_path, probe_name, probe_bytes, token=tok, log_ctx=None
+            )
+            item_id = result.get("id")
+            if item_id:
+                del_url = f"{GRAPH_BASE}/drives/{drive_id}/items/{item_id}"
+                try:
+                    self._raw_http(
+                        "DELETE", del_url, headers={"Authorization": f"Bearer {tok}"}, log_ctx=None
+                    )
+                except GraphUploadError:
+                    pass
+            return bool(result.get("id"))
+        except GraphUploadError:
+            return False
+
+    def ensure_folder_path(
+        self, drive_id: str, folder_path: str, *, token: str | None = None
+    ) -> str:
         tok = token or self.get_access_token()
         sanitized_parts = [
             sanitize_graph_name(part) for part in folder_path.split("/") if part.strip()
@@ -174,13 +255,14 @@ class SharePointGraphClient:
             raise GraphUploadError("folder_path vacío")
         full_target = "/".join(sanitized_parts)
         with _CACHE_LOCK:
-            cached = _FOLDER_CACHE.get(full_target)
-        if cached:
-            return full_target
+            if _FOLDER_CACHE.get(full_target):
+                return full_target
 
         current_path = sanitized_parts[0]
         root_children_endpoint = f"{GRAPH_BASE}/drives/{drive_id}/root/children"
-        root_children = self._request("GET", root_children_endpoint, token=tok, expected_status=(200,))
+        root_children = self._request_json(
+            "GET", root_children_endpoint, token=tok, log_ctx=None
+        )
         current_id = ""
         for item in root_children.get("value", []):
             if item.get("name") == current_path and "folder" in item:
@@ -192,8 +274,13 @@ class SharePointGraphClient:
                 "folder": {},
                 "@microsoft.graph.conflictBehavior": "replace",
             }
-            created = self._request(
-                "POST", root_children_endpoint, token=tok, json_payload=payload, expected_status=(201,)
+            created = self._request_json(
+                "POST",
+                root_children_endpoint,
+                token=tok,
+                json_payload=payload,
+                expected_status=(200, 201),
+                log_ctx=None,
             )
             current_id = created.get("id", "")
 
@@ -213,17 +300,54 @@ class SharePointGraphClient:
         *,
         drive_id: str | None = None,
         token: str | None = None,
+        log_ctx: GraphLogContext | None = None,
     ) -> GraphUploadResult:
+        started = time.perf_counter()
         self.validate_config()
+        size = len(file_bytes)
         tok = token or self.get_access_token()
         drive = drive_id or self.get_drive_id(token=tok)
         site_id = self.get_site_id(token=tok)
         self.ensure_folder_path(drive, folder_path, token=tok)
         clean_name = sanitize_graph_name(filename)
-        if len(file_bytes) <= _SMALL_FILE_MAX_BYTES:
-            data = self._upload_small(drive, folder_path, clean_name, file_bytes, token=tok)
-        else:
-            data = self._upload_large(drive, folder_path, clean_name, file_bytes, token=tok)
+        raw_threshold = getattr(self.settings, "ms_graph_small_file_max_bytes", 4 * 1024 * 1024)
+        try:
+            threshold = int(raw_threshold)
+        except (TypeError, ValueError):
+            threshold = 4 * 1024 * 1024
+        try:
+            if size <= threshold:
+                data = self._upload_small(
+                    drive, folder_path, clean_name, file_bytes, token=tok, log_ctx=log_ctx
+                )
+            else:
+                data = self._upload_large(
+                    drive, folder_path, clean_name, file_bytes, token=tok, log_ctx=log_ctx
+                )
+            self._validate_upload_commit(data, expected_size=size)
+        except GraphUploadError as exc:
+            elapsed = int((time.perf_counter() - started) * 1000)
+            log_graph_operation(
+                logging.ERROR,
+                "graph_upload_failed",
+                document_id=log_ctx.document_id if log_ctx else None,
+                case_id=log_ctx.case_id if log_ctx else None,
+                upload_attempt=log_ctx.upload_attempt if log_ctx else None,
+                elapsed_ms=elapsed,
+                error_code=getattr(exc, "error_code", None),
+                endpoint=folder_path,
+            )
+            raise
+        elapsed = int((time.perf_counter() - started) * 1000)
+        log_graph_operation(
+            logging.INFO,
+            "graph_upload_ok",
+            document_id=log_ctx.document_id if log_ctx else None,
+            case_id=log_ctx.case_id if log_ctx else None,
+            upload_attempt=log_ctx.upload_attempt if log_ctx else None,
+            elapsed_ms=elapsed,
+            extra={"size_bytes": size, "folder_path": folder_path},
+        )
         clean_folder = "/".join(
             sanitize_graph_name(p) for p in folder_path.split("/") if p.strip()
         )
@@ -234,30 +358,58 @@ class SharePointGraphClient:
             site_id=site_id,
             folder_path=f"{clean_folder}/{clean_name}",
             name=data.get("name"),
+            size_bytes=data.get("size") or size,
         )
 
+    @staticmethod
+    def _validate_upload_commit(data: dict[str, Any], *, expected_size: int) -> None:
+        if not data.get("id"):
+            raise GraphUploadError("Upload incompleto: Graph no devolvió item id")
+        remote_size = data.get("size")
+        if remote_size is not None and int(remote_size) != expected_size:
+            raise GraphUploadError(
+                f"Upload incompleto: tamaño remoto {remote_size} != local {expected_size}"
+            )
+
     def _upload_small(
-        self, drive_id: str, folder_path: str, filename: str, file_bytes: bytes, *, token: str
+        self,
+        drive_id: str,
+        folder_path: str,
+        filename: str,
+        file_bytes: bytes,
+        *,
+        token: str,
+        log_ctx: GraphLogContext | None,
     ) -> dict[str, Any]:
         clean_folder = "/".join(
             sanitize_graph_name(p) for p in folder_path.split("/") if p.strip()
         )
-        endpoint = (
-            f"{GRAPH_BASE}/drives/{drive_id}/root:/{clean_folder}/{filename}:/content"
-        )
+        endpoint = f"{GRAPH_BASE}/drives/{drive_id}/root:/{clean_folder}/{filename}:/content"
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/octet-stream",
         }
-        response = self._raw_request(
-            "PUT", endpoint, headers=headers, data=file_bytes, timeout=_UPLOAD_TIMEOUT
+        response = self._raw_http(
+            "PUT",
+            endpoint,
+            headers=headers,
+            data=file_bytes,
+            timeout=self.settings.ms_graph_upload_timeout,
+            log_ctx=log_ctx,
         )
         if response.status_code not in (200, 201):
-            self._raise_from_response(response, endpoint)
+            self._raise_api_error(response, endpoint)
         return response.json()
 
     def _upload_large(
-        self, drive_id: str, folder_path: str, filename: str, file_bytes: bytes, *, token: str
+        self,
+        drive_id: str,
+        folder_path: str,
+        filename: str,
+        file_bytes: bytes,
+        *,
+        token: str,
+        log_ctx: GraphLogContext | None,
     ) -> dict[str, Any]:
         clean_folder = "/".join(
             sanitize_graph_name(p) for p in folder_path.split("/") if p.strip()
@@ -265,7 +417,7 @@ class SharePointGraphClient:
         session_endpoint = (
             f"{GRAPH_BASE}/drives/{drive_id}/root:/{clean_folder}/{filename}:/createUploadSession"
         )
-        session = self._request(
+        session = self._request_json(
             "POST",
             session_endpoint,
             token=token,
@@ -276,33 +428,95 @@ class SharePointGraphClient:
                 }
             },
             expected_status=(200, 201),
+            log_ctx=log_ctx,
         )
         upload_url = session.get("uploadUrl")
         if not upload_url:
             raise GraphUploadError("createUploadSession sin uploadUrl")
+
         size = len(file_bytes)
-        chunk = 320 * 1024 * 10  # 3.2 MB
+        chunk_size = aligned_chunk_size(self.settings)
         start = 0
         result: dict[str, Any] = {}
+        chunk_index = 0
+
         while start < size:
-            end = min(start + chunk, size) - 1
+            end = min(start + chunk_size, size) - 1
+            chunk_len = end - start + 1
             headers = {
-                "Content-Length": str(end - start + 1),
+                "Content-Length": str(chunk_len),
                 "Content-Range": f"bytes {start}-{end}/{size}",
             }
-            response = requests.put(
-                upload_url,
-                headers=headers,
-                data=file_bytes[start : end + 1],
-                timeout=_UPLOAD_TIMEOUT,
+            response = self._upload_chunk_with_retry(
+                upload_url, headers, file_bytes[start : end + 1], log_ctx=log_ctx, chunk_index=chunk_index
             )
             if response.status_code in (200, 201):
                 result = response.json()
                 break
-            if response.status_code not in (202,):
-                self._raise_from_response(response, upload_url)
+            if response.status_code != 202:
+                self._raise_api_error(response, upload_url)
             start = end + 1
+            chunk_index += 1
+
+        if not result.get("id") and start >= size:
+            raise GraphUploadError("Sesión de upload finalizada sin respuesta de commit")
         return result
+
+    def _upload_chunk_with_retry(
+        self,
+        upload_url: str,
+        headers: dict[str, str],
+        chunk: bytes,
+        *,
+        log_ctx: GraphLogContext | None,
+        chunk_index: int,
+    ) -> requests.Response:
+        policy = self._retry
+        last_response: requests.Response | None = None
+        for attempt in range(policy.max_attempts):
+            try:
+                response = requests.put(
+                    upload_url,
+                    headers=headers,
+                    data=chunk,
+                    timeout=self.settings.ms_graph_upload_timeout,
+                )
+                last_response = response
+                if response.status_code in (200, 201, 202):
+                    return response
+                parsed = parse_graph_response(response)
+                if not parsed.retryable or attempt >= policy.max_attempts - 1:
+                    raise GraphApiError(parsed, endpoint=upload_url)
+                retry_after = None
+                if parsed.status_code == 429:
+                    ra = response.headers.get("Retry-After")
+                    if ra and ra.isdigit():
+                        retry_after = float(ra)
+                log_graph_operation(
+                    logging.WARNING,
+                    "graph_upload_chunk_retry",
+                    document_id=log_ctx.document_id if log_ctx else None,
+                    case_id=log_ctx.case_id if log_ctx else None,
+                    upload_attempt=log_ctx.upload_attempt if log_ctx else None,
+                    error_code=parsed.error_code,
+                    http_status=parsed.status_code,
+                    graph_request_id=parsed.request_id,
+                    extra={"chunk_index": chunk_index, "attempt": attempt + 1},
+                )
+                policy.sleep_before_retry(attempt, retry_after=retry_after)
+            except requests.Timeout as exc:
+                if attempt >= policy.max_attempts - 1:
+                    raise GraphUploadError(
+                        f"Timeout subiendo fragmento {chunk_index}: {exc}"
+                    ) from exc
+                policy.sleep_before_retry(attempt)
+            except requests.RequestException as exc:
+                if attempt >= policy.max_attempts - 1:
+                    raise GraphUploadError(f"Error de red en fragmento: {exc}") from exc
+                policy.sleep_before_retry(attempt)
+        if last_response is not None:
+            self._raise_api_error(last_response, upload_url)
+        raise GraphUploadError("Fallo de upload por sesión sin respuesta")
 
     def _ensure_child_folder(
         self,
@@ -315,22 +529,26 @@ class SharePointGraphClient:
     ) -> tuple[str, str]:
         children_endpoint = f"{GRAPH_BASE}/drives/{drive_id}/items/{parent_id}/children"
         folder_name_clean = sanitize_graph_name(folder_name)
-        children = self._request("GET", children_endpoint, token=token, expected_status=(200,))
+        children = self._request_json("GET", children_endpoint, token=token, log_ctx=None)
         for item in children.get("value", []):
             if item.get("name") == folder_name_clean and "folder" in item:
-                full_path = f"{parent_path}/{folder_name_clean}"
-                return full_path, item.get("id", "")
+                return f"{parent_path}/{folder_name_clean}", item.get("id", "")
         payload = {
             "name": folder_name_clean,
             "folder": {},
             "@microsoft.graph.conflictBehavior": "replace",
         }
-        created = self._request(
-            "POST", children_endpoint, token=token, json_payload=payload, expected_status=(201,)
+        created = self._request_json(
+            "POST",
+            children_endpoint,
+            token=token,
+            json_payload=payload,
+            expected_status=(200, 201),
+            log_ctx=None,
         )
         return f"{parent_path}/{folder_name_clean}", created.get("id", "")
 
-    def _request(
+    def _request_json(
         self,
         method: str,
         endpoint: str,
@@ -338,27 +556,32 @@ class SharePointGraphClient:
         token: str | None,
         json_payload: dict | None = None,
         data_payload: dict | None = None,
-        expected_status: tuple[int, ...] = (200,),
-        timeout: int = _DEFAULT_TIMEOUT,
+        expected_status: tuple[int, ...] | None = None,
+        log_ctx: GraphLogContext | None = None,
+        allow_token_retry: bool = True,
     ) -> dict[str, Any]:
+        expected = expected_status or (200,)
         headers = {"Accept": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        response = self._raw_request(
+        response = self._raw_http(
             method,
             endpoint,
             headers=headers,
             json=json_payload,
             data=data_payload,
-            timeout=timeout,
+            timeout=self.settings.ms_graph_request_timeout,
+            log_ctx=log_ctx,
+            allow_token_retry=allow_token_retry,
+            bearer_token=token,
         )
-        if response.status_code not in expected_status:
-            self._raise_from_response(response, endpoint)
+        if response.status_code not in expected:
+            self._raise_api_error(response, endpoint)
         if not response.text:
             return {}
         return response.json()
 
-    def _raw_request(
+    def _raw_http(
         self,
         method: str,
         endpoint: str,
@@ -366,31 +589,95 @@ class SharePointGraphClient:
         headers: dict | None = None,
         json: dict | None = None,
         data: dict | bytes | None = None,
-        timeout: int = _DEFAULT_TIMEOUT,
+        timeout: int | None = None,
+        log_ctx: GraphLogContext | None = None,
+        allow_token_retry: bool = True,
+        bearer_token: str | None = None,
     ) -> requests.Response:
-        last_exc: Exception | None = None
-        for attempt in range(_MAX_RETRIES):
+        policy = self._retry
+        timeout = timeout or self.settings.ms_graph_request_timeout
+        refreshed_token = False
+
+        for attempt in range(policy.max_attempts):
             try:
                 response = requests.request(
                     method, endpoint, headers=headers, json=json, data=data, timeout=timeout
                 )
-                if response.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
-                    time.sleep(1.5 * (attempt + 1))
-                    continue
-                return response
+            except requests.Timeout as exc:
+                log_graph_operation(
+                    logging.WARNING,
+                    "graph_timeout",
+                    document_id=log_ctx.document_id if log_ctx else None,
+                    case_id=log_ctx.case_id if log_ctx else None,
+                    upload_attempt=log_ctx.upload_attempt if log_ctx else None,
+                    error_code="timeout",
+                    extra={"attempt": attempt + 1},
+                )
+                if attempt >= policy.max_attempts - 1:
+                    raise GraphUploadError(f"Timeout Graph: {exc}") from exc
+                policy.sleep_before_retry(attempt)
+                continue
             except requests.RequestException as exc:
-                last_exc = exc
-                if attempt < _MAX_RETRIES - 1:
-                    time.sleep(1.5 * (attempt + 1))
-                    continue
-                raise GraphUploadError(f"Error de red Graph: {exc}") from exc
-        raise GraphUploadError(f"Error de red Graph: {last_exc}")
+                log_graph_operation(
+                    logging.WARNING,
+                    "graph_network_error",
+                    document_id=log_ctx.document_id if log_ctx else None,
+                    case_id=log_ctx.case_id if log_ctx else None,
+                    error_code="network",
+                    extra={"attempt": attempt + 1},
+                )
+                if attempt >= policy.max_attempts - 1:
+                    raise GraphUploadError(f"Error de red Graph: {exc}") from exc
+                policy.sleep_before_retry(attempt)
+                continue
+
+            if response.status_code == 401 and allow_token_retry and bearer_token and not refreshed_token:
+                refreshed_token = True
+                new_token = self.get_access_token(force_refresh=True)
+                if headers and "Authorization" in headers:
+                    headers = dict(headers)
+                    headers["Authorization"] = f"Bearer {new_token}"
+                log_graph_operation(
+                    logging.INFO,
+                    "graph_token_refreshed",
+                    document_id=log_ctx.document_id if log_ctx else None,
+                    case_id=log_ctx.case_id if log_ctx else None,
+                )
+                continue
+
+            parsed = parse_graph_response(response)
+            if parsed.retryable and attempt < policy.max_attempts - 1:
+                retry_after = None
+                if parsed.status_code == 429:
+                    ra = response.headers.get("Retry-After")
+                    if ra and ra.isdigit():
+                        retry_after = float(ra)
+                log_graph_operation(
+                    logging.WARNING,
+                    "graph_retry",
+                    document_id=log_ctx.document_id if log_ctx else None,
+                    case_id=log_ctx.case_id if log_ctx else None,
+                    graph_request_id=parsed.request_id,
+                    error_code=parsed.error_code,
+                    http_status=parsed.status_code,
+                    upload_attempt=log_ctx.upload_attempt if log_ctx else None,
+                    extra={"attempt": attempt + 1},
+                )
+                policy.sleep_before_retry(attempt, retry_after=retry_after)
+                continue
+            return response
+
+        raise GraphUploadError("Graph: agotados reintentos HTTP")
 
     @staticmethod
-    def _raise_from_response(response: requests.Response, endpoint: str) -> None:
-        body = (response.text or "")[:1500]
-        log.error(
-            "Graph request failed",
-            extra={"endpoint": endpoint, "status_code": response.status_code, "body": body},
+    def _raise_api_error(response: requests.Response, endpoint: str) -> None:
+        parsed = parse_graph_response(response)
+        log_graph_operation(
+            logging.ERROR,
+            "graph_api_error",
+            graph_request_id=parsed.request_id,
+            error_code=parsed.error_code,
+            http_status=parsed.status_code,
+            endpoint=endpoint[:200],
         )
-        raise GraphUploadError(f"Graph API error {response.status_code} on {endpoint}")
+        raise GraphApiError(parsed, endpoint=endpoint)

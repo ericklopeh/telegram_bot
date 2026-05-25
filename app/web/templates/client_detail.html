@@ -1,0 +1,65 @@
+{% extends "base_dashboard.html" %}
+{% block title %}{{ customer.name }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between mb-3">
+        <div>
+            <h1 class="h4">{{ customer.name }}</h1>
+            <p class="text-muted mb-0">RFC {{ customer.rfc or '—' }} · CURP {{ customer.curp or '—' }} · {{ customer.seccion or '' }}</p>
+        </div>
+        <a href="/erp/dashboard" class="btn btn-sm btn-outline-secondary">ERP</a>
+    </div>
+
+    <div class="alert alert-primary">Saldo consolidado: <strong>${{ "%.2f"|format(total_saldo) }}</strong></div>
+
+    <div class="card mb-4">
+        <div class="card-header">Contratos</div>
+        <table class="table table-sm mb-0">
+            <thead><tr><th>ID</th><th>Folio</th><th>Venta</th><th>Pagado</th><th>Saldo</th><th>Recovery</th><th>Estado</th></tr></thead>
+            <tbody>
+                {% for row in contract_rows %}
+                <tr>
+                    <td>{{ row.contract.id }}</td>
+                    <td>{{ row.contract.folio or row.contract.contract_code or '—' }}</td>
+                    <td>${{ "%.2f"|format(row.snapshot.total_sale) }}</td>
+                    <td>${{ "%.2f"|format(row.snapshot.total_paid) }}</td>
+                    <td>${{ "%.2f"|format(row.snapshot.saldo_final) }}</td>
+                    <td>{{ row.snapshot.recovery_pct }}%</td>
+                    <td>{{ row.contract.status }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-muted text-center">Sin contratos</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card"><div class="card-header">Pagos</div>
+            <ul class="list-group list-group-flush small">
+                {% for p in payments %}
+                <li class="list-group-item">${{ p.amount }} — {{ p.payment_date or '' }} (venta {{ p.sale_id or '—' }})</li>
+                {% else %}<li class="list-group-item text-muted">Sin pagos</li>{% endfor %}
+            </ul></div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card"><div class="card-header">Documentos (casos vinculados)</div>
+            <ul class="list-group list-group-flush small">
+                {% for d in documents %}
+                <li class="list-group-item"><a href="/documentos/{{ d.id }}/ver" target="_blank">{{ d.stored_filename }}</a></li>
+                {% else %}<li class="list-group-item text-muted">Sin documentos</li>{% endfor %}
+            </ul></div>
+        </div>
+    </div>
+
+    {% if timelines %}
+    <div class="card mt-4"><div class="card-header">Timeline financiero / casos</div>
+    <ul class="list-group list-group-flush">
+        {% for t in timelines[:25] %}
+        <li class="list-group-item small"><span class="badge {{ t.badge_class }}">{{ t.type_label }}</span> {{ t.description }} <span class="text-muted">{{ t.created_at }}</span></li>
+        {% endfor %}
+    </ul></div>
+    {% endif %}
+</div>
+{% endblock %}

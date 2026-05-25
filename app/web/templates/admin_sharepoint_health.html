@@ -1,0 +1,68 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Health Graph SharePoint{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between mb-3">
+        <h1 class="h4">Health check — Microsoft Graph</h1>
+        <a href="/admin/sharepoint" class="btn btn-sm btn-outline-secondary">Panel SharePoint</a>
+    </div>
+
+    <p class="text-muted small">Verificado: {{ report.checked_at }}</p>
+
+    <div class="card mb-3 {% if report.ok %}border-success{% else %}border-danger{% endif %}">
+        <div class="card-body">
+            <h2 class="h5">Estado global: {% if report.ok %}<span class="text-success">OK</span>{% else %}<span class="text-danger">Con problemas</span>{% endif %}</h2>
+            <ul class="mb-0">
+                <li>Configuración .env: {% if report.config_ok %}✓{% else %}✗{% endif %}</li>
+                <li>Token OAuth: {% if report.token_ok %}✓{% else %}✗{% endif %}
+                    {% if report.last_token_at %}<span class="text-muted small">(último OK: {{ report.last_token_at }})</span>{% endif %}
+                </li>
+                <li>Site: {{ report.site_hostname }}{{ report.site_path }} — ID: <code>{{ report.site_id or '—' }}</code></li>
+                <li>Drive: {{ report.drive_name }} — ID: <code>{{ report.drive_id or '—' }}</code></li>
+                <li>MS_ROOT_FOLDER: <code>{{ report.root_folder }}</code> — lectura: {% if report.root_folder_readable %}✓{% else %}✗{% endif %}, escritura prueba: {% if report.write_probe_ok %}✓{% else %}✗{% endif %}</li>
+            </ul>
+            <p class="small text-muted mt-2 mb-0">{{ report.permissions_hint }}</p>
+            {% if report.errors %}
+            <div class="alert alert-danger mt-3 mb-0">
+                {% for err in report.errors %}<div>{{ err }}</div>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">Errores recientes (timeline)</div>
+                <ul class="list-group list-group-flush small">
+                    {% for e in report.recent_graph_errors %}
+                    <li class="list-group-item">
+                        Caso {{ e.case_id }} · {{ e.event_type }}<br>
+                        <span class="text-muted">{{ e.created_at }}</span><br>
+                        {{ e.message }}
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Sin eventos recientes.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">Uploads fallidos (documents)</div>
+                <ul class="list-group list-group-flush small">
+                    {% for d in report.recent_failed_uploads %}
+                    <li class="list-group-item">
+                        Doc #{{ d.document_id }} · caso {{ d.case_id }} · intentos {{ d.attempts }}<br>
+                        {{ d.filename }}<br>
+                        <span class="text-danger">{{ d.error }}</span>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Ninguno.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

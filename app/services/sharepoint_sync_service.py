@@ -27,9 +27,12 @@ from app.services.case_event_service import (
 from app.services.excel_path_guard import assert_not_excel_master_path
 from app.services.sharepoint_graph_client import (
     GraphConfigError,
+    GraphLogContext,
     GraphUploadError,
     SharePointGraphClient,
 )
+from app.services.sharepoint_graph_errors import GraphApiError
+from app.services.sharepoint_graph_logging import log_graph_operation
 from app.services.sharepoint_retry_queue import enqueue_failed_upload
 
 log = logging.getLogger(__name__)
@@ -106,6 +109,12 @@ class SharePointSyncService:
         )
         db.flush()
 
+        upload_attempt = (doc.upload_attempts or 0) + 1
+        log_ctx = GraphLogContext(
+            document_id=doc.id,
+            case_id=case.id,
+            upload_attempt=upload_attempt,
+        )
         try:
             file_bytes = self._local_file_bytes(doc)
             folder_path = self._remote_folder_for_case(case)
@@ -113,6 +122,7 @@ class SharePointSyncService:
                 folder_path,
                 doc.stored_filename,
                 file_bytes,
+                log_ctx=log_ctx,
             )
             DocumentRepository.set_sharepoint_ok(
                 db,
@@ -139,8 +149,17 @@ class SharePointSyncService:
                 C.UPLOAD_SHAREPOINT_OK,
                 web_url=result.web_url,
             )
-        except (GraphUploadError, GraphConfigError, FileNotFoundError, OSError, ValueError) as exc:
-            err = str(exc)
+        except (GraphApiError, GraphUploadError, GraphConfigError, FileNotFoundError, OSError, ValueError) as exc:
+            err = exc.user_message if isinstance(exc, GraphApiError) else str(exc)
+            log_graph_operation(
+                logging.ERROR,
+                "sharepoint_sync_failed",
+                document_id=doc.id,
+                case_id=case.id,
+                upload_attempt=upload_attempt,
+                error_code=getattr(exc, "error_code", None),
+                graph_request_id=getattr(exc, "request_id", None),
+            )
             DocumentRepository.set_upload_failed(db, document_id, err)
             self._enqueue_retry(doc, case, err)
             self._log_sp(

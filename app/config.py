@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     ms_root_folder: str = Field(default="", alias="MS_ROOT_FOLDER")
     sharepoint_retry_interval_minutes: int = Field(default=5, alias="SHAREPOINT_RETRY_INTERVAL_MINUTES")
     sharepoint_retry_max_attempts: int = Field(default=8, alias="SHAREPOINT_RETRY_MAX_ATTEMPTS")
+    ms_graph_max_retries: int = Field(default=5, alias="MS_GRAPH_MAX_RETRIES")
+    ms_graph_retry_base_seconds: float = Field(default=1.0, alias="MS_GRAPH_RETRY_BASE_SECONDS")
+    ms_graph_upload_chunk_bytes: int = Field(
+        default=10 * 320 * 1024, alias="MS_GRAPH_UPLOAD_CHUNK_BYTES"
+    )
+    ms_graph_request_timeout: int = Field(default=30, alias="MS_GRAPH_REQUEST_TIMEOUT")
+    ms_graph_upload_timeout: int = Field(default=120, alias="MS_GRAPH_UPLOAD_TIMEOUT")
+    ms_graph_small_file_max_bytes: int = Field(
+        default=4 * 1024 * 1024, alias="MS_GRAPH_SMALL_FILE_MAX_BYTES"
+    )
     sla_alert_interval_minutes: int = Field(default=120, alias="SLA_ALERT_INTERVAL_MINUTES")
     sla_revision_minutes: int = Field(default=240, alias="SLA_REVISION_MINUTES")
     sla_autorizacion_minutes: int = Field(default=240, alias="SLA_AUTORIZACION_MINUTES")

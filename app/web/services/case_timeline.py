@@ -59,6 +59,10 @@ from app.services.case_event_service import (
     SHAREPOINT_UPLOAD_OK,
     SHAREPOINT_UPLOAD_FAILED,
     SHAREPOINT_RETRY_REQUESTED,
+    PAYMENT_REGISTERED,
+    REFINANCE_CREATED,
+    BALANCE_ADJUSTED,
+    CONTRACT_CLOSED,
 )
 
 _ICON: dict[str, str] = {
@@ -113,6 +117,10 @@ _ICON: dict[str, str] = {
     SHAREPOINT_UPLOAD_OK: "bi-cloud-check-fill",
     SHAREPOINT_UPLOAD_FAILED: "bi-cloud-slash",
     SHAREPOINT_RETRY_REQUESTED: "bi-arrow-clockwise",
+    PAYMENT_REGISTERED: "bi-credit-card",
+    REFINANCE_CREATED: "bi-arrow-repeat",
+    BALANCE_ADJUSTED: "bi-sliders",
+    CONTRACT_CLOSED: "bi-lock",
 }
 
 _BADGE: dict[str, str] = {
@@ -167,6 +175,10 @@ _BADGE: dict[str, str] = {
     SHAREPOINT_UPLOAD_OK: "bg-success",
     SHAREPOINT_UPLOAD_FAILED: "bg-danger",
     SHAREPOINT_RETRY_REQUESTED: "bg-primary",
+    PAYMENT_REGISTERED: "bg-success",
+    REFINANCE_CREATED: "bg-warning text-dark",
+    BALANCE_ADJUSTED: "bg-info text-dark",
+    CONTRACT_CLOSED: "bg-secondary",
 }
 
 _CERRADOS_PEDIDO = {C.ST_PED_CERRADO, C.ST_PED_RECHAZADO, C.ST_PED_COMPRA}
@@ -224,6 +236,10 @@ _LABEL: dict[str, str] = {
     SHAREPOINT_UPLOAD_OK: "SharePoint sincronizado",
     SHAREPOINT_UPLOAD_FAILED: "SharePoint fallido",
     SHAREPOINT_RETRY_REQUESTED: "Reintento SharePoint solicitado",
+    PAYMENT_REGISTERED: "Pago registrado",
+    REFINANCE_CREATED: "Refinanciamiento creado",
+    BALANCE_ADJUSTED: "Saldo ajustado",
+    CONTRACT_CLOSED: "Contrato cerrado",
 }
 
 

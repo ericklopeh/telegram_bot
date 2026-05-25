@@ -10,6 +10,10 @@ from app.models.operational_alert import OperationalAlert
 from app.models.commission import Commission
 from app.models.sale_capture import SaleCapture
 from app.models.talon_review import TalonReview
+from app.models.erp_customer import ErpCustomer
+from app.models.erp_sale import ErpSale, ErpSaleItem
+from app.models.erp_payment import ErpPayment, ErpInstallment
+from app.models.contract import Contract, ContractInstallment, RefinanceOperation
 
 __all__ = [
     "AuthorizationJob",
@@ -25,4 +29,12 @@ __all__ = [
     "Commission",
     "SaleCapture",
     "TalonReview",
+    "ErpCustomer",
+    "ErpSale",
+    "ErpSaleItem",
+    "ErpPayment",
+    "ErpInstallment",
+    "Contract",
+    "ContractInstallment",
+    "RefinanceOperation",
 ]

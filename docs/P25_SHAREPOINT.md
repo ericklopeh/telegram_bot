@@ -90,6 +90,14 @@ docker compose exec web alembic upgrade head
 docker compose restart web
 ```
 
+## P25.1 — Endurecimiento
+
+- Errores tipados: 401, 403, 404, 409, 429, 5xx, timeout/red.
+- Reintentos con backoff exponencial (`MS_GRAPH_MAX_RETRIES`, `MS_GRAPH_RETRY_BASE_SECONDS`).
+- Health: `GET /admin/sharepoint/health`.
+- Upload session mejorado (chunks configurables, validación de commit/tamaño).
+- Checklist staging: [P25_1_STAGING_CHECKLIST.md](P25_1_STAGING_CHECKLIST.md).
+
 ## Restricciones
 
 - No escribir en `storage/excel_masters/`
