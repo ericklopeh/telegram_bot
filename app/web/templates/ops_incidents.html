@@ -1,0 +1,81 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Incidencias operativas{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Incidencias</h1>
+        <a href="/ops" class="btn btn-sm btn-outline-secondary">Panel operación</a>
+    </div>
+
+    {% if msg %}<div class="alert alert-success">{{ msg }}</div>{% endif %}
+
+    <div class="mb-3">
+        <a href="/ops/incidents" class="btn btn-sm btn-outline-secondary">Todas</a>
+        <a href="/ops/incidents?status=OPEN" class="btn btn-sm btn-outline-danger">Abiertas</a>
+        <a href="/ops/incidents?status=ACKNOWLEDGED" class="btn btn-sm btn-outline-warning">Reconocidas</a>
+        <a href="/ops/incidents?status=RESOLVED" class="btn btn-sm btn-outline-success">Resueltas</a>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Severidad</th>
+                    <th>Estado</th>
+                    <th>Origen</th>
+                    <th>Entidad</th>
+                    <th>Mensaje</th>
+                    <th>Última vez</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inc in incidents %}
+                <tr>
+                    <td>{{ inc.id }}</td>
+                    <td>
+                        {% if inc.severity == 'CRITICAL' %}<span class="badge bg-danger">crítico</span>
+                        {% elif inc.severity == 'ERROR' %}<span class="badge bg-danger">error</span>
+                        {% elif inc.severity == 'WARNING' %}<span class="badge bg-warning text-dark">advertencia</span>
+                        {% else %}<span class="badge bg-secondary">info</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if inc.status == 'OPEN' %}<span class="badge bg-danger">abierto</span>
+                        {% elif inc.status == 'ACKNOWLEDGED' %}<span class="badge bg-warning text-dark">reconocido</span>
+                        {% elif inc.status == 'RESOLVED' %}<span class="badge bg-success">resuelto</span>
+                        {% else %}<span class="badge bg-secondary">{{ inc.status }}</span>{% endif %}
+                    </td>
+                    <td>{{ inc.source }}</td>
+                    <td class="small">{{ inc.entity_type }} #{{ inc.entity_id or '—' }}</td>
+                    <td class="small">{{ inc.message[:120] }}</td>
+                    <td class="small">{{ inc.last_seen_at }}</td>
+                    <td class="text-nowrap">
+                        {% if inc.status in ['OPEN', 'ACKNOWLEDGED'] %}
+                        <form method="post" action="/ops/incidents/{{ inc.id }}/ack" class="d-inline">
+                            <button class="btn btn-sm btn-outline-warning">Ack</button>
+                        </form>
+                        <form method="post" action="/ops/incidents/{{ inc.id }}/resolve" class="d-inline">
+                            {% if beta_safe_mode and inc.severity in ['CRITICAL', 'ERROR'] %}
+                            <input type="text" name="confirm_text" class="form-control form-control-sm d-inline-block mb-1"
+                                   style="width:10rem" placeholder="RESOLVER-{{ inc.id }}" required>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-success"
+                                    onclick="return confirm('¿Marcar incidencia #{{ inc.id }} como resuelta?');">
+                                Resolver
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% if inc.details_json and inc.details_json.url %}
+                        <a href="{{ inc.details_json.url }}" class="btn btn-sm btn-link">Ver</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-muted">Sin incidencias{% if status_filter %} con filtro {{ status_filter }}{% endif %}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

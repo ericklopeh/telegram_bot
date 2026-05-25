@@ -35,6 +35,8 @@ from app.web.routes import (
     sales,
     revision_talon,
     imports,
+    ops,
+    beta_readiness,
 )
 
 _log = logging.getLogger(__name__)
@@ -65,6 +67,32 @@ web_app.add_middleware(
     same_site="lax",
     https_only=False,
 )
+
+
+@web_app.middleware("http")
+async def _beta_ui_middleware(request: Request, call_next):
+    """Badges operativos P34 para admin/sistemas."""
+    request.state.beta_ui = None
+    if "session" not in request.scope:
+        return await call_next(request)
+    session_user = request.session.get("usuario")
+    if session_user and session_user.get("rol") in ("admin", "sistemas"):
+        if request.method == "GET" and not request.url.path.startswith(("/static", "/health", "/ping")):
+            try:
+                from app.db.session import session_scope
+                from app.services.beta_readiness_service import BetaReadinessService
+                from app.services.beta_safe_mode_service import BetaSafeModeService
+
+                with session_scope() as db:
+                    request.state.beta_ui = BetaReadinessService().quick_banner_alerts(db)
+                    request.state.beta_ui["safe_mode"] = BetaSafeModeService().is_enabled()
+            except Exception:
+                request.state.beta_ui = {
+                    "safe_mode": BetaSafeModeService().is_enabled(),
+                    "critical_incidents": 0,
+                    "backup_stale": False,
+                }
+    return await call_next(request)
 
 
 @web_app.middleware("http")
@@ -116,6 +144,10 @@ async def _log_unhandled_errors(request: Request, call_next):
 
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+from app.services.beta_safe_mode_service import BetaSafeModeService as _BetaSafeModeService
+
+templates.env.globals["beta_safe_mode"] = lambda: _BetaSafeModeService().is_enabled()
 
 
 @web_app.get("/ping")
@@ -209,6 +241,8 @@ web_app.include_router(bi.router)
 web_app.include_router(operational.router)
 web_app.include_router(clients.router)
 web_app.include_router(imports.router)
+web_app.include_router(ops.router)
+web_app.include_router(beta_readiness.router)
 
 # Montar estáticos al final (recomendación FastAPI/Starlette) para no interferir con rutas HTTP.
 web_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

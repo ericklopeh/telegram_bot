@@ -64,11 +64,20 @@
 
                 </li>
 
-                <li class="nav-item">
-
-                    <a class="nav-link" href="/operacion/revision">Revisión operativa</a>
-
+                {% if usuario.rol in ['admin', 'sistemas'] %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Operación</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="/ops">Panel ops</a></li>
+                        <li><a class="dropdown-item" href="/ops/incidents">Incidencias</a></li>
+                        <li><a class="dropdown-item" href="/operacion/revision">Revisión operativa</a></li>
+                    </ul>
                 </li>
+                {% else %}
+                <li class="nav-item">
+                    <a class="nav-link" href="/operacion/revision">Revisión operativa</a>
+                </li>
+                {% endif %}
 
                 <li class="nav-item dropdown">
 
@@ -122,6 +131,8 @@
 
                     <ul class="dropdown-menu">
 
+                        <li><a class="dropdown-item" href="/ops">Recovery / Ops</a></li>
+                        <li><a class="dropdown-item" href="/admin/beta-readiness">Beta readiness</a></li>
                         <li><a class="dropdown-item" href="/admin/workflow">Workflow</a></li>
 
                         <li><a class="dropdown-item" href="/admin/sharepoint">SharePoint</a></li>
@@ -164,7 +175,10 @@
 
 {% endif %}
 
-
+{% if request.state and request.state.beta_ui %}
+{% set beta_ui = request.state.beta_ui %}
+{% include "partials/beta_banner.html" %}
+{% endif %}
 
 <main class="{% block main_class %}container py-4{% endblock %}">
 

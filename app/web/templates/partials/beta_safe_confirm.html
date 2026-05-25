@@ -1,0 +1,8 @@
+{% if beta_safe_mode and confirm_phrase %}
+<div class="mb-2 p-2 border border-warning rounded bg-warning-subtle">
+    <label class="form-label small mb-1">Confirmación modo beta — escriba exactamente:</label>
+    <code class="d-block mb-2">{{ confirm_phrase }}</code>
+    <input type="text" name="confirm_text" class="form-control form-control-sm" required
+           placeholder="{{ confirm_phrase }}" autocomplete="off">
+</div>
+{% endif %}

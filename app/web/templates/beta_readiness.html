@@ -1,0 +1,119 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Beta readiness{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h1 class="h4 mb-0">Beta readiness</h1>
+        <div>
+            {% if report.safe_mode %}
+            <span class="badge bg-warning text-dark">BETA_SAFE_MODE activo</span>
+            {% else %}
+            <span class="badge bg-secondary">Modo normal</span>
+            {% endif %}
+            <a href="/ops" class="btn btn-sm btn-outline-secondary">Panel ops</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100 border-{% if report.overall_status == 'ready' %}success{% elif report.overall_status == 'degraded' %}warning{% else %}danger{% endif %}">
+                <div class="card-body text-center">
+                    <div class="fs-3 text-uppercase">{{ report.overall_status }}</div>
+                    <small>Estado general</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <div class="fs-2">{{ report.readiness_score }}%</div>
+                    <small>Readiness score</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <strong>Pendientes ops</strong>
+                    <ul class="small mb-0 mt-2">
+                        <li>Incidencias críticas: {{ report.pending_ops.critical_incidents }}</li>
+                        <li>Imports fallidos: {{ report.pending_ops.imports_failed }}</li>
+                        <li>Exports fallidos: {{ report.pending_ops.exports_failed }}</li>
+                        <li>SharePoint fallidos: {{ report.pending_ops.sharepoint_failed }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if report.critical_errors %}
+    <div class="alert alert-danger">
+        <strong>Errores críticos</strong>
+        <ul class="mb-0">{% for e in report.critical_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if report.warnings %}
+    <div class="alert alert-warning">
+        <strong>Advertencias</strong>
+        <ul class="mb-0">{% for w in report.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <h2 class="h6">Checklist</h2>
+    <table class="table table-sm table-striped mb-4">
+        <thead><tr><th>Check</th><th>Estado</th><th>Detalle</th></tr></thead>
+        <tbody>
+            {% for c in report.checks %}
+            <tr>
+                <td>{{ c.label }}</td>
+                <td>
+                    {% if c.ok %}<span class="badge bg-success">ok</span>
+                    {% elif c.severity == 'error' %}<span class="badge bg-danger">error</span>
+                    {% else %}<span class="badge bg-warning text-dark">warn</span>{% endif %}
+                </td>
+                <td class="small">{{ c.detail }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <h2 class="h6">Últimos backups</h2>
+            <ul class="list-group list-group-flush mb-3">
+                {% for b in report.recent_backups %}
+                <li class="list-group-item small">{{ b.name }} — {{ b.age_hours }}h — {{ b.size_mb }} MB</li>
+                {% else %}
+                <li class="list-group-item text-muted">Sin backups en backups/</li>
+                {% endfor %}
+            </ul>
+            <h2 class="h6">Últimos errores (timeline)</h2>
+            <ul class="list-group list-group-flush">
+                {% for e in report.recent_errors %}
+                <li class="list-group-item small">{{ e.at }} · caso {{ e.case_id }} · {{ e.type }}: {{ e.message }}</li>
+                {% else %}
+                <li class="list-group-item text-muted">Sin errores recientes.</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="col-lg-6">
+            <h2 class="h6">Incidencias abiertas</h2>
+            <ul class="list-group list-group-flush">
+                {% for inc in report.open_incidents %}
+                <li class="list-group-item small d-flex justify-content-between">
+                    <span><span class="badge bg-{% if inc.severity == 'CRITICAL' %}danger{% else %}warning text-dark{% endif %}">{{ inc.severity }}</span> {{ inc.message[:80] }}</span>
+                    <a href="/ops/incidents?status={{ inc.status }}">#{{ inc.id }}</a>
+                </li>
+                {% else %}
+                <li class="list-group-item text-muted">Ninguna incidencia abierta.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <p class="text-muted small mt-4">
+        Documentación: <code>docs/P34_DAILY_OPERATIONS.md</code>, <code>docs/P34_BETA_CHECKLIST.md</code>.
+        Variable <code>BETA_SAFE_MODE=true</code> activa confirmaciones textuales en recovery.
+    </p>
+</div>
+{% endblock %}

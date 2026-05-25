@@ -16,6 +16,7 @@ from app.domain import constants as C
 from app.domain.constants import doc_type_label
 from app.models.case import Case
 from app.models.user import UserRole
+from app.services.beta_safe_mode_service import BetaSafeModeService
 from app.services.case_document_service import CaseDocumentService
 from app.web.auth import (
     ROLES_ADMIN_SISTEMAS,
@@ -29,6 +30,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 log = logging.getLogger(__name__)
 _doc_svc = CaseDocumentService()
+_safe = BetaSafeModeService()
 
 
 def get_web_db() -> Generator[Session, None, None]:
@@ -249,6 +251,7 @@ async def replace_case_document(
     document_id: int,
     request: Request,
     file: UploadFile = File(...),
+    confirm_text: str = Form(""),
     db: Session = Depends(get_web_db),
 ):
     redirect = require_login(request, db)
@@ -263,6 +266,17 @@ async def replace_case_document(
     content = await file.read()
     if not content:
         return _redirect_case(case_id, error="Archivo vacío.")
+
+    ok, err = _safe.require_confirmation(
+        "replace_document",
+        _safe.phrase_replace_document(document_id),
+        confirm_text,
+        entity_type="document",
+        entity_id=document_id,
+        username=usuario.get("username"),
+    )
+    if not ok:
+        return _redirect_case(case_id, error=err or "Confirmación requerida")
 
     try:
         _doc_svc.replace_document(

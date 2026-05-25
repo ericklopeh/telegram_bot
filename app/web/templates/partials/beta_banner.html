@@ -1,0 +1,24 @@
+{% if beta_ui %}
+<div class="border-bottom {% if beta_ui.safe_mode %}border-warning bg-warning-subtle{% else %}border-secondary bg-light{% endif %} py-1 px-2">
+    <div class="container-fluid d-flex flex-wrap align-items-center gap-2 small">
+        {% if beta_ui.safe_mode %}
+        <span class="badge bg-warning text-dark">Modo beta seguro</span>
+        {% endif %}
+        {% if beta_ui.critical_incidents %}
+        <span class="badge bg-danger">Crítico: {{ beta_ui.critical_incidents }} incidencias</span>
+        {% endif %}
+        {% if beta_ui.backup_stale %}
+        <span class="badge bg-warning text-dark">Backup desactualizado</span>
+        {% endif %}
+        {% if beta_ui.sharepoint_degraded %}
+        <span class="badge bg-secondary">SharePoint degradado</span>
+        {% elif beta_ui.sharepoint_failed %}
+        <span class="badge bg-danger">SP fallidos: {{ beta_ui.sharepoint_failed }}</span>
+        {% endif %}
+        {% if beta_ui.imports_pending %}
+        <span class="badge bg-info text-dark">Imports pendientes: {{ beta_ui.imports_pending }}</span>
+        {% endif %}
+        <a href="/admin/beta-readiness" class="ms-auto text-decoration-none">Beta readiness</a>
+    </div>
+</div>
+{% endif %}

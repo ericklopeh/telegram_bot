@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
 from app.models.import_batch import SOURCE_CONTRATOS, SOURCE_VENTAS
+from app.services.beta_safe_mode_service import BetaSafeModeService
 from app.services.excel_import_service import ExcelImportService
 from app.web.auth import ROLES_ADMIN_SISTEMAS, get_current_user, require_login, require_roles
 from app.web.paths import TEMPLATES_DIR
@@ -18,6 +19,7 @@ from app.web.paths import TEMPLATES_DIR
 router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 _svc = ExcelImportService()
+_safe = BetaSafeModeService()
 
 
 def get_web_db() -> Generator[Session, None, None]:
@@ -50,6 +52,7 @@ def imports_list(request: Request, db: Session = Depends(get_web_db)):
             "batches": batches,
             "msg": msg,
             "error": err,
+            "beta_safe_mode": _safe.is_enabled(),
         },
     )
 
@@ -160,7 +163,12 @@ def imports_confirm(request: Request, batch_id: int, db: Session = Depends(get_w
 
 
 @router.post("/imports/{batch_id}/rollback")
-def imports_rollback(request: Request, batch_id: int, db: Session = Depends(get_web_db)):
+def imports_rollback(
+    request: Request,
+    batch_id: int,
+    db: Session = Depends(get_web_db),
+    confirm_text: str = Form(""),
+):
     redirect = require_login(request, db)
     if redirect:
         return redirect
@@ -169,6 +177,14 @@ def imports_rollback(request: Request, batch_id: int, db: Session = Depends(get_
         return denied
 
     usuario = get_current_user(request, db)
+    ok, err = _safe.block_mass_rollback_without_phrase(
+        batch_id,
+        confirm_text,
+        username=usuario.get("username"),
+    )
+    if not ok:
+        return RedirectResponse(url=f"/imports?error={err}", status_code=302)
+
     try:
         _svc.rollback_batch(db, batch_id, username=usuario.get("username"))
         db.commit()

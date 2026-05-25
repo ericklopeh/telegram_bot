@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     app_version: str = Field(default="0.1.0", alias="APP_VERSION")
     storage_root: str = Field(default="/app/storage", alias="STORAGE_ROOT")
     demo_mode: bool = Field(default=False, alias="DEMO_MODE")
+    # P34 — exige confirmaciones textuales y limita acciones masivas destructivas
+    beta_safe_mode: bool = Field(default=False, alias="BETA_SAFE_MODE")
 
     @property
     def sqlalchemy_database_uri(self) -> str:

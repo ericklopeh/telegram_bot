@@ -71,9 +71,15 @@
                         <a href="/imports/{{ b.id }}/errors" class="btn btn-sm btn-outline-warning">Errores</a>
                         {% endif %}
                         {% if b.status == 'confirmed' %}
-                        <form method="post" action="/imports/{{ b.id }}/rollback" class="d-inline"
-                              onsubmit="return confirm('¿Revertir importación del lote {{ b.id }}?');">
-                            <button class="btn btn-sm btn-outline-danger">Revertir</button>
+                        <form method="post" action="/imports/{{ b.id }}/rollback" class="d-inline">
+                            {% if beta_safe_mode %}
+                            <input type="text" name="confirm_text" class="form-control form-control-sm d-inline-block"
+                                   style="width:11rem" placeholder="REVERTIR-LOTE-{{ b.id }}" required>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-danger" type="submit"
+                                    onclick="return confirm('¿Revertir importación del lote {{ b.id }}?');">
+                                Revertir
+                            </button>
                         </form>
                         {% endif %}
                     </td>

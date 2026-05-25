@@ -4,7 +4,7 @@ disable_existing_loggers: false
 
 formatters:
   standard:
-    format: "%(asctime)s %(levelname)s [%(name)s] [%(request_id)s] %(message)s"
+    format: "%(asctime)s %(levelname)s [%(name)s] [%(correlation_id)s] %(message)s action=%(action)s entity=%(entity_type)s:%(entity_id)s result=%(result)s elapsed_ms=%(elapsed_ms)s"
     datefmt: "%Y-%m-%d %H:%M:%S"
   simple:
     format: "%(asctime)s %(levelname)s [%(name)s] %(message)s"
