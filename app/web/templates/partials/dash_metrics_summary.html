@@ -1,0 +1,41 @@
+{% set ds = daily_alert_summary|default({}, true) %}
+<section class="dash-panel dash-panel--summary" aria-label="Resumen del día">
+    <header class="dash-panel__head dash-panel__head--compact">
+        <h3 class="dash-panel__title">Resumen operativo · hoy</h3>
+        <span class="dash-pill dash-pill--info">P16</span>
+    </header>
+    <div class="dash-summary-grid">
+        <div class="dash-summary-pill">
+            <span class="dash-summary-pill__v">{{ ds.nuevos_casos|default(0) }}</span>
+            <span class="dash-summary-pill__l">Nuevos casos</span>
+        </div>
+        <div class="dash-summary-pill dash-summary-pill--ok">
+            <span class="dash-summary-pill__v">{{ ds.listos_autorizacion|default(0) }}</span>
+            <span class="dash-summary-pill__l">Listos aut.</span>
+        </div>
+        <div class="dash-summary-pill">
+            <span class="dash-summary-pill__v">{{ ds.pendientes_ocr|default(0) }}</span>
+            <span class="dash-summary-pill__l">Pend. OCR</span>
+        </div>
+        <div class="dash-summary-pill dash-summary-pill--warn">
+            <span class="dash-summary-pill__v">{{ ds.sharepoint_fallidos|default(0) }}</span>
+            <span class="dash-summary-pill__l">SP fallidos</span>
+        </div>
+        <div class="dash-summary-pill dash-summary-pill--warn">
+            <span class="dash-summary-pill__v">{{ ds.stale_24h|default(0) }}</span>
+            <span class="dash-summary-pill__l">Sin avance 24h</span>
+        </div>
+        <div class="dash-summary-pill">
+            <span class="dash-summary-pill__v">{{ metricas.docs_pending_upload|default(0) }}</span>
+            <span class="dash-summary-pill__l">Pend. upload</span>
+        </div>
+        <div class="dash-summary-pill dash-summary-pill--ok">
+            <span class="dash-summary-pill__v">{{ metricas.compulsa_ok|default(0) }}</span>
+            <span class="dash-summary-pill__l">Compulsa OK</span>
+        </div>
+        <div class="dash-summary-pill">
+            <span class="dash-summary-pill__v">{{ metricas.prep_sin_excel_snte|default(0) }}</span>
+            <span class="dash-summary-pill__l">Sin Excel SNTE</span>
+        </div>
+    </div>
+</section>

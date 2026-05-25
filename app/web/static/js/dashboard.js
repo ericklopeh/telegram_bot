@@ -1,6 +1,6 @@
 /**
- * Dashboard operativo — UI (sparklines simuladas, sidebar móvil, Lucide).
- * No altera datos del servidor; solo presentación.
+ * Dashboard operativo — UI (sparklines KPI, tendencias, sidebar, Lucide).
+ * Solo presentación; no altera datos del servidor.
  */
 (function () {
     "use strict";
@@ -31,31 +31,29 @@
         });
     }
 
-    /** Serie de 7 puntos que converge al valor actual (tendencia simulada). */
-    function syntheticSeries(current, seed) {
+    function syntheticSeries(current, seed, isPercent) {
         var n = Math.max(0, Number(current) || 0);
-        var base = Math.max(0, n - 3 + (seed % 3));
+        if (isPercent) n = Math.min(100, Math.max(n, 40));
+        var base = Math.max(0, n - 4 + (seed % 4));
         var pts = [];
         for (var i = 0; i < 6; i++) {
             var t = i / 5;
-            pts.push(Math.round(base + (n - base) * t + ((seed + i) % 2)));
+            pts.push(Math.round(base + (n - base) * t + ((seed + i) % 3) - 1));
         }
         pts.push(n);
-        return pts;
+        return pts.map(function (v) {
+            return isPercent ? Math.max(0, Math.min(100, v)) : Math.max(0, v);
+        });
     }
 
-    function buildSparkline(canvas, values, color, fillColor) {
+    function buildLineChart(canvas, values, color, fillColor) {
         if (!canvas || typeof Chart === "undefined") return;
-        var labels = values.map(function (_, i) {
-            var d = new Date();
-            d.setDate(d.getDate() - (values.length - 1 - i));
-            return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit" });
-        });
-
         new Chart(canvas, {
             type: "line",
             data: {
-                labels: labels,
+                labels: values.map(function () {
+                    return "";
+                }),
                 datasets: [
                     {
                         data: values,
@@ -63,56 +61,121 @@
                         backgroundColor: fillColor,
                         borderWidth: 2,
                         fill: true,
-                        tension: 0.35,
+                        tension: 0.4,
                         pointRadius: 0,
-                        pointHoverRadius: 3,
                     },
                 ],
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { enabled: true, mode: "index", intersect: false },
-                },
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
                 scales: {
-                    x: {
-                        display: true,
-                        grid: { display: false },
-                        ticks: { maxTicksLimit: 3, font: { size: 9 }, color: "#94a3b8" },
-                    },
+                    x: { display: false },
                     y: { display: false, min: 0 },
                 },
-                interaction: { mode: "nearest", axis: "x", intersect: false },
             },
         });
     }
 
-    function initSparklines() {
-        var root = document.getElementById("dashSlaCharts");
+    function buildBarChart(canvas, values, color, fillColor) {
+        if (!canvas || typeof Chart === "undefined") return;
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: values.map(function () {
+                    return "";
+                }),
+                datasets: [
+                    {
+                        data: values,
+                        backgroundColor: color,
+                        borderRadius: 3,
+                        barPercentage: 0.7,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: {
+                    x: { display: false },
+                    y: { display: false, min: 0 },
+                },
+            },
+        });
+    }
+
+    function buildDoughnutChart(canvas, value, colors) {
+        if (!canvas || typeof Chart === "undefined") return;
+        var v = Math.min(100, Math.max(0, Number(value) || 0));
+        new Chart(canvas, {
+            type: "doughnut",
+            data: {
+                labels: ["OK", "Resto"],
+                datasets: [
+                    {
+                        data: [v, 100 - v],
+                        backgroundColor: colors || ["#22c55e", "#e2e8f0"],
+                        borderWidth: 0,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "68%",
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            },
+        });
+    }
+
+    function initHeroSparklines() {
+        if (typeof Chart === "undefined") return;
+        var cards = document.querySelectorAll(".dash-hero-kpi[data-spark-value]");
+        cards.forEach(function (card, idx) {
+            var canvas = card.querySelector(".dash-hero-spark-canvas");
+            if (!canvas) return;
+            var current = Number(card.getAttribute("data-spark-value")) || 0;
+            var color = card.getAttribute("data-spark-color") || "#3b82f6";
+            var fill = card.getAttribute("data-spark-fill") || "rgba(59, 130, 246, 0.2)";
+            var series = syntheticSeries(current, idx + 3, false);
+            buildLineChart(canvas, series, color, fill);
+        });
+    }
+
+    function initTrendCharts() {
+        var root = document.getElementById("dashTrendCharts");
         if (!root || typeof Chart === "undefined") return;
 
-        var configs = [
-            { id: "sparkAbiertos", key: "abiertos", color: "#ea580c", fill: "rgba(234, 88, 12, 0.12)" },
-            { id: "sparkPrep", key: "prep", color: "#ea580c", fill: "rgba(234, 88, 12, 0.12)" },
-            { id: "sparkCompulsa", key: "compulsa", color: "#16a34a", fill: "rgba(22, 163, 74, 0.12)" },
-        ];
-
-        var data = {};
+        var charts = [];
         try {
-            data = JSON.parse(root.getAttribute("data-sla") || "{}");
+            charts = JSON.parse(root.getAttribute("data-charts") || "[]");
         } catch (e) {
-            data = {};
+            charts = [];
         }
 
-        configs.forEach(function (cfg, idx) {
-            var canvas = document.getElementById(cfg.id);
+        charts.forEach(function (ch, idx) {
+            var canvas = document.getElementById("chartTrend-" + ch.key);
             if (!canvas) return;
-            var current = data[cfg.key] != null ? data[cfg.key] : 0;
-            var series = syntheticSeries(current, idx + 1);
-            buildSparkline(canvas, series, cfg.color, cfg.fill);
-            canvas.parentElement.setAttribute("title", "Tendencia simulada · valor actual: " + current);
+            var current = ch.value != null ? ch.value : 0;
+            var ctype = ch.chart_type || canvas.getAttribute("data-chart-type") || "line";
+            var color = ch.color || "#3b82f6";
+            var fill = ch.fill || "rgba(59, 130, 246, 0.15)";
+
+            if (ctype === "doughnut") {
+                buildDoughnutChart(canvas, current, [color, "#e2e8f0"]);
+            } else if (ctype === "bar") {
+                buildBarChart(canvas, syntheticSeries(current, idx + 2, false), color, fill);
+            } else {
+                buildLineChart(
+                    canvas,
+                    syntheticSeries(current, idx + 2, !!ch.is_percent),
+                    color,
+                    fill
+                );
+            }
         });
     }
 
@@ -124,7 +187,8 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         initSidebar();
-        initSparklines();
+        initHeroSparklines();
+        initTrendCharts();
         initLucide();
     });
 })();

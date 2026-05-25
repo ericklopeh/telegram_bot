@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Analytics avanzados — Sistema Gaman{% endblock %}
+{% block body_class %}enterprise-page{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/enterprise.css">{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3">
+    <h1 class="h4 mb-0">Analytics avanzados</h1>
+    <a href="/analytics/export" class="btn btn-outline-secondary btn-sm">Exportar CSV</a>
+</div>
+<div class="row g-3 mb-4">
+{% for label, count in analytics.aging.items() %}
+<div class="col-md-4"><div class="card p-3"><div class="fw-bold">{{ count }}</div><div class="small text-muted">Aging {{ label }}</div></div></div>
+{% endfor %}
+</div>
+<h2 class="h6">Productividad vendedor</h2>
+<table class="table table-sm card shadow-sm">
+<thead><tr><th>Vendedor</th><th>Ventas</th></tr></thead>
+<tbody>
+{% for v in analytics.vendor_productivity %}
+<tr><td>{{ v.vendedor }}</td><td>{{ v.ventas }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+<h2 class="h6 mt-4">Snapshots históricos</h2>
+<ul class="list-group">
+{% for s in snapshots %}
+<li class="list-group-item">{{ s.period_label }} — {{ s.created_at }}</li>
+{% else %}
+<li class="list-group-item text-muted">Sin snapshots; ejecute job bi_refresh.</li>
+{% endfor %}
+</ul>
+{% endblock %}

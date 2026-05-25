@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Actividad — Sistema Gaman{% endblock %}
+{% block body_class %}enterprise-page{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/enterprise.css">{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Actividad del sistema</h1>
+<ul class="list-group shadow-sm">
+{% for ev in feed %}
+<li class="list-group-item d-flex gap-3 align-items-start">
+    <span class="ent-avatar">{{ ev.initials }}</span>
+    <div class="flex-grow-1">
+        <div class="fw-semibold">{{ ev.title }}</div>
+        <div class="small text-muted">{{ ev.detail or '' }} · {{ ev.actor_label }} · {{ ev.time_ago }}</div>
+    </div>
+    {% if ev.href %}<a href="{{ ev.href }}" class="btn btn-sm btn-outline-primary">Ver</a>{% endif %}
+</li>
+{% else %}
+<li class="list-group-item text-muted">Sin actividad reciente.</li>
+{% endfor %}
+</ul>
+{% endblock %}

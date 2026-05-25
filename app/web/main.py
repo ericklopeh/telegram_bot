@@ -37,7 +37,9 @@ from app.web.routes import (
     imports,
     ops,
     beta_readiness,
+    platform,
 )
+from app.api.v1 import api_v1_router
 
 _log = logging.getLogger(__name__)
 settings = get_settings()
@@ -47,6 +49,9 @@ settings = get_settings()
 async def _lifespan(app: FastAPI):
     setup_logging(settings.log_level)
     ensure_runtime_directories()
+    from app.services.performance_service import install_slow_query_logging
+
+    install_slow_query_logging()
     paths = [getattr(r, "path", None) for r in app.routes]
     paths = [p for p in paths if p]
     _log.warning(
@@ -206,13 +211,20 @@ def login_post(
                 )
             )
 
-        request.session["usuario"] = {
+        from app.services.tenant_service import TenantService
+
+        session_user = {
             "id": usuario.id,
             "user_id": usuario.id,
             "username": usuario.username,
             "nombre": usuario.nombre,
             "rol": getattr(usuario.role, "value", usuario.role),
+            "company_id": getattr(usuario, "company_id", 1),
+            "branch_id": getattr(usuario, "branch_id", 1),
         }
+        TenantService().enrich_login_user(db, session_user)
+        request.session["usuario"] = session_user
+        db.commit()
 
     return RedirectResponse(url="/dashboard", status_code=302)
 
@@ -243,6 +255,8 @@ web_app.include_router(clients.router)
 web_app.include_router(imports.router)
 web_app.include_router(ops.router)
 web_app.include_router(beta_readiness.router)
+web_app.include_router(platform.router)
+web_app.include_router(api_v1_router)
 
 # Montar estáticos al final (recomendación FastAPI/Starlette) para no interferir con rutas HTTP.
 web_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

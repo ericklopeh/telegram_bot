@@ -1,0 +1,26 @@
+{% set kpis = hero_kpis|default([], true) %}
+<section class="dash-hero-section" aria-label="KPIs ejecutivos">
+    <div class="dash-hero-grid">
+        {% for kpi in kpis %}
+        <a href="{{ kpi.href }}" class="dash-hero-kpi dash-hero-kpi--{{ kpi.tone }}"
+           data-spark-value="{{ kpi.spark_value }}"
+           data-spark-color="{{ kpi.spark_color }}"
+           data-spark-fill="{{ kpi.spark_fill }}">
+            <div class="dash-hero-kpi__accent" aria-hidden="true"></div>
+            <div class="dash-hero-kpi__inner">
+                <div class="dash-hero-kpi__content">
+                    <div class="dash-hero-kpi__row">
+                        <span class="dash-hero-kpi__icon"><i data-lucide="{{ kpi.icon }}"></i></span>
+                        <span class="dash-hero-kpi__trend dash-hero-kpi__trend--{{ kpi.trend_dir }}">{{ kpi.trend }}</span>
+                    </div>
+                    <div class="dash-hero-kpi__value">{{ kpi.value }}</div>
+                    <div class="dash-hero-kpi__label">{{ kpi.label }}</div>
+                </div>
+                <div class="dash-hero-kpi__spark" aria-hidden="true">
+                    <canvas class="dash-hero-spark-canvas" height="44"></canvas>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>

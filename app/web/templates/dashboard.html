@@ -18,90 +18,8 @@
 <div class="dash-app">
     <div class="dash-sidebar-backdrop" id="dashSidebarBackdrop" aria-hidden="true"></div>
 
-    <aside class="dash-sidebar" id="dashSidebar" aria-label="Navegación principal">
-        <div class="dash-sidebar__brand">
-            <h1>Gaman</h1>
-            <p>Sistema de autorizaciones</p>
-        </div>
-
-        <nav class="dash-nav">
-            <a href="/dashboard" class="dash-nav__link is-active">
-                <i data-lucide="layout-dashboard"></i>
-                <span>Dashboard</span>
-            </a>
-            <a href="/casos" class="dash-nav__link">
-                <i data-lucide="folder-open"></i>
-                <span>Casos</span>
-            </a>
-            <a href="/casos" class="dash-nav__link" title="Gestión de documentos por caso">
-                <i data-lucide="file-text"></i>
-                <span>Documentos</span>
-            </a>
-            <a href="/autorizaciones/aprobadas" class="dash-nav__link" title="Autorizaciones SNTE generadas">
-                <i data-lucide="badge-check"></i>
-                <span>Autorizaciones</span>
-            </a>
-            <span class="dash-nav__link is-disabled" title="Próximamente">
-                <i data-lucide="scale"></i>
-                <span>Compulsa</span>
-            </span>
-            <a href="/ventas/nueva" class="dash-nav__link" title="Capturar venta">
-                <i data-lucide="plus-circle"></i>
-                <span>Nueva venta</span>
-            </a>
-            <a href="/comisiones" class="dash-nav__link" title="Comisiones por vendedor y QNA">
-                <i data-lucide="wallet"></i>
-                <span>Comisiones</span>
-            </a>
-            <a href="/reportes/comercial" class="dash-nav__link" title="Ventas, contratos y autorizaciones">
-                <i data-lucide="bar-chart-3"></i>
-                <span>Control comercial</span>
-            </a>
-            {% if usuario.rol in ['admin', 'sistemas', 'autorizacion'] %}
-            <a href="/ventas/pendientes" class="dash-nav__link" title="Cola y errores de registro Excel">
-                <i data-lucide="clock"></i>
-                <span>Ventas pendientes</span>
-            </a>
-            <a href="/control/conciliacion" class="dash-nav__link" title="Conciliación BD vs exportaciones">
-                <i data-lucide="git-compare"></i>
-                <span>Conciliación</span>
-            </a>
-            {% endif %}
-            <span class="dash-nav__link is-disabled" title="Próximamente">
-                <i data-lucide="users"></i>
-                <span>Vendedores</span>
-            </span>
-            <span class="dash-nav__link is-disabled" title="Próximamente">
-                <i data-lucide="package"></i>
-                <span>Productos</span>
-            </span>
-            <span class="dash-nav__link is-disabled" title="Próximamente">
-                <i data-lucide="settings"></i>
-                <span>Configuración</span>
-            </span>
-        </nav>
-
-        <div class="dash-sidebar__footer">
-            <div class="dash-p16-badge">
-                <span class="dot" aria-hidden="true"></span>
-                <div>
-                    <strong>Alertas inteligentes</strong><br>
-                    <span>P16 activo</span>
-                </div>
-            </div>
-            <div class="dash-user">
-                <div class="dash-user__avatar">{{ user_initial }}</div>
-                <div>
-                    <div class="dash-user__name">{{ usuario.nombre }}</div>
-                    <div class="dash-user__role">{{ usuario.rol|capitalize }}</div>
-                </div>
-            </div>
-            <a href="/logout" class="dash-nav__link mt-2" style="padding-left:0;">
-                <i data-lucide="log-out"></i>
-                <span>Salir</span>
-            </a>
-        </div>
-    </aside>
+    {% set active_nav = 'dashboard' %}
+    {% include "partials/dash_sidebar_p35.html" %}
 
     <div class="dash-main">
         <header class="dash-topbar">
@@ -110,8 +28,8 @@
                     <i data-lucide="menu"></i>
                 </button>
                 <div class="dash-topbar__title">
-                    <h2>Dashboard operativo</h2>
-                    <p>Métricas del flujo de casos y documentos{% if usuario.rol == 'vendedor' %} · solo tus casos{% endif %}.</p>
+                    <h2>Centro operacional</h2>
+                    <p>Panel ejecutivo · pipeline, alertas y tendencias{% if usuario.rol == 'vendedor' %} · tus casos{% endif %}</p>
                 </div>
             </div>
             <div class="dash-topbar__actions">
@@ -134,193 +52,21 @@
             </div>
         </header>
 
-        <div class="dash-content">
+        <div class="dash-content dash-content--dense">
 
-            {# —— Alertas inteligentes P16 —— #}
-            <section class="dash-card mb-4">
-                <div class="dash-card__header">
-                    <h3><i data-lucide="bell" style="width:18px;height:18px;vertical-align:-3px;"></i> Alertas inteligentes (P16)</h3>
-                    <span class="dash-badge dash-badge--muted">{{ operational_alerts|length }} activa(s)</span>
-                </div>
-                <div class="dash-card__body">
-                    <div class="dash-alerts-panel">
-                        <div>
-                            <p class="dash-section-title">Resumen del día</p>
-                            <ul class="dash-summary-list">
-                                <li>
-                                    <span>Nuevos casos hoy</span>
-                                    <span class="dash-summary-badge dash-summary-badge--blue">{{ ds.nuevos_casos|default(0) }}</span>
-                                </li>
-                                <li>
-                                    <span>Listos para autorización</span>
-                                    <span class="dash-summary-badge dash-summary-badge--green">{{ ds.listos_autorizacion|default(0) }}</span>
-                                </li>
-                                <li>
-                                    <span>Pendientes OCR</span>
-                                    <span class="dash-summary-badge dash-summary-badge--orange">{{ ds.pendientes_ocr|default(0) }}</span>
-                                </li>
-                                <li>
-                                    <span>SharePoint fallidos</span>
-                                    <span class="dash-summary-badge dash-summary-badge--red">{{ ds.sharepoint_fallidos|default(0) }}</span>
-                                </li>
-                                <li>
-                                    <span>Sin avance &gt; 24 h</span>
-                                    <span class="dash-summary-badge dash-summary-badge--red">{{ ds.stale_24h|default(0) }}</span>
-                                </li>
-                            </ul>
-                        </div>
-                        <div>
-                            {% if operational_alerts %}
-                            <div class="dash-alert-cards">
-                                {% for alert in operational_alerts %}
-                                {% set at = alert.alert_type %}
-                                <article class="dash-alert-item">
-                                    <div class="dash-alert-item__icon {% if at == 'sharepoint_failed' %}dash-alert-item__icon--danger{% elif at == 'ready_for_auth' %}dash-alert-item__icon--success{% elif at == 'stale_case' %}dash-alert-item__icon--warning{% elif at == 'low_ocr' %}dash-alert-item__icon--info{% else %}dash-alert-item__icon--warning{% endif %}">
-                                        {% if at == 'sharepoint_failed' %}
-                                        <i data-lucide="cloud-off"></i>
-                                        {% elif at == 'ready_for_auth' %}
-                                        <i data-lucide="check-circle-2"></i>
-                                        {% elif at == 'stale_case' %}
-                                        <i data-lucide="clock"></i>
-                                        {% elif at == 'low_ocr' %}
-                                        <i data-lucide="scan-text"></i>
-                                        {% elif at == 'multiple_regen' %}
-                                        <i data-lucide="refresh-cw"></i>
-                                        {% else %}
-                                        <i data-lucide="alert-circle"></i>
-                                        {% endif %}
-                                    </div>
-                                    <div class="dash-alert-item__body">
-                                        <span class="dash-badge {% if alert.severity == 'danger' %}dash-badge--danger{% elif alert.severity == 'success' %}dash-badge--success{% elif alert.severity == 'info' %}dash-badge--muted{% else %}dash-badge--warning{% endif %}">{{ at }}</span>
-                                        <div class="mt-1 small">{{ alert.message }}</div>
-                                        {% if alert.case_id %}
-                                        <a href="/casos/{{ alert.case_id }}" class="dash-link small">
-                                            {% if alert.case %}{{ alert.case.public_id }}{% else %}Caso #{{ alert.case_id }}{% endif %}
-                                        </a>
-                                        {% endif %}
-                                    </div>
-                                    <span class="dash-alert-item__meta">{{ alert.updated_at.strftime('%d/%m %H:%M') }}</span>
-                                </article>
-                                {% endfor %}
-                            </div>
-                            {% else %}
-                            <p class="text-muted small mb-0">No hay alertas activas. Las reglas revisan casos detenidos, listos para autorización, OCR, SharePoint y regeneraciones.</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </section>
+            {% include "partials/dash_module_tabs.html" %}
+            {% include "partials/dash_hero_kpis.html" %}
+            {% include "partials/dash_workflow_kanban.html" %}
+            {% include "partials/dash_metrics_summary.html" %}
 
-            {# —— KPIs —— #}
-            <div class="dash-kpi-grid mb-4">
-                <a href="/casos" class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--blue"><i data-lucide="briefcase"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.total_abiertos }}</div>
-                    <div class="dash-kpi__label">Casos abiertos</div>
-                    <div class="dash-kpi__hint">Excluye cerrados, rechazados y compra.</div>
-                </a>
-                <a href="/dashboard?filter=prep_aut" class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--orange"><i data-lucide="file-clock"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.pendientes_autorizacion }}</div>
-                    <div class="dash-kpi__label">Pendientes de autorización</div>
-                    <div class="dash-kpi__hint">En preparación de autorización.</div>
-                </a>
-                <div class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--green"><i data-lucide="badge-check"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.autorizaciones_generadas }}</div>
-                    <div class="dash-kpi__label">Autorizaciones generadas</div>
-                    <div class="dash-kpi__hint">Estado «Autorización generada».</div>
-                </div>
-                <a href="/dashboard?filter=compulsa" class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--orange"><i data-lucide="scale"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.pendientes_compulsa }}</div>
-                    <div class="dash-kpi__label">Pendientes de compulsa</div>
-                </a>
-                <div class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--green"><i data-lucide="circle-check-big"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.compulsa_ok }}</div>
-                    <div class="dash-kpi__label">Compulsa OK</div>
-                </div>
-                <a href="/dashboard?filter=sp_failed" class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--red"><i data-lucide="cloud-off"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.docs_upload_failed }}</div>
-                    <div class="dash-kpi__label">UPLOAD_FAILED</div>
-                    <div class="dash-kpi__hint">Documentos activos con error de subida.</div>
-                </a>
-                <a href="/dashboard?filter=sp_pending" class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--cyan"><i data-lucide="cloud-upload"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.docs_pending_upload }}</div>
-                    <div class="dash-kpi__label">PENDING_UPLOAD</div>
-                </a>
-                <a href="/dashboard?filter=missing_docs" class="dash-kpi">
-                    <div class="dash-kpi__icon dash-kpi__icon--purple"><i data-lucide="list-checks"></i></div>
-                    <div class="dash-kpi__value">{{ metricas.pedidos_checklist_incompleto }}</div>
-                    <div class="dash-kpi__label">Checklist incompleto</div>
-                    {% if metricas.pedidos_checklist_incompleto_capped %}
-                    <div class="dash-kpi__hint text-warning">Tope 150 casos; el total real puede ser mayor.</div>
-                    {% else %}
-                    <div class="dash-kpi__hint">Recibido o corrección sin docs obligatorios.</div>
-                    {% endif %}
-                </a>
+            <div class="dash-split">
+                {% include "partials/dash_ops_center.html" %}
+                {% include "partials/dash_trend_charts.html" %}
             </div>
 
-            <div class="row g-3 mb-2">
-                <div class="col-6 col-md-3">
-                    <div class="dash-kpi" style="padding:0.85rem;">
-                        <div class="dash-kpi__icon dash-kpi__icon--slate" style="width:32px;height:32px;margin-bottom:0.5rem;"><i data-lucide="file-spreadsheet" style="width:18px;height:18px;"></i></div>
-                        <div class="dash-kpi__value" style="font-size:1.35rem;">{{ metricas.prep_sin_excel_snte }}</div>
-                        <div class="dash-kpi__label" style="font-size:0.75rem;">Prep. aut. sin Excel SNTE</div>
-                    </div>
-                </div>
-            </div>
+            {% include "partials/dash_recent_activity.html" %}
 
-            {# —— SLA + sparklines —— #}
-            <section class="mb-4">
-                <p class="dash-section-title mb-2">
-                    <i data-lucide="info" style="width:14px;height:14px;"></i>
-                    Tiempo operativo / SLA (indicadores) — basado en <code>updated_at</code> / <code>created_at</code>; umbral 24 h al cargar.
-                </p>
-                <div id="dashSlaCharts" data-sla='{"abiertos":{{ metricas.sla_abiertos_sin_act_24h }},"prep":{{ metricas.sla_prep_aut_mas_24h }},"compulsa":{{ metricas.sla_compulsa_mas_24h }}}'>
-                    <div class="dash-sla-grid">
-                        <div class="dash-card dash-sla-card">
-                            <div class="text-muted small">Abiertos sin actualización &gt; 24 h</div>
-                            <div class="dash-sla-card__value text-warning">{{ metricas.sla_abiertos_sin_act_24h }}</div>
-                            <div class="dash-sla-card__chart"><canvas id="sparkAbiertos" height="56"></canvas></div>
-                        </div>
-                        <div class="dash-card dash-sla-card">
-                            <div class="text-muted small">Prep. autorización &gt; 24 h</div>
-                            <div class="dash-sla-card__value text-warning">{{ metricas.sla_prep_aut_mas_24h }}</div>
-                            <div class="dash-sla-card__chart"><canvas id="sparkPrep" height="56"></canvas></div>
-                        </div>
-                        <div class="dash-card dash-sla-card">
-                            <div class="text-muted small">Compulsa / pend. compulsa &gt; 24 h</div>
-                            <div class="dash-sla-card__value text-success">{{ metricas.sla_compulsa_mas_24h }}</div>
-                            <div class="dash-sla-card__chart"><canvas id="sparkCompulsa" height="56"></canvas></div>
-                        </div>
-                    </div>
-                    <div class="dash-sla-extra">
-                        <div class="dash-card dash-sla-card">
-                            <div class="text-muted small">Edad media casos abiertos</div>
-                            <div class="dash-sla-card__value">
-                                {% if metricas.sla_edad_media_abiertos_horas is not none %}
-                                {{ "%.1f"|format(metricas.sla_edad_media_abiertos_horas) }} h
-                                {% else %}—{% endif %}
-                            </div>
-                        </div>
-                        <div class="dash-card dash-sla-card">
-                            <div class="text-muted small">Caso abierto más antiguo (alta)</div>
-                            <div class="dash-sla-card__value" style="font-size:1.1rem;">
-                                {% if metricas.sla_caso_mas_antiguo_abierto %}
-                                {{ metricas.sla_caso_mas_antiguo_abierto.strftime('%d/%m/%Y %H:%M') }}
-                                {% else %}—{% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {# —— Distribución por estado + errores recientes —— #}
-            <div class="row g-3 mb-4">
+            <div class="row g-3 mb-3">
                 <div class="col-12 col-xl-8">
                     <section class="dash-card h-100">
                         <div class="dash-card__header">

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Generator
 
@@ -19,6 +20,16 @@ from app.services.notification_rule_engine import NotificationRuleEngine
 from app.services.ocr_service import OCR_ELIGIBLE_DOCUMENT_TYPES
 from app.web.auth import get_current_user, require_login, web_should_scope_vendedor_cases
 from app.web.paths import TEMPLATES_DIR
+from app.web.services.dashboard_ui_service import (
+    build_activity_feed,
+    build_hero_kpis,
+    build_ops_alert_rows,
+    build_ops_center_items,
+    build_pipeline_columns,
+    build_recent_cases_rows,
+    build_trend_charts,
+    enrich_pipeline_with_cases,
+)
 from app.web.services.operational_tracking import (
     build_operational_row,
     build_tracking_contexts,
@@ -564,6 +575,8 @@ def dashboard(
 
         logging.getLogger(__name__).exception("Error calculando alertas operativas P16")
 
+    trend_charts = build_trend_charts(metricas, daily_alert_summary)
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -576,5 +589,17 @@ def dashboard(
             "operational_alerts": operational_alerts,
             "daily_alert_summary": daily_alert_summary,
             "estado_buckets": estado_buckets,
+            "hero_kpis": build_hero_kpis(metricas, daily_alert_summary),
+            "pipeline_columns": enrich_pipeline_with_cases(
+                build_pipeline_columns(metricas), pendientes_tabla
+            ),
+            "ops_center_items": build_ops_center_items(metricas, daily_alert_summary),
+            "ops_alert_rows": build_ops_alert_rows(
+                operational_alerts, metricas, daily_alert_summary
+            ),
+            "recent_cases": build_recent_cases_rows(pendientes_tabla),
+            "activity_feed": build_activity_feed(operational_alerts, pendientes_tabla),
+            "trend_charts": trend_charts,
+            "trend_charts_json": json.dumps(trend_charts, ensure_ascii=False),
         },
     )

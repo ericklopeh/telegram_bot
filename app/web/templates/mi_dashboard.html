@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Mi dashboard — Sistema Gaman{% endblock %}
+{% block body_class %}enterprise-page{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/enterprise.css">{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Mi operación</h1>
+<div class="row g-3 mb-4">
+{% for key, val in dash.kpis.items() %}
+<div class="col-6 col-md-4 col-lg-2">
+    <div class="card ent-kpi-card text-center p-3">
+        <div class="fs-4 fw-bold">{{ val }}</div>
+        <div class="small text-muted">{{ key|replace('_',' ') }}</div>
+    </div>
+</div>
+{% endfor %}
+</div>
+<div class="row g-3">
+<div class="col-lg-7">
+    <h2 class="h6">Mis casos</h2>
+    <ul class="list-group">
+    {% for c in dash.cases %}
+    <li class="list-group-item d-flex justify-content-between">
+        <span><strong>{{ c.public_id }}</strong> — {{ c.client_name }}</span>
+        <a href="{{ c.href }}" class="btn btn-sm btn-outline-primary">Ver</a>
+    </li>
+    {% endfor %}
+    </ul>
+</div>
+<div class="col-lg-5">
+    <h2 class="h6">SLA en riesgo</h2>
+    <ul class="list-group list-group-flush">
+    {% for a in dash.sla_alerts %}
+    <li class="list-group-item"><a href="{{ a.href }}">{{ a.public_id }}</a></li>
+    {% else %}
+    <li class="list-group-item text-muted">Sin alertas SLA.</li>
+    {% endfor %}
+    </ul>
+</div>
+</div>
+{% endblock %}

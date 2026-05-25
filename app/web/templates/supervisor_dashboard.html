@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Supervisor — Sistema Gaman{% endblock %}
+{% block body_class %}enterprise-page{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/enterprise.css">{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Dashboard supervisor</h1>
+<div class="row g-3 mb-4">
+{% for key, val in dash.kpis.items() %}
+<div class="col-md-4">
+    <div class="card ent-kpi-card p-3">
+        <div class="fs-3 fw-bold">{{ val }}</div>
+        <div class="text-muted small">{{ key|replace('_',' ') }}</div>
+    </div>
+</div>
+{% endfor %}
+</div>
+<div class="row g-3">
+<div class="col-md-6">
+    <h2 class="h6">Ranking vendedores</h2>
+    <table class="table table-sm">
+        <thead><tr><th>Vendedor</th><th>Casos</th></tr></thead>
+        <tbody>
+        {% for r in dash.seller_ranking %}
+        <tr><td>{{ r.seller }}</td><td>{{ r.cases }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="col-md-6">
+    <h2 class="h6">Casos atorados</h2>
+    <ul class="list-group list-group-flush">
+    {% for c in dash.stuck_cases %}
+    <li class="list-group-item d-flex justify-content-between">
+        <span>{{ c.public_id }} · {{ c.seller }}</span>
+        <a href="{{ c.href }}" class="btn btn-sm btn-outline-danger">Ver</a>
+    </li>
+    {% endfor %}
+    </ul>
+</div>
+</div>
+{% endblock %}

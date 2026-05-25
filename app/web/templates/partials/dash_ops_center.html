@@ -1,0 +1,44 @@
+<section class="dash-panel dash-panel--ops" aria-label="Centro de operaciones">
+    <header class="dash-panel__head">
+        <div>
+            <h3 class="dash-panel__title">Centro de operaciones</h3>
+            <p class="dash-panel__sub">{{ ops_alert_rows|default([], true)|length }} alerta(s) activas</p>
+        </div>
+        <div class="dash-ops-chips">
+            {% for item in ops_center_items|default([], true) %}
+            <a href="{{ item.href }}" class="dash-ops-chip dash-ops-chip--{{ item.severity }}">
+                <span class="dash-ops-chip__n">{{ item.count }}</span>
+                <span>{{ item.title }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </header>
+    <ul class="dash-alert-list">
+        {% for row in ops_alert_rows|default([], true) %}
+        <li class="dash-alert-row dash-alert-row--{{ row.severity_tone }}">
+            <span class="dash-pill dash-pill--{{ row.severity_tone }}">{{ row.severity_label }}</span>
+            <span class="dash-alert-row__type">{{ row.type }}</span>
+            <p class="dash-alert-row__msg" title="{{ row.message }}">{{ row.message }}</p>
+            <span class="dash-alert-row__case">
+                {% if row.case_href %}
+                <a href="{{ row.case_href }}" class="dash-text-link font-monospace">{{ row.case_label }}</a>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+            </span>
+            <span class="dash-alert-row__time">{{ row.time_label }}</span>
+            <span class="dash-alert-row__actions">
+                {% if row.case_href %}
+                <a href="{{ row.case_href }}" class="dash-btn-mini">Ver caso</a>
+                {% else %}
+                <span class="dash-btn-mini dash-btn-mini--disabled">Ver caso</span>
+                {% endif %}
+                <a href="{{ row.recovery_href|default('/ops') }}" class="dash-btn-mini dash-btn-mini--ghost">Recovery</a>
+            </span>
+        </li>
+        {% else %}
+        <li class="dash-alert-row dash-alert-row--empty">
+            <i data-lucide="check-circle-2"></i>
+            <span>Operación estable — sin alertas críticas activas.</span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>

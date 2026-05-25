@@ -1,0 +1,44 @@
+<div class="dash-bottom-grid">
+    <section class="dash-panel" aria-label="Casos recientes">
+        <header class="dash-panel__head dash-panel__head--compact">
+            <h3 class="dash-panel__title">Casos recientes</h3>
+            <a href="/casos" class="dash-text-link">Ver todos</a>
+        </header>
+        <ul class="dash-mini-list">
+            {% for r in recent_cases|default([], true) %}
+            <li class="dash-mini-list__row">
+                <a href="{{ r.href }}" class="dash-mini-list__folio">{{ r.public_id }}</a>
+                <span class="dash-mini-list__main">{{ r.client_name }}</span>
+                <span class="dash-stage-pill dash-stage-pill--{{ r.stage_tone }}">{{ r.stage_label }}</span>
+                <span class="dash-sla-tag dash-sla-tag--{{ r.sla_tone }}">{{ r.sla_badge }}</span>
+                <span class="dash-mini-list__time">{{ r.time_ago }}</span>
+                <a href="{{ r.href }}" class="dash-btn-mini">Ver</a>
+            </li>
+            {% else %}
+            <li class="dash-mini-list__empty">No hay casos en cola operativa.</li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <section class="dash-panel" aria-label="Actividad reciente">
+        <header class="dash-panel__head dash-panel__head--compact">
+            <h3 class="dash-panel__title">Actividad reciente</h3>
+            <span class="dash-pill dash-pill--info">{{ activity_feed|default([], true)|length }} eventos</span>
+        </header>
+        <ul class="dash-timeline">
+            {% for ev in activity_feed|default([], true) %}
+            <li class="dash-timeline__item dash-timeline__item--{{ ev.tone }}">
+                <span class="dash-timeline__icon"><i data-lucide="{{ ev.icon }}"></i></span>
+                <div class="dash-timeline__body">
+                    <div class="dash-timeline__title">{{ ev.title }}</div>
+                    <div class="dash-timeline__detail">{{ ev.detail }}</div>
+                </div>
+                <span class="dash-timeline__time">{{ ev.time }}</span>
+                {% if ev.href %}<a href="{{ ev.href }}" class="dash-btn-mini">Ver</a>{% endif %}
+            </li>
+            {% else %}
+            <li class="dash-timeline__empty">Sin eventos recientes.</li>
+            {% endfor %}
+        </ul>
+    </section>
+</div>

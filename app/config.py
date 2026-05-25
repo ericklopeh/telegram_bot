@@ -93,6 +93,22 @@ class Settings(BaseSettings):
     # P34 — exige confirmaciones textuales y limita acciones masivas destructivas
     beta_safe_mode: bool = Field(default=False, alias="BETA_SAFE_MODE")
 
+    # P36-P45 — plataforma enterprise
+    redis_url: str = Field(default="", alias="REDIS_URL")
+    jobs_async_enabled: bool = Field(default=True, alias="JOBS_ASYNC_ENABLED")
+    slow_query_ms: int = Field(default=500, alias="SLOW_QUERY_MS")
+    cache_ttl_seconds: int = Field(default=60, alias="CACHE_TTL_SECONDS")
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_user: str = Field(default="", alias="SMTP_USER")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    notification_email_from: str = Field(default="", alias="NOTIFICATION_EMAIL_FROM")
+    notification_webhook_url: str = Field(default="", alias="NOTIFICATION_WEBHOOK_URL")
+    notification_slack_webhook: str = Field(default="", alias="NOTIFICATION_SLACK_WEBHOOK")
+    api_rate_limit_per_min: int = Field(default=120, alias="API_RATE_LIMIT_PER_MIN")
+    default_company_id: int = Field(default=1, alias="DEFAULT_COMPANY_ID")
+    default_branch_id: int = Field(default=1, alias="DEFAULT_BRANCH_ID")
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         return self.database_url.strip().strip('"').strip("'")

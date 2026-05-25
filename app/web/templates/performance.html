@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Performance — Sistema Gaman{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Performance &amp; scaling (P36)</h1>
+<p class="text-muted small">Generado: {{ report.generated_at }}</p>
+<p>Entradas en cache: <strong>{{ report.cache_entries }}</strong></p>
+<h2 class="h6">Consultas / operaciones lentas</h2>
+<pre class="bg-dark text-light p-3 small" style="max-height:400px;overflow:auto">{{ report.slow_queries | tojson(indent=2) }}</pre>
+{% endblock %}

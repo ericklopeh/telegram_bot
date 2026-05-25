@@ -1,0 +1,59 @@
+<section class="dash-panel dash-panel--pipeline" aria-label="Pipeline operacional">
+    <header class="dash-panel__head dash-panel__head--pipeline">
+        <div>
+            <h3 class="dash-panel__title">Pipeline operacional</h3>
+            <p class="dash-panel__sub">Flujo en vivo · máx. 3 casos por etapa</p>
+        </div>
+        <div class="dash-pipeline-flow" aria-hidden="true">
+            <span>PREP AUT</span><i data-lucide="chevron-right"></i>
+            <span>DOCS</span><i data-lucide="chevron-right"></i>
+            <span>COMPULSA</span><i data-lucide="chevron-right"></i>
+            <span>SP</span><i data-lucide="chevron-right"></i>
+            <span>REGISTRO</span><i data-lucide="chevron-right"></i>
+            <span>COMISIÓN</span>
+        </div>
+        <a href="/casos" class="dash-btn-ghost btn-sm">Todos</a>
+    </header>
+    <div class="dash-kanban-board">
+        {% for col in pipeline_columns|default([], true) %}
+        <div class="dash-kanban-col dash-kanban-col--{{ col.tone }}">
+            <div class="dash-kanban-col__head">
+                <div class="dash-kanban-col__head-left">
+                    <i data-lucide="{{ col.icon }}"></i>
+                    <span class="dash-kanban-col__name">{{ col.short_label }}</span>
+                </div>
+                <span class="dash-kanban-col__count">{{ col.count }}</span>
+            </div>
+            <div class="dash-kanban-col__meta">
+                {% if col.critical_count > 0 %}
+                <span class="dash-pill dash-pill--danger">{{ col.critical_count }} crít.</span>
+                {% elif col.sla_count > 0 %}
+                <span class="dash-pill dash-pill--warn">SLA {{ col.sla_count }}</span>
+                {% else %}
+                <span class="dash-pill dash-pill--ok">Al día</span>
+                {% endif %}
+                <span class="dash-kanban-col__hint">{{ col.states_hint }}</span>
+            </div>
+            <ul class="dash-kanban-col__cases">
+                {% for pc in col.recent_cases[:3] %}
+                <li>
+                    <a href="{{ pc.href }}" class="dash-kanban-case">
+                        <div class="dash-kanban-case__top">
+                            <span class="dash-kanban-case__id">{{ pc.public_id }}</span>
+                            <span class="dash-sla-tag dash-sla-tag--{{ pc.sla_tone }}">{{ pc.sla_badge }}</span>
+                        </div>
+                        <span class="dash-kanban-case__client">{{ pc.client_name }}</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="dash-kanban-col__empty">
+                    <i data-lucide="inbox"></i>
+                    <span>Sin casos</span>
+                </li>
+                {% endfor %}
+            </ul>
+            <a href="{{ col.href }}" class="dash-kanban-col__cta">Ver todos →</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>

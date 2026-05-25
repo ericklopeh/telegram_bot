@@ -1,0 +1,104 @@
+{# Sidebar P35 — navegación agrupada (reutilizable) #}
+<aside class="dash-sidebar" id="dashSidebar" aria-label="Navegación principal">
+    <div class="dash-sidebar__brand">
+        <h1>Gaman</h1>
+        <p>Centro operacional</p>
+    </div>
+
+    <nav class="dash-nav">
+        <p class="dash-nav__group">Principal</p>
+        <a href="/dashboard" class="dash-nav__link {% if active_nav == 'dashboard' %}is-active{% endif %}">
+            <i data-lucide="layout-dashboard"></i><span>Dashboard</span>
+        </a>
+        <a href="/casos" class="dash-nav__link {% if active_nav == 'casos' %}is-active{% endif %}">
+            <i data-lucide="folder-kanban"></i><span>Casos</span>
+        </a>
+        <a href="/operacion/revision" class="dash-nav__link">
+            <i data-lucide="scan-search"></i><span>Revisión operativa</span>
+        </a>
+
+        <p class="dash-nav__group">Operación</p>
+        <a href="/ventas/nueva" class="dash-nav__link">
+            <i data-lucide="plus-circle"></i><span>Nueva venta</span>
+        </a>
+        <a href="/ventas/pendientes" class="dash-nav__link">
+            <i data-lucide="clock"></i><span>Ventas pendientes</span>
+        </a>
+        <a href="/comisiones" class="dash-nav__link">
+            <i data-lucide="wallet"></i><span>Comisiones</span>
+        </a>
+        <a href="/control/conciliacion" class="dash-nav__link">
+            <i data-lucide="git-compare"></i><span>Conciliación</span>
+        </a>
+        <a href="/reportes/comercial" class="dash-nav__link">
+            <i data-lucide="bar-chart-3"></i><span>Control comercial</span>
+        </a>
+
+        <p class="dash-nav__group">ERP</p>
+        <a href="/erp/dashboard" class="dash-nav__link">
+            <i data-lucide="building-2"></i><span>ERP</span>
+        </a>
+        <a href="/erp/conciliacion" class="dash-nav__link">
+            <i data-lucide="landmark"></i><span>Conciliación ERP</span>
+        </a>
+
+        <p class="dash-nav__group">BI</p>
+        <a href="/bi/dashboard" class="dash-nav__link">
+            <i data-lucide="line-chart"></i><span>BI Dashboard</span>
+        </a>
+        <a href="/bi/reportes" class="dash-nav__link">
+            <i data-lucide="pie-chart"></i><span>Reportes BI</span>
+        </a>
+
+        <p class="dash-nav__group">Recovery</p>
+        <a href="/ops" class="dash-nav__link">
+            <i data-lucide="life-buoy"></i><span>Panel ops</span>
+            {% if request.state and request.state.beta_ui and request.state.beta_ui.critical_incidents %}
+            <span class="dash-nav__badge">{{ request.state.beta_ui.critical_incidents }}</span>
+            {% endif %}
+        </a>
+        <a href="/ops/incidents" class="dash-nav__link">
+            <i data-lucide="alert-octagon"></i><span>Incidencias</span>
+        </a>
+        <a href="/imports" class="dash-nav__link">
+            <i data-lucide="file-up"></i><span>Imports Excel</span>
+        </a>
+
+        {% if usuario.rol in ['admin', 'sistemas'] %}
+        <p class="dash-nav__group">Administración</p>
+        <a href="/admin/beta-readiness" class="dash-nav__link">
+            <i data-lucide="shield-check"></i><span>Beta readiness</span>
+        </a>
+        <a href="/admin/workflow" class="dash-nav__link">
+            <i data-lucide="git-branch"></i><span>Workflow</span>
+        </a>
+        <a href="/autorizaciones/aprobadas" class="dash-nav__link">
+            <i data-lucide="badge-check"></i><span>Autorizaciones</span>
+        </a>
+        {% endif %}
+    </nav>
+
+    <div class="dash-sidebar__footer">
+        {% if request.state and request.state.beta_ui and request.state.beta_ui.safe_mode %}
+        <div class="dash-p16-badge" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fcd34d;">
+            <span class="dot" style="background:#f59e0b;box-shadow:0 0 8px #f59e0b;"></span>
+            <div><strong>Modo beta seguro</strong><br><span>Confirmaciones activas</span></div>
+        </div>
+        {% else %}
+        <div class="dash-p16-badge">
+            <span class="dot" aria-hidden="true"></span>
+            <div><strong>Operación activa</strong><br><span>P35 UI</span></div>
+        </div>
+        {% endif %}
+        <div class="dash-user">
+            <div class="dash-user__avatar">{{ user_initial }}</div>
+            <div>
+                <div class="dash-user__name">{{ usuario.nombre }}</div>
+                <div class="dash-user__role">{{ usuario.rol|capitalize }}</div>
+            </div>
+        </div>
+        <a href="/logout" class="dash-nav__link mt-2" style="padding-left:0;">
+            <i data-lucide="log-out"></i><span>Salir</span>
+        </a>
+    </div>
+</aside>

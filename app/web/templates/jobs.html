@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Jobs en background — Sistema Gaman{% endblock %}
+{% block body_class %}enterprise-page{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/enterprise.css">{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Cola de trabajos</h1>
+    <form method="post" action="/jobs/enqueue" class="d-flex gap-2">
+        <select name="job_type" class="form-select form-select-sm">
+            {% for jt in job_types %}
+            <option value="{{ jt }}">{{ jt }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Encolar</button>
+    </form>
+</div>
+<div class="table-responsive card shadow-sm">
+    <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>ID</th><th>Tipo</th><th>Estado</th><th>Intentos</th><th>Creado</th><th></th></tr></thead>
+        <tbody>
+        {% for j in jobs %}
+        <tr>
+            <td>{{ j.id }}</td>
+            <td><code>{{ j.job_type }}</code></td>
+            <td><span class="badge bg-secondary">{{ j.status }}</span></td>
+            <td>{{ j.attempts }}/{{ j.max_attempts }}</td>
+            <td>{{ j.created_at }}</td>
+            <td>
+                {% if j.status in ['failed', 'completed'] %}
+                <form method="post" action="/jobs/{{ j.id }}/retry" class="d-inline">
+                    <button class="btn btn-outline-secondary btn-sm" type="submit">Reintentar</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-muted text-center py-4">Sin jobs registrados.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

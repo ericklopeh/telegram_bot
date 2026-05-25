@@ -29,6 +29,8 @@ class Case(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+    company_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False, index=True)
+    branch_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     history_entries = relationship(
         "CaseHistory", back_populates="case", cascade="all, delete-orphan"
