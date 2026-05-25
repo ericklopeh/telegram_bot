@@ -351,8 +351,10 @@ def _iter_sheet_data_rows(ws, header_row: int) -> Iterator[tuple]:
         yield row
 
 
-def load_ventas_2026(
+def load_ventas_from_path(
+    path: Path,
     *,
+    sheet_name: str | None = None,
     vendedor: str | None = None,
     qna: str | None = None,
     semana: str | None = None,
@@ -361,9 +363,14 @@ def load_ventas_2026(
     tipo_venta: str | None = None,
     limit: int = DEFAULT_ROW_LIMIT,
 ) -> ExcelReadResult:
-    path = VENTAS_MASTER_PATH
+    """Lee ventas desde cualquier ruta (imports o copia); no escribe en masters."""
+    from app.services.excel_path_guard import assert_not_excel_master_path
+
+    assert_not_excel_master_path(path)
     result = ExcelReadResult(rows=[], diagnostics=[], source_path=str(path))
-    sheet_name = semana.strip() if semana and semana.strip().startswith("SEM ") else _VENTAS_PRIMARY_SHEET
+    sheet = sheet_name or (
+        semana.strip() if semana and semana.strip().startswith("SEM ") else _VENTAS_PRIMARY_SHEET
+    )
 
     try:
         wb = _open_workbook(path)
@@ -375,20 +382,20 @@ def load_ventas_2026(
         return result
 
     try:
-        if sheet_name not in wb.sheetnames:
+        if sheet not in wb.sheetnames:
             result.error = (
-                f"Hoja «{sheet_name}» no encontrada en {path.name}. "
+                f"Hoja «{sheet}» no encontrada en {path.name}. "
                 f"Hojas disponibles (muestra): {', '.join(wb.sheetnames[:8])}…"
             )
             return result
 
-        ws = wb[sheet_name]
+        ws = wb[sheet]
         header_row, labels = _find_header_row(ws, markers=_VENTAS_HEADER_MARKERS)
         if not header_row:
-            result.error = f"No se detectó fila de encabezados en hoja «{sheet_name}»."
+            result.error = f"No se detectó fila de encabezados en hoja «{sheet}»."
             result.diagnostics.append(
                 ExcelSheetDiagnostic(
-                    sheet_name=sheet_name,
+                    sheet_name=sheet,
                     note="Se esperaban columnas FOLIO, VENDEDOR y CLIENTE.",
                 )
             )
@@ -396,7 +403,7 @@ def load_ventas_2026(
 
         col_map = _map_columns(labels, _VENTAS_FIELD_ALIASES)
         diag = _diagnostic_from_map(
-            sheet_name, header_row, col_map, _VENTAS_FIELD_ALIASES, labels
+            sheet, header_row, col_map, _VENTAS_FIELD_ALIASES, labels
         )
         result.diagnostics.append(diag)
 
@@ -409,7 +416,7 @@ def load_ventas_2026(
                 parsed,
                 vendedor=vendedor,
                 qna=qna,
-                semana=semana if sheet_name == _VENTAS_PRIMARY_SHEET else None,
+                semana=semana if sheet == _VENTAS_PRIMARY_SHEET else None,
                 cliente=cliente,
                 rfc=rfc,
                 tipo_venta=tipo_venta,
@@ -428,7 +435,30 @@ def load_ventas_2026(
         wb.close()
 
 
-def load_relacion_contratos(
+def load_ventas_2026(
+    *,
+    vendedor: str | None = None,
+    qna: str | None = None,
+    semana: str | None = None,
+    cliente: str | None = None,
+    rfc: str | None = None,
+    tipo_venta: str | None = None,
+    limit: int = DEFAULT_ROW_LIMIT,
+) -> ExcelReadResult:
+    return load_ventas_from_path(
+        VENTAS_MASTER_PATH,
+        vendedor=vendedor,
+        qna=qna,
+        semana=semana,
+        cliente=cliente,
+        rfc=rfc,
+        tipo_venta=tipo_venta,
+        limit=limit,
+    )
+
+
+def load_contratos_from_path(
+    path: Path,
     *,
     vendedor: str | None = None,
     qna: str | None = None,
@@ -436,7 +466,9 @@ def load_relacion_contratos(
     folio: str | None = None,
     limit: int = DEFAULT_ROW_LIMIT,
 ) -> ExcelReadResult:
-    path = CONTRATOS_MASTER_PATH
+    from app.services.excel_path_guard import assert_not_excel_master_path
+
+    assert_not_excel_master_path(path)
     result = ExcelReadResult(rows=[], diagnostics=[], source_path=str(path))
 
     try:
@@ -511,6 +543,24 @@ def load_relacion_contratos(
         return result
     finally:
         wb.close()
+
+
+def load_relacion_contratos(
+    *,
+    vendedor: str | None = None,
+    qna: str | None = None,
+    cliente: str | None = None,
+    folio: str | None = None,
+    limit: int = DEFAULT_ROW_LIMIT,
+) -> ExcelReadResult:
+    return load_contratos_from_path(
+        CONTRATOS_MASTER_PATH,
+        vendedor=vendedor,
+        qna=qna,
+        cliente=cliente,
+        folio=folio,
+        limit=limit,
+    )
 
 
 def load_filter_options_ventas() -> dict[str, Any]:
@@ -681,3 +731,147 @@ def build_commercial_report_payload(
         "master_ventas_path": str(VENTAS_MASTER_PATH),
         "master_contratos_path": str(CONTRATOS_MASTER_PATH),
     }
+
+
+def _decimal_cell(value: Any):
+    from decimal import Decimal, InvalidOperation
+
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
+    if isinstance(value, Decimal):
+        return value
+    text = str(value).replace("$", "").replace(",", "").strip()
+    if not text or text == "—":
+        return None
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def _parse_date_cell(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def read_ventas_rows_raw(
+    path: Path,
+    *,
+    sheet_name: str | None = None,
+    limit: int = 5000,
+) -> tuple[list[dict[str, Any]], ExcelReadResult]:
+    """Filas normalizadas para importación histórica (P32)."""
+    from app.services.excel_path_guard import assert_not_excel_master_path
+
+    assert_not_excel_master_path(path)
+    display = load_ventas_from_path(path, sheet_name=sheet_name, limit=limit)
+    if display.error:
+        return [], display
+
+    sheet = sheet_name or _VENTAS_PRIMARY_SHEET
+    rows_out: list[dict[str, Any]] = []
+    try:
+        wb = _open_workbook(path)
+        ws = wb[sheet]
+        header_row, labels = _find_header_row(ws, markers=_VENTAS_HEADER_MARKERS)
+        if not header_row:
+            display.error = "Encabezados no detectados."
+            return [], display
+        col_map = _map_columns(labels, _VENTAS_FIELD_ALIASES)
+        row_num = header_row
+        for row in _iter_sheet_data_rows(ws, header_row):
+            row_num += 1
+            folio = _get_cell(row, col_map.get("folio"))
+            cliente = _get_cell(row, col_map.get("cliente"))
+            if folio in (None, "") and cliente in (None, ""):
+                continue
+            venta = _decimal_cell(_get_cell(row, col_map.get("venta")))
+            if venta is None:
+                venta = _decimal_cell(_get_cell(row, col_map.get("costo")))
+            rows_out.append(
+                {
+                    "row_number": row_num,
+                    "sheet_name": sheet,
+                    "folio": str(folio).strip() if folio not in (None, "") else "",
+                    "cliente": str(cliente or "").strip(),
+                    "vendedor": str(_get_cell(row, col_map.get("vendedor")) or "").strip(),
+                    "seccion": str(_get_cell(row, col_map.get("seccion")) or "").strip() or None,
+                    "rfc": str(_get_cell(row, col_map.get("rfc")) or "").strip() or None,
+                    "qna": str(_get_cell(row, col_map.get("qna")) or "").strip() or None,
+                    "tipo_venta": str(_get_cell(row, col_map.get("tipo_venta")) or "").strip() or None,
+                    "semana": str(_get_cell(row, col_map.get("semana")) or "").strip() or None,
+                    "sale_date": _parse_date_cell(_get_cell(row, col_map.get("fecha"))),
+                    "total_amount": venta if venta is not None else _decimal_cell("0"),
+                }
+            )
+            if len(rows_out) >= limit:
+                break
+        wb.close()
+    except Exception as exc:
+        display.error = str(exc)
+        return [], display
+    return rows_out, display
+
+
+def read_contratos_rows_raw(path: Path, *, limit: int = 5000) -> tuple[list[dict[str, Any]], ExcelReadResult]:
+    from app.services.excel_path_guard import assert_not_excel_master_path
+
+    assert_not_excel_master_path(path)
+    display = load_contratos_from_path(path, limit=limit)
+    if display.error:
+        return [], display
+    rows_out: list[dict[str, Any]] = []
+    try:
+        wb = _open_workbook(path)
+        for sheet_name in [n for n in wb.sheetnames if n not in _CONTRATOS_SKIP_SHEETS]:
+            ws = wb[sheet_name]
+            header_row, labels = _find_header_row(ws, markers=_CONTRATOS_HEADER_MARKERS)
+            if not header_row:
+                continue
+            col_map = _map_columns(labels, _CONTRATOS_FIELD_ALIASES)
+            row_num = header_row
+            for row in _iter_sheet_data_rows(ws, header_row):
+                row_num += 1
+                cliente = _get_cell(row, col_map.get("cliente"))
+                codigo = _get_cell(row, col_map.get("codigo"))
+                if cliente in (None, "") and codigo in (None, ""):
+                    continue
+                folio = _get_cell(row, col_map.get("folio")) or codigo
+                contrato = _get_cell(row, col_map.get("contrato")) or codigo
+                monto = _decimal_cell(_get_cell(row, col_map.get("monto")))
+                saldo = _decimal_cell(_get_cell(row, col_map.get("saldo")))
+                rows_out.append(
+                    {
+                        "row_number": row_num,
+                        "sheet_name": sheet_name,
+                        "folio": str(folio or "").strip(),
+                        "contract_code": str(contrato or "").strip() or None,
+                        "cliente": str(cliente or "").strip(),
+                        "vendedor": sheet_name.strip(),
+                        "qna": str(_get_cell(row, col_map.get("qna")) or "").strip() or None,
+                        "total_amount": monto if monto is not None else (saldo if saldo is not None else _decimal_cell("0")),
+                        "saldo": saldo,
+                    }
+                )
+                if len(rows_out) >= limit:
+                    break
+            if len(rows_out) >= limit:
+                break
+        wb.close()
+    except Exception as exc:
+        display.error = str(exc)
+        return [], display
+    return rows_out, display

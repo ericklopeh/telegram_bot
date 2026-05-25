@@ -27,3 +27,24 @@ body {
 .stat-card {
     min-height: 120px;
 }
+
+/* P31 — UX operativa */
+.breadcrumb-sm {
+    font-size: 0.875rem;
+}
+.form-hint {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+.field-invalid {
+    border-color: #dc3545;
+}
+.btn-next-step {
+    font-weight: 600;
+}
+.guided-panel .badge {
+    font-weight: 500;
+}
+.nav-link.active {
+    font-weight: 600;
+}

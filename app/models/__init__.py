@@ -14,6 +14,7 @@ from app.models.erp_customer import ErpCustomer
 from app.models.erp_sale import ErpSale, ErpSaleItem
 from app.models.erp_payment import ErpPayment, ErpInstallment
 from app.models.contract import Contract, ContractInstallment, RefinanceOperation
+from app.models.import_batch import ImportBatch, ImportRowError, ImportedSaleReference
 
 __all__ = [
     "AuthorizationJob",
@@ -37,4 +38,7 @@ __all__ = [
     "Contract",
     "ContractInstallment",
     "RefinanceOperation",
+    "ImportBatch",
+    "ImportRowError",
+    "ImportedSaleReference",
 ]

@@ -1,0 +1,161 @@
+{% extends "base_dashboard.html" %}
+{% block title %}BI — Dashboard ejecutivo{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h1 class="h4 mb-0">BI — Supervisión operativa y comercial</h1>
+            <p class="text-muted small mb-0">KPIs y gráficas basados en ERP (P27), ventas, workflow y SharePoint</p>
+        </div>
+        <ul class="nav nav-pills">
+            <li class="nav-item"><a class="nav-link {% if tab == 'dashboard' %}active{% endif %}" href="/bi/dashboard{% if filter_query %}?{% endif %}{% for k,v in filter_query.items() %}{{ k }}={{ v }}&{% endfor %}">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link {% if tab == 'reportes' %}active{% endif %}" href="/bi/reportes{% if filter_query %}?{% endif %}{% for k,v in filter_query.items() %}{{ k }}={{ v }}&{% endfor %}">Reportes BI</a></li>
+            <li class="nav-item"><a class="nav-link {% if tab == 'alertas' %}active{% endif %}" href="/bi/alertas{% if filter_query %}?{% endif %}{% for k,v in filter_query.items() %}{{ k }}={{ v }}&{% endfor %}">Alertas</a></li>
+        </ul>
+    </div>
+
+    {% if success_msg %}<div class="alert alert-success">{{ success_msg }}</div>{% endif %}
+
+    <form method="get" action="/bi/dashboard" class="card mb-4">
+        <div class="card-header">Filtros globales</div>
+        <div class="card-body row g-2">
+            <div class="col-md-2"><label class="form-label small">Desde</label><input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ filters.fecha_desde or '' }}"></div>
+            <div class="col-md-2"><label class="form-label small">Hasta</label><input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ filters.fecha_hasta or '' }}"></div>
+            <div class="col-md-2"><label class="form-label small">Semana</label>
+                <select name="semana" class="form-select form-select-sm"><option value="">—</option>
+                {% for s in payload.filter_options.semanas %}<option value="{{ s }}" {% if filters.semana == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select></div>
+            <div class="col-md-2"><label class="form-label small">QNA</label>
+                <select name="qna" class="form-select form-select-sm"><option value="">—</option>
+                {% for q in payload.filter_options.qnas %}<option value="{{ q }}" {% if filters.qna == q %}selected{% endif %}>{{ q }}</option>{% endfor %}
+                </select></div>
+            <div class="col-md-2"><label class="form-label small">Vendedor</label>
+                <select name="vendedor" class="form-select form-select-sm"><option value="">—</option>
+                {% for v in payload.filter_options.vendedores %}<option value="{{ v }}" {% if filters.vendedor == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+                </select></div>
+            <div class="col-md-2"><label class="form-label small">Sección</label>
+                <select name="seccion" class="form-select form-select-sm"><option value="">—</option>
+                {% for s in payload.filter_options.secciones %}<option value="{{ s }}" {% if filters.seccion == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select></div>
+            <div class="col-md-2"><label class="form-label small">Tipo venta</label>
+                <select name="tipo_venta" class="form-select form-select-sm"><option value="">—</option>
+                {% for t in payload.filter_options.tipos_venta %}<option value="{{ t }}" {% if filters.tipo_venta == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                </select></div>
+            <div class="col-md-3"><label class="form-label small">Estado workflow</label>
+                <select name="workflow_state" class="form-select form-select-sm"><option value="">—</option>
+                {% for w in payload.filter_options.workflow_states %}<option value="{{ w }}" {% if filters.workflow_state == w %}selected{% endif %}>{{ w }}</option>{% endfor %}
+                </select></div>
+            <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary btn-sm w-100">Aplicar</button></div>
+            <div class="col-md-2 d-flex align-items-end"><a href="/bi/dashboard" class="btn btn-outline-secondary btn-sm w-100">Limpiar</a></div>
+        </div>
+    </form>
+
+    {% if tab != 'reportes' %}
+    <div class="row g-2 mb-4">
+        {% for kpi in payload.kpis %}
+        <div class="col-6 col-md-4 col-xl">
+            <a href="{{ kpi.drill_url }}" class="card text-decoration-none text-dark h-100 border-0 shadow-sm">
+                <div class="card-body py-3">
+                    <div class="fs-5 fw-semibold">{{ kpi.value }}</div>
+                    <div class="small text-muted">{{ kpi.label }}</div>
+                    <div class="small text-truncate" title="{{ kpi.hint }}">{{ kpi.hint }}</div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-6"><div class="card h-100"><div class="card-header">Ventas por vendedor</div><div class="card-body"><canvas id="chartVendedor" height="200"></canvas></div></div></div>
+        <div class="col-lg-6"><div class="card h-100"><div class="card-header">Ventas por semana</div><div class="card-body"><canvas id="chartSemana" height="200"></canvas></div></div></div>
+        <div class="col-lg-6"><div class="card h-100"><div class="card-header">Ventas por sección</div><div class="card-body"><canvas id="chartSeccion" height="200"></canvas></div></div></div>
+        <div class="col-lg-6"><div class="card h-100"><div class="card-header">Ventas por tipo</div><div class="card-body"><canvas id="chartTipo" height="200"></canvas></div></div></div>
+        <div class="col-lg-6"><div class="card h-100"><div class="card-header">Workflow por estado</div><div class="card-body"><canvas id="chartWorkflow" height="200"></canvas></div></div></div>
+        <div class="col-lg-6"><div class="card h-100"><div class="card-header">SharePoint OK vs fallidos</div><div class="card-body"><canvas id="chartSharepoint" height="200"></canvas></div></div></div>
+        <div class="col-lg-12"><div class="card"><div class="card-header">Recovery % por vendedor (ERP)</div><div class="card-body"><canvas id="chartRecovery" height="120"></canvas></div></div></div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        {% for key, title in [('top_vendedores','Top vendedores'),('top_recovery','Top recovery'),('mas_pendientes','Más pendientes'),('mas_refinanciado','Más refinanciado'),('mas_ventas','Más ventas')] %}
+        <div class="col-md-6 col-xl-4">
+            <div class="card h-100">
+                <div class="card-header">{{ title }}</div>
+                <ul class="list-group list-group-flush small">
+                    {% for r in payload.rankings[key] %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <a href="{{ r.drill_url }}">{{ r.label }}</a>
+                        <span class="fw-semibold">{{ r.metric }}</span>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Sin datos</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <section id="alertas" class="card mb-4 {% if tab == 'alertas' %}border-warning border-2{% endif %}">
+        <div class="card-header d-flex justify-content-between">
+            <span>Alertas operativas críticas</span>
+            <a href="/control/conciliacion" class="btn btn-sm btn-outline-secondary">Conciliación comercial</a>
+        </div>
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Severidad</th><th>Alerta</th><th>Cant.</th><th>Acción</th></tr></thead>
+            <tbody>
+                {% for a in payload.alerts %}
+                <tr class="{% if a.severity == 'error' %}table-danger{% elif a.severity == 'warning' %}table-warning{% endif %}">
+                    <td>{{ a.severity }}</td>
+                    <td><strong>{{ a.title }}</strong><br><small>{{ a.message }}</small></td>
+                    <td>{{ a.count }}</td>
+                    <td><a href="{{ a.drill_url }}" class="btn btn-sm btn-link">Ver</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-muted">Sin alertas críticas detectadas.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    {% if tab == 'reportes' or tab == 'dashboard' %}
+    <section class="card mb-4">
+        <div class="card-header">Exportaciones BI (storage/excel_exports/bi/)</div>
+        <div class="card-body d-flex flex-wrap gap-2">
+            <form method="post" action="/bi/export/resumen{% if filter_qs %}?{{ filter_qs }}{% endif %}"><button class="btn btn-success btn-sm">dashboard_resumen.xlsx</button></form>
+            <form method="post" action="/bi/export/ventas_vendedor{% if filter_qs %}?{{ filter_qs }}{% endif %}"><button class="btn btn-primary btn-sm">ventas_vendedor.xlsx</button></form>
+            <form method="post" action="/bi/export/recovery{% if filter_qs %}?{{ filter_qs }}{% endif %}"><button class="btn btn-info btn-sm">recovery.xlsx</button></form>
+            <form method="post" action="/bi/export/pendientes{% if filter_qs %}?{{ filter_qs }}{% endif %}"><button class="btn btn-warning btn-sm">pendientes.xlsx</button></form>
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const chartOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } } };
+const charts = {{ payload.charts | tojson }};
+function barChart(id, key, color) {
+  const el = document.getElementById(id);
+  const d = charts[key] || { labels: [], values: [] };
+  if (!el || !d.labels.length) return;
+  new Chart(el, { type: 'bar', data: { labels: d.labels, datasets: [{ data: d.values, backgroundColor: color }] }, options: { ...chartOpts, plugins: { legend: { display: false } } } });
+}
+function doughnut(id, key) {
+  const el = document.getElementById(id);
+  const d = charts[key] || { labels: [], values: [] };
+  if (!el || !d.labels.length) return;
+  new Chart(el, { type: 'doughnut', data: { labels: d.labels, datasets: [{ data: d.values, backgroundColor: ['#22c55e','#ef4444','#94a3b8'] }] }, options: chartOpts });
+}
+barChart('chartVendedor', 'ventas_vendedor', '#3b82f6');
+barChart('chartSemana', 'ventas_semana', '#10b981');
+barChart('chartSeccion', 'ventas_seccion', '#8b5cf6');
+barChart('chartTipo', 'ventas_tipo', '#f59e0b');
+barChart('chartWorkflow', 'workflow_estado', '#6366f1');
+doughnut('chartSharepoint', 'sharepoint');
+barChart('chartRecovery', 'recovery_vendedor', '#0ea5e9');
+{% if tab == 'alertas' %}document.getElementById('alertas')?.scrollIntoView({ behavior: 'smooth' });{% endif %}
+</script>
+{% endblock %}

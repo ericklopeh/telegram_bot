@@ -84,6 +84,13 @@ class Settings(BaseSettings):
         default=False, alias="OPERATIONAL_ALERTS_TELEGRAM"
     )
 
+    # P30 — operación / staging
+    environment: str = Field(default="development", alias="ENVIRONMENT")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    app_version: str = Field(default="0.1.0", alias="APP_VERSION")
+    storage_root: str = Field(default="/app/storage", alias="STORAGE_ROOT")
+    demo_mode: bool = Field(default=False, alias="DEMO_MODE")
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         return self.database_url.strip().strip('"').strip("'")

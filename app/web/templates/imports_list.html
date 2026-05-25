@@ -1,0 +1,88 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Importación histórica Excel{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Importación histórica (Excel)</h1>
+        <a href="/erp/dashboard" class="btn btn-sm btn-outline-secondary">ERP</a>
+    </div>
+
+    {% if msg %}<div class="alert alert-success">{{ msg }}</div>{% endif %}
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header">Subir archivo</div>
+        <div class="card-body">
+            <p class="text-muted small">
+                Los archivos se guardan en <code>storage/imports/</code>. No se modifican maestros en
+                <code>storage/excel_masters/</code>. Flujo: subir → vista previa (dry-run) → confirmar.
+            </p>
+            <form method="post" action="/imports/upload" enctype="multipart/form-data" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Tipo de origen</label>
+                    <select name="source_type" class="form-select" required>
+                        <option value="ventas">Ventas 2026</option>
+                        <option value="contratos">Relación de contratos</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Archivo Excel (.xlsx)</label>
+                    <input type="file" name="file" class="form-control" accept=".xlsx" required>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">Subir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <h2 class="h6">Lotes recientes</h2>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Origen</th>
+                    <th>Archivo</th>
+                    <th>Estado</th>
+                    <th>Filas</th>
+                    <th>Listas</th>
+                    <th>Dup.</th>
+                    <th>Errores</th>
+                    <th>Importados</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in batches %}
+                <tr>
+                    <td>{{ b.id }}</td>
+                    <td>{{ b.source_type }}</td>
+                    <td class="small">{{ b.original_filename }}</td>
+                    <td><span class="badge bg-secondary">{{ b.status }}</span></td>
+                    <td>{{ b.row_count }}</td>
+                    <td>{{ b.ready_count }}</td>
+                    <td>{{ b.duplicate_count }}</td>
+                    <td>{{ b.error_count }}</td>
+                    <td>{{ b.imported_count }}</td>
+                    <td class="text-nowrap">
+                        <a href="/imports/{{ b.id }}/preview" class="btn btn-sm btn-outline-primary">Preview</a>
+                        {% if b.error_count %}
+                        <a href="/imports/{{ b.id }}/errors" class="btn btn-sm btn-outline-warning">Errores</a>
+                        {% endif %}
+                        {% if b.status == 'confirmed' %}
+                        <form method="post" action="/imports/{{ b.id }}/rollback" class="d-inline"
+                              onsubmit="return confirm('¿Revertir importación del lote {{ b.id }}?');">
+                            <button class="btn btn-sm btn-outline-danger">Revertir</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="10" class="text-muted">Sin lotes aún.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

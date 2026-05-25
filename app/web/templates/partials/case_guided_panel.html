@@ -1,0 +1,72 @@
+{% if guided_flow %}
+<section class="card shadow-sm border-0 mb-4 border-start border-4 border-info" id="flujo-guiado">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <span class="fw-bold">Flujo operativo guiado</span>
+            <span class="badge bg-primary ms-2">{{ guided_flow.workflow_label }}</span>
+            <span class="badge bg-secondary ms-1">{{ guided_flow.status_badge }}</span>
+        </div>
+        <a href="{{ guided_flow.cta_url }}" class="btn btn-sm btn-primary">{{ guided_flow.cta_label }}</a>
+    </div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-start gap-3 mb-3">
+            <div>
+                <div class="text-muted small">Siguiente acción recomendada</div>
+                <span class="badge {{ guided_flow.action_badge_class }} fs-6">{{ guided_flow.next_action }}</span>
+                <p class="small text-muted mb-0 mt-1">{{ guided_flow.next_action_hint }}</p>
+            </div>
+            <div>
+                <div class="text-muted small">SharePoint</div>
+                <span class="badge {% if guided_flow.sharepoint_alert %}bg-danger{% else %}bg-success{% endif %}">
+                    {{ guided_flow.sharepoint_summary }}
+                </span>
+            </div>
+            {% if guided_flow.missing_docs_labels %}
+            <div>
+                <div class="text-muted small">Documentos faltantes</div>
+                {% for lbl in guided_flow.missing_docs_labels %}
+                <span class="badge bg-warning text-dark me-1">{{ lbl }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="row g-2 small mb-3">
+            <div class="col-md-6">
+                <strong>Venta:</strong>
+                {% if guided_flow.sale_summary %}
+                <a href="{{ guided_flow.sale_url }}">{{ guided_flow.sale_summary }}</a>
+                {% else %}
+                <span class="text-muted">Sin captura vinculada</span>
+                <a href="/ventas/nueva?case_id={{ caso.id }}" class="ms-1">Registrar venta</a>
+                {% endif %}
+            </div>
+            <div class="col-md-6">
+                <strong>Comisión:</strong>
+                {% if guided_flow.commission_summary %}
+                <a href="{{ guided_flow.commission_url }}">{{ guided_flow.commission_summary }}</a>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if guided_flow.block_hints %}
+        <div class="alert alert-warning py-2 small mb-3">
+            <strong>Atención:</strong>
+            <ul class="mb-0 ps-3">
+                {% for h in guided_flow.block_hints %}
+                <li>{{ h }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="d-flex flex-wrap gap-2">
+            {% for link in guided_flow.quick_links %}
+            <a href="{{ link.url }}" class="btn btn-sm btn-{{ link.style }}">{{ link.label }}</a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}

@@ -12,7 +12,7 @@
 
 {% if error_msg %}
 <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-    <strong>Error:</strong> {{ error_msg }}
+    <strong>Error:</strong> {{ error_msg|friendly_error }}
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 </div>
 {% endif %}
@@ -24,7 +24,9 @@
 </div>
 {% endif %}
 
+{% include "partials/breadcrumbs.html" %}
 {% include "partials/workflow_pipeline.html" %}
+{% include "partials/case_guided_panel.html" %}
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
     <div>
@@ -503,7 +505,7 @@
         <div class="card shadow-sm border-0 mt-4">
             <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-clock-history me-2"></i>Línea de tiempo / auditoría</span>
-                <span class="text-muted small fw-normal">{{ (case_timeline|default([]))|length }} evento(s)</span>
+                <span class="text-muted small fw-normal" id="timeline">{{ (case_timeline|default([]))|length }} evento(s)</span>
             </div>
 
             <div class="card-body">

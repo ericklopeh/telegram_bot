@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Revisión operativa{% endblock %}
+{% block content %}
+{% set breadcrumbs = [
+    {'label': 'Dashboard', 'url': '/dashboard'},
+    {'label': 'Revisión operativa', 'url': '/operacion/revision'},
+] %}
+{% include "partials/breadcrumbs.html" %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h4 mb-1">Revisión operativa</h1>
+        <p class="text-muted small mb-0">Generado {{ report.generated_at.strftime('%d/%m/%Y %H:%M UTC') }} · {{ report.critical_count }} crítico(s)</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/bi/alertas" class="btn btn-sm btn-outline-primary">Alertas BI</a>
+        <a href="/erp/conciliacion" class="btn btn-sm btn-outline-secondary">Conciliación ERP</a>
+        <a href="/dashboard" class="btn btn-sm btn-outline-secondary">Dashboard</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    {% for key, label in [
+        ('casos_atorados', 'Casos atorados'),
+        ('documentos_pendientes', 'Docs pendientes'),
+        ('sharepoint_fallidos', 'SharePoint fallidos'),
+        ('ventas_pendientes', 'Ventas pendientes'),
+        ('comisiones_pendientes', 'Comisiones'),
+        ('export_excel_fallido', 'Excel fallido'),
+        ('conciliacion_critica', 'Conciliación'),
+    ] %}
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card text-center h-100">
+            <div class="card-body py-3">
+                <div class="fs-4 fw-bold">{{ report.totals.get(key, 0) }}</div>
+                <div class="small text-muted">{{ label }}</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% for section_key, section_title in [
+    ('casos_atorados', 'Casos atorados (>24h)'),
+    ('sharepoint_fallidos', 'SharePoint fallidos'),
+    ('export_excel_fallido', 'Export Excel fallido'),
+    ('documentos_pendientes', 'Documentos pendientes de revisión'),
+    ('ventas_pendientes', 'Ventas pendientes de registrar'),
+    ('comisiones_pendientes', 'Comisiones y ventas sin comisión'),
+    ('conciliacion_critica', 'Conciliación crítica (ERP/BI)'),
+] %}
+{% set items = report.sections.get(section_key, []) %}
+<section class="card mb-3">
+    <div class="card-header d-flex justify-content-between">
+        <span>{{ section_title }}</span>
+        <span class="badge bg-secondary">{{ items|length }}</span>
+    </div>
+    {% if items %}
+    <ul class="list-group list-group-flush">
+        {% for item in items %}
+        <li class="list-group-item d-flex justify-content-between align-items-start {% if item.severity == 'error' %}list-group-item-danger{% elif item.severity == 'warning' %}list-group-item-warning{% endif %}">
+            <div>
+                <strong>{{ item.title }}</strong>
+                <div class="small text-muted">{{ item.detail }}</div>
+            </div>
+            <a href="{{ item.url }}" class="btn btn-sm btn-outline-primary shrink-0">Ver</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="card-body text-muted small">Sin pendientes en esta categoría.</div>
+    {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

@@ -33,10 +33,12 @@ from app.web.auth import (
     require_roles,
     web_should_scope_vendedor_cases,
 )
+from app.web.jinja_helpers import register_web_template_filters
 from app.web.paths import TEMPLATES_DIR
 
 router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+register_web_template_filters(templates)
 
 log = logging.getLogger(__name__)
 
@@ -193,6 +195,18 @@ def detalle_caso(
 
     doc_p24_summary = CaseDocumentService().summarize(db, caso)
 
+    from app.web.services.case_guided_flow import build_case_guided_flow
+
+    guided_flow = build_case_guided_flow(
+        db, caso, action_guard, doc_summary=doc_p24_summary, case_svc=case_svc
+    )
+
+    breadcrumbs = [
+        {"label": "Dashboard", "url": "/dashboard"},
+        {"label": "Casos", "url": "/casos"},
+        {"label": caso.public_id, "url": f"/casos/{caso.id}"},
+    ]
+
     return templates.TemplateResponse(
         request=request,
         name="case_detail.html",
@@ -221,7 +235,9 @@ def detalle_caso(
             "can_recalc_workflow": (usuario or {}).get("rol") in ROLES_ADMIN_SISTEMAS
             or get_settings().web_rbac_relaxed,
             "doc_p24_summary": doc_p24_summary,
-        }
+            "guided_flow": guided_flow,
+            "breadcrumbs": breadcrumbs,
+        },
     )
 
 

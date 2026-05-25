@@ -1,0 +1,31 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Errores importación #{{ batch.id }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Errores — lote #{{ batch.id }}</h1>
+        <div>
+            <a href="/imports/{{ batch.id }}/errors?download=xlsx" class="btn btn-sm btn-warning">Exportar .xlsx</a>
+            <a href="/imports/{{ batch.id }}/preview" class="btn btn-sm btn-outline-secondary">Preview</a>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <thead><tr><th>Fila</th><th>Hoja</th><th>Código</th><th>Mensaje</th></tr></thead>
+            <tbody>
+                {% for e in errors %}
+                <tr>
+                    <td>{{ e.row_number }}</td>
+                    <td>{{ e.sheet_name or '—' }}</td>
+                    <td><code>{{ e.error_code }}</code></td>
+                    <td>{{ e.message }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted">Sin errores registrados.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

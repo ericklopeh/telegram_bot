@@ -1,0 +1,71 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Vista previa importación #{{ batch.id }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Vista previa — lote #{{ batch.id }}</h1>
+        <a href="/imports" class="btn btn-sm btn-outline-secondary">Volver</a>
+    </div>
+
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger">{{ request.query_params.get('error') }}</div>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="card"><div class="card-body text-center">
+            <div class="fs-5">{{ batch.row_count }}</div><small>Filas leídas</small>
+        </div></div></div>
+        <div class="col-md-3"><div class="card border-success"><div class="card-body text-center">
+            <div class="fs-5">{{ batch.ready_count }}</div><small>Listas para importar</small>
+        </div></div></div>
+        <div class="col-md-3"><div class="card border-warning"><div class="card-body text-center">
+            <div class="fs-5">{{ batch.duplicate_count }}</div><small>Duplicados</small>
+        </div></div></div>
+        <div class="col-md-3"><div class="card border-danger"><div class="card-body text-center">
+            <div class="fs-5">{{ batch.error_count }}</div><small>Errores</small>
+        </div></div></div>
+    </div>
+
+    <p class="text-muted">
+        <strong>Origen:</strong> {{ batch.source_type }} ·
+        <strong>Archivo:</strong> {{ batch.original_filename }} ·
+        <strong>Estado:</strong> {{ batch.status }}
+        {% if batch.preview_json and batch.preview_json.dry_run %}
+        · <span class="badge bg-info">Dry-run (sin escritura ERP)</span>
+        {% endif %}
+    </p>
+
+    {% if batch.preview_json and batch.preview_json.sample_ready %}
+    <h2 class="h6">Muestra listas</h2>
+    <pre class="bg-white border rounded p-3 small">{{ batch.preview_json.sample_ready | tojson(indent=2) }}</pre>
+    {% endif %}
+
+    {% if batch.status == 'previewed' and batch.ready_count > 0 %}
+    <form method="post" action="/imports/{{ batch.id }}/confirm" class="mb-3"
+          onsubmit="return confirm('¿Confirmar importación de {{ batch.ready_count }} filas?');">
+        <button type="submit" class="btn btn-success">Confirmar importación</button>
+    </form>
+    {% endif %}
+
+    {% if error_total %}
+    <h2 class="h6">Errores ({{ error_total }})</h2>
+    <p><a href="/imports/{{ batch.id }}/errors?download=xlsx" class="btn btn-sm btn-outline-warning">Descargar Excel de errores</a></p>
+    <ul class="list-group mb-3">
+        {% for e in errors %}
+        <li class="list-group-item small">
+            Fila {{ e.row_number }} ({{ e.sheet_name or '—' }}): <strong>{{ e.error_code }}</strong> — {{ e.message }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if batch.audit_trail %}
+    <h2 class="h6">Auditoría</h2>
+    <ul class="list-group">
+        {% for ev in batch.audit_trail %}
+        <li class="list-group-item small">{{ ev.type }} — {{ ev.at }}{% if ev.username %} ({{ ev.username }}){% endif %}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+{% endblock %}
