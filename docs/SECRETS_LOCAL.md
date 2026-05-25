@@ -20,7 +20,7 @@ cp .env.example .env
 ## GitHub / CI
 
 - **No** pegues el token en código, workflows ni `.env.example`.
-- CI ejecuta `cp .env.example .env` antes de `docker compose config` (sin secretos reales).
+- CI genera un `.env` temporal con valores dummy antes de `docker compose config` (ver `.github/workflows/ci.yml`).
 - Variables de job en `.github/workflows/ci.yml` para pytest.
 - En el VPS usa `.env` en el servidor (fuera del repo público) o secrets del proveedor.
 
