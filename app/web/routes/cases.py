@@ -1,8 +1,6 @@
 import logging
 import mimetypes
 import os
-import shutil
-import uuid
 from typing import Generator
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -337,67 +335,45 @@ def upload_document(
             msg = urllib.parse.quote(guard_reason or "Acción no permitida para este caso.")
             return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
-    # Validar que sea uno de los tipos permitidos
-    allowed_types = {
-        "talon",
-        C.DOC_PEDIDO,
-        C.DOC_ORDEN_DESCUENTO,
-        C.DOC_CARATULA_BANCARIA,
-        C.DOC_REVISION_EVIDENCIA,
-    }
-    if document_type not in allowed_types:
+    from app.services.case_document_service import (
+        CaseDocumentService,
+        LEGACY_WEB_UPLOAD_TYPES,
+    )
+
+    if document_type not in LEGACY_WEB_UPLOAD_TYPES:
         return RedirectResponse(url=f"/casos/{case_id}", status_code=302)
 
-    # Crear carpeta si no existe
-    upload_dir = f"storage/uploads/{case_id}"
-    os.makedirs(upload_dir, exist_ok=True)
+    content = file.file.read()
+    if not content:
+        import urllib.parse
 
-    # Guardar archivo localmente
-    file_extension = os.path.splitext(file.filename)[1] if file.filename else ""
-    stored_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join(upload_dir, stored_filename)
+        return RedirectResponse(
+            url=f"/casos/{case_id}?error={urllib.parse.quote('Archivo vacío.')}",
+            status_code=302,
+        )
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    from app.models.document import Document
     from app.models.case_history import CaseHistory
 
-    # Crear Document
-    new_doc = Document(
-        case_id=case_id,
-        document_type=document_type,
-        original_filename=file.filename,
-        stored_filename=stored_filename,
-        file_path=file_path,
-        mime_type=file.content_type,
-        is_active=True,
-        upload_status="LOCAL"
-    )
-    db.add(new_doc)
-    db.flush()
+    try:
+        new_doc = CaseDocumentService().upload_document_legacy_web(
+            db,
+            caso,
+            document_type,
+            content,
+            original_filename=file.filename,
+            mime_type=file.content_type,
+            uploaded_by=usuario.get("nombre"),
+            actor_user_id=usuario.get("id"),
+            actor_role=usuario.get("rol"),
+        )
+    except ValueError as exc:
+        import urllib.parse
 
-    from app.services.case_event_service import (
-        log_document_received,
-        log_pedido_checklist_after_upload,
-    )
-
-    log_document_received(
-        db,
-        case_id=case_id,
-        document_type=document_type,
-        document_id=new_doc.id,
-        filename=file.filename or stored_filename,
-        actor_role=usuario.get("nombre"),
-        actor_user_id=usuario.get("id"),
-        source="web",
-    )
-    log_pedido_checklist_after_upload(
-        db,
-        caso,
-        source="web",
-        actor_role=usuario.get("nombre"),
-    )
+        db.rollback()
+        return RedirectResponse(
+            url=f"/casos/{case_id}?error={urllib.parse.quote(str(exc))}",
+            status_code=302,
+        )
 
     # Crear CaseHistory
     history_entry = CaseHistory(
@@ -559,25 +535,22 @@ def reintentar_sharepoint_documento(
         msg = urllib.parse.quote(reason or "No se puede reintentar la subida.")
         return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
 
-    from app.repositories.document_repository import DocumentRepository
+    from app.services.sharepoint_sync_service import SharePointSyncService
 
-    DocumentRepository.set_upload_pending(db, document_id)
-    db.commit()
-
-    payload = SharePointUploadPayload(
-        document_id=doc.id,
-        file_path=doc.file_path,
-        vendedor=caso.seller_name or "SIN VENDEDOR",
-        semana=caso.week_code,
-        cliente=caso.client_name,
-        folio=caso.official_folio or caso.temp_folio or caso.public_id,
-        tipo_documento=doc.document_type,
-        filename=doc.stored_filename,
-    )
     try:
-        SharePointDocumentService().upload_document(payload)
-        msg = urllib.parse.quote("Documento sincronizado en SharePoint correctamente.")
-        return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
+        result = SharePointSyncService().sync_document(
+            db,
+            document_id,
+            actor_user_id=usuario.get("id"),
+            actor_role=usuario.get("rol"),
+            is_retry=True,
+        )
+        db.commit()
+        if result.ok:
+            msg = urllib.parse.quote("Documento sincronizado en SharePoint correctamente.")
+            return RedirectResponse(url=f"/casos/{case_id}?success={msg}", status_code=302)
+        msg = urllib.parse.quote(result.error or "Error al subir a SharePoint.")
+        return RedirectResponse(url=f"/casos/{case_id}?error={msg}", status_code=302)
     except Exception as exc:
         db.rollback()
         log.exception("Reintento SharePoint fallido", extra={"document_id": document_id})

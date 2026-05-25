@@ -45,6 +45,21 @@ OCR_STATUS_PENDING = "OCR_PENDING"
 OCR_STATUS_DONE = "OCR_DONE"
 OCR_STATUS_FAILED = "OCR_FAILED"
 
+# SharePoint / Graph (P25)
+UPLOAD_LOCAL = "LOCAL"
+UPLOAD_PENDING = "PENDING_UPLOAD"
+UPLOAD_UPLOADING = "UPLOADING"
+UPLOAD_SHAREPOINT_OK = "SHAREPOINT_OK"
+UPLOAD_FAILED = "UPLOAD_FAILED"
+# Compatibilidad P22/P23
+UPLOAD_LEGACY_OK = "UPLOADED"
+
+
+def is_sharepoint_synced(upload_status: str | None) -> bool:
+    if not upload_status:
+        return False
+    return upload_status in (UPLOAD_SHAREPOINT_OK, UPLOAD_LEGACY_OK)
+
 # Estados internos — revisión
 ST_REV_RECIBIDO = "Recibido"
 ST_REV_EN_REVISION = "En revisión"

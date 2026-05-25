@@ -37,9 +37,10 @@ Abrir `http://localhost:8010` (o el puerto configurado).
 2. Intentar transición manual a **EN_COMPULSA** o **APROBADO** (formulario workflow en detalle).
 3. Debe mostrar error con tipos faltantes y evento `DOCUMENT_MISSING_BLOCKED` en timeline.
 
-## 5. SharePoint / rutas legacy
+## 5. SharePoint / rutas legacy (P24.1)
 
-1. Subida antigua `/casos/{id}/upload-document` sigue funcionando.
+1. Subida desde detalle de caso (`/casos/{id}/upload-document`) guarda en `storage/cases/...` y aparece en gestión documental.
+2. Subir el mismo tipo dos veces incrementa versión y registra reemplazo en timeline.
 2. Vista detalle lista documentos y enlace `/documentos/{id}/ver`.
 
 ## 6. Seguridad Excel

@@ -69,8 +69,12 @@ _ALL_UPLOAD_TYPES = frozenset(
         C.DOC_OTRO,
         C.DOC_REVISION_EVIDENCIA,
         C.DOC_REVISION_DICTAMEN,
+        "talon",
     }
 )
+
+# Tipos aceptados por POST /casos/{id}/upload-document (formulario detalle de caso)
+LEGACY_WEB_UPLOAD_TYPES = _ALL_UPLOAD_TYPES
 
 
 @dataclass(frozen=True)
@@ -310,8 +314,95 @@ class CaseDocumentService:
             source=source,
             metadata={"version": version, "review_status": doc.review_status},
         )
+        if prev is not None:
+            log_document_event(
+                db,
+                case_id=case.id,
+                event_type=CASE_DOCUMENT_REPLACED,
+                document_id=doc.id,
+                document_type=document_type,
+                filename=original_filename or stored_filename,
+                message=f"Documento reemplazado (v{version}): {doc_type_label(document_type)}",
+                actor_user_id=actor_user_id,
+                actor_role=actor_role,
+                source=source,
+                metadata={
+                    "replaced_document_id": prev.id,
+                    "new_document_id": doc.id,
+                    "version": version,
+                },
+            )
         db.flush()
         return doc
+
+    def upload_document_legacy_web(
+        self,
+        db: Session,
+        case: Case,
+        document_type: str,
+        file_bytes: bytes,
+        *,
+        original_filename: str | None = None,
+        mime_type: str | None = None,
+        uploaded_by: str | None = None,
+        actor_user_id: int | None = None,
+        actor_role: str | None = None,
+    ) -> Document:
+        """
+        Subida desde POST /casos/{id}/upload-document: storage/cases, versionado P24,
+        eventos timeline y checklist de pedido (compatibilidad web legacy).
+        """
+        document_type = normalize_doc_type(document_type)
+        if document_type not in LEGACY_WEB_UPLOAD_TYPES:
+            raise ValueError(f"Tipo de documento no permitido: {document_type}")
+        if not file_bytes:
+            raise ValueError("Archivo vacío.")
+
+        doc = self.upload_document(
+            db,
+            case,
+            document_type,
+            file_bytes,
+            original_filename=original_filename,
+            mime_type=mime_type,
+            uploaded_by=uploaded_by,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            source="web",
+        )
+
+        from app.services.case_event_service import log_pedido_checklist_after_upload
+
+        log_pedido_checklist_after_upload(
+            db,
+            case,
+            source="web",
+            actor_role=actor_role or uploaded_by,
+        )
+        return doc
+
+    @staticmethod
+    def store_bytes_without_case(
+        file_bytes: bytes,
+        *,
+        original_filename: str | None = None,
+        storage_key: str = "orphan",
+    ) -> tuple[str, str]:
+        """
+        Compatibilidad cuando no hay caso en BD: guarda en storage/uploads/{key}/.
+        No crea fila en documents (solo almacenamiento temporal).
+        """
+        import uuid
+
+        upload_dir = Path("storage") / "uploads" / storage_key
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        ext = ""
+        if original_filename and "." in original_filename:
+            ext = original_filename[original_filename.rfind(".") :]
+        stored_filename = f"{uuid.uuid4()}{ext}"
+        file_path = str((upload_dir / stored_filename).resolve())
+        Path(file_path).write_bytes(file_bytes)
+        return stored_filename, file_path
 
     def replace_document(
         self,

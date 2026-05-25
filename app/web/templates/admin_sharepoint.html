@@ -1,0 +1,68 @@
+{% extends "base_dashboard.html" %}
+{% block title %}Admin SharePoint{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <h1 class="h4 mb-3">SharePoint / Microsoft Graph</h1>
+
+    {% if config_error %}
+    <div class="alert alert-warning">{{ config_error }}</div>
+    {% endif %}
+    {% if request.query_params.get('success') %}
+    <div class="alert alert-success">{{ request.query_params.get('success') }}</div>
+    {% endif %}
+
+    <form method="post" action="/admin/sharepoint/retry-failed" class="mb-4">
+        <button type="submit" class="btn btn-primary">Reintentar todos los fallidos</button>
+    </form>
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">Pendientes / local</div>
+                <ul class="list-group list-group-flush small">
+                    {% for row in pending %}
+                    <li class="list-group-item">
+                        #{{ row.doc.id }} · {{ row.case.public_id if row.case else '—' }}<br>
+                        <span class="text-muted">{{ row.doc.upload_status }}</span>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Ninguno</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card border-danger">
+                <div class="card-header text-danger">Fallidos</div>
+                <ul class="list-group list-group-flush small">
+                    {% for row in failed %}
+                    <li class="list-group-item">
+                        #{{ row.doc.id }} · {{ row.case.public_id if row.case else '—' }}<br>
+                        <span class="text-danger">{{ row.doc.upload_error or 'Error' }}</span>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Ninguno</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card border-success">
+                <div class="card-header text-success">OK recientes</div>
+                <ul class="list-group list-group-flush small">
+                    {% for row in ok_recent %}
+                    <li class="list-group-item">
+                        #{{ row.doc.id }} · {{ row.doc.stored_filename }}<br>
+                        {% if row.doc.sharepoint_web_url %}
+                        <a href="{{ row.doc.sharepoint_web_url }}" target="_blank" rel="noopener">Abrir en SharePoint</a>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Ninguno</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

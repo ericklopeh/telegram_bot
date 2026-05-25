@@ -7,7 +7,15 @@
             <h1 class="h4 mb-1">Gestión documental</h1>
             <p class="text-muted mb-0">{{ caso.public_id }} · {{ caso.client_name }}</p>
         </div>
-        <a href="/casos/{{ caso.id }}" class="btn btn-outline-secondary btn-sm">Volver al caso</a>
+        <div class="d-flex gap-2">
+            <form method="post" action="/casos/{{ caso.id }}/sharepoint/sync" class="m-0">
+                <button type="submit" class="btn btn-sm btn-outline-primary">Subir a SharePoint</button>
+            </form>
+            <form method="post" action="/casos/{{ caso.id }}/sharepoint/retry" class="m-0">
+                <button type="submit" class="btn btn-sm btn-outline-warning">Reintentar fallidos</button>
+            </form>
+            <a href="/casos/{{ caso.id }}" class="btn btn-outline-secondary btn-sm">Volver al caso</a>
+        </div>
     </div>
 
     {% if error %}
@@ -110,7 +118,8 @@
                     <tr>
                         <th>Tipo</th>
                         <th>Archivo</th>
-                        <th>Estado</th>
+                        <th>Revisión</th>
+                        <th>SharePoint</th>
                         <th>v</th>
                         <th>Acciones</th>
                     </tr>
@@ -126,6 +135,22 @@
                             {% endif %}
                         </td>
                         <td><span class="badge {% if doc.review_status == 'VALID' %}bg-success{% elif doc.review_status == 'INVALID' %}bg-danger{% else %}bg-warning text-dark{% endif %}">{{ doc.review_status }}</span></td>
+                        <td>
+                            {% if doc.upload_status in ('SHAREPOINT_OK', 'UPLOADED') %}
+                            <span class="badge bg-success">OK</span>
+                            {% elif doc.upload_status == 'UPLOADING' %}
+                            <span class="badge bg-info text-dark">Subiendo</span>
+                            {% elif doc.upload_status == 'UPLOAD_FAILED' %}
+                            <span class="badge bg-danger" title="{{ doc.upload_error or '' }}">Error</span>
+                            {% elif doc.upload_status == 'PENDING_UPLOAD' %}
+                            <span class="badge bg-warning text-dark">Pendiente</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ doc.upload_status }}</span>
+                            {% endif %}
+                            {% if doc.sharepoint_web_url %}
+                            <div><a href="{{ doc.sharepoint_web_url }}" class="small" target="_blank" rel="noopener">SharePoint</a></div>
+                            {% endif %}
+                        </td>
                         <td>{{ doc.version }}</td>
                         <td class="text-nowrap">
                             {% if can_validate and doc.review_status != 'VALID' %}
@@ -148,7 +173,7 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="5" class="text-muted text-center py-3">No hay documentos activos.</td></tr>
+                    <tr><td colspan="6" class="text-muted text-center py-3">No hay documentos activos.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

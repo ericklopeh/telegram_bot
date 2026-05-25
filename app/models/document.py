@@ -30,6 +30,9 @@ class Document(Base):
         String(32), nullable=False, server_default="PENDING_UPLOAD", index=True
     )
     sharepoint_web_url: Mapped[str | None] = mapped_column(String(1500), nullable=True)
+    sharepoint_drive_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    sharepoint_item_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    sharepoint_folder_path: Mapped[str | None] = mapped_column(String(1500), nullable=True)
     upload_error: Mapped[str | None] = mapped_column(Text(), nullable=True)
     upload_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)

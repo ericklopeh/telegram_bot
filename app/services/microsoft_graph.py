@@ -22,8 +22,7 @@ _CACHED_DRIVE_ID: str | None = None
 _FOLDER_CACHE: dict[str, str] = {}
 
 
-class GraphUploadError(RuntimeError):
-    """Error controlado para fallos de Microsoft Graph."""
+from app.services.sharepoint_graph_client import GraphUploadError  # noqa: F401 — reexport P25
 
 
 @dataclass

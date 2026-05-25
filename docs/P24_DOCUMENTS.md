@@ -92,6 +92,10 @@ docker compose exec web alembic upgrade head
 
 Revisión: `g3h4i5j6k7l8` (después de `f2a3b4c5d6e7`).
 
+## Upload legacy (P24.1)
+
+`POST /casos/{id}/upload-document` delega en `upload_document_legacy_web` (misma storage y eventos P24). Detalle: [P24_1_LEGACY_UPLOAD.md](P24_1_LEGACY_UPLOAD.md).
+
 ## Compatibilidad P19–P23
 
 - Rutas `/ventas` sin cambios.

@@ -18,6 +18,7 @@ from app.web.routes import (
     authorizations,
     case_documents,
     cases,
+    sharepoint,
     admin_workflow,
     commercial_reconciliation,
     commercial_reports,
@@ -160,6 +161,7 @@ web_app.include_router(dashboard.router)
 web_app.include_router(admin_workflow.router)
 web_app.include_router(cases.router)
 web_app.include_router(case_documents.router)
+web_app.include_router(sharepoint.router)
 web_app.include_router(revision_talon.router)
 web_app.include_router(authorizations.router)
 web_app.include_router(approved_authorizations.router)

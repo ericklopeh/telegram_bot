@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
+from app.domain import constants as C
 from app.domain.constants import doc_type_label
 from app.services.case_event_service import (
     DOCUMENT_UPLOAD_FAILED,
@@ -153,24 +154,54 @@ class DocumentRepository:
         _log_upload_event(db, doc, DOCUMENT_UPLOAD_QUEUED, doc.upload_status)
 
     @staticmethod
-    def set_upload_uploaded(
+    def set_upload_uploading(db: Session, document_id: int) -> None:
+        doc = db.get(Document, document_id)
+        if not doc:
+            return
+        doc.upload_status = C.UPLOAD_UPLOADING
+        doc.upload_error = None
+        db.flush()
+
+    @staticmethod
+    def set_sharepoint_ok(
         db: Session,
         document_id: int,
+        *,
         web_url: str | None,
-        sharepoint_path: str | None = None,
+        sharepoint_folder_path: str | None = None,
+        sharepoint_drive_id: str | None = None,
+        sharepoint_item_id: str | None = None,
     ) -> None:
         doc = db.get(Document, document_id)
         if not doc:
             return
-        doc.upload_status = "UPLOADED"
+        doc.upload_status = C.UPLOAD_SHAREPOINT_OK
         doc.sharepoint_web_url = web_url
+        doc.sharepoint_folder_path = sharepoint_folder_path
+        doc.sharepoint_drive_id = sharepoint_drive_id
+        doc.sharepoint_item_id = sharepoint_item_id
         doc.upload_error = None
         _log_upload_event(
             db,
             doc,
             DOCUMENT_UPLOADED,
             doc.upload_status,
-            sharepoint_path=sharepoint_path,
+            sharepoint_path=sharepoint_folder_path,
+        )
+
+    @staticmethod
+    def set_upload_uploaded(
+        db: Session,
+        document_id: int,
+        web_url: str | None,
+        sharepoint_path: str | None = None,
+    ) -> None:
+        """Compatibilidad con flujo legacy (bot / SharePointDocumentService)."""
+        DocumentRepository.set_sharepoint_ok(
+            db,
+            document_id,
+            web_url=web_url,
+            sharepoint_folder_path=sharepoint_path,
         )
 
     @staticmethod

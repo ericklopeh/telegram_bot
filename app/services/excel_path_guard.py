@@ -25,6 +25,12 @@ def is_under_excel_exports(path: Path | str) -> bool:
         return False
 
 
+def assert_not_excel_master_path(path: Path | str) -> None:
+    """Impide operar sobre maestros (solo lectura)."""
+    if is_under_excel_masters(path):
+        raise ValueError(f"Ruta prohibida en maestro Excel: {path}")
+
+
 def assert_writable_excel_path(path: Path | str) -> None:
     """Lanza ValueError si la ruta de escritura apunta a maestros."""
     p = Path(path)

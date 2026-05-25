@@ -35,6 +35,22 @@ def case_documents_base_dir(case: Case, *, project_root: Path | None = None) -> 
     return root / "storage" / "cases" / year / week_seg / seller / folio_seg / "documents"
 
 
+def case_documents_remote_relative_path(case: Case) -> str:
+    """
+    Ruta relativa bajo MS_ROOT_FOLDER (alineada con storage/cases/.../documents).
+    {year}/SEM_{week}/{seller}/FOLIO_{folio}_{cliente}/documents
+    """
+    created = case.created_at or datetime.now(timezone.utc)
+    year = str(created.year)
+    week_raw = (case.week_code or "SEM_00").strip()
+    week_seg = week_raw if week_raw.upper().startswith("SEM_") else f"SEM_{week_raw}"
+    seller = _safe_segment(case.seller_name or "sin_vendedor", "sin_vendedor")
+    folio = case.official_folio or case.temp_folio or case.public_id or str(case.id)
+    cliente = _safe_segment(case.client_name, "cliente")
+    folio_seg = _safe_segment(f"FOLIO_{folio}_{cliente}", f"FOLIO_{case.id}")
+    return f"{year}/{week_seg}/{seller}/{folio_seg}/documents"
+
+
 def build_stored_filename(
     document_type: str,
     original_filename: str | None,

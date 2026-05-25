@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain import constants as C
-from app.domain.constants import normalize_doc_type
+from app.domain.constants import is_sharepoint_synced, normalize_doc_type
 from app.models.case import Case
 from app.models.case_event import CaseEvent
 from app.models.commission import PAYMENT_STATUS_CANCELLED, Commission
@@ -111,9 +111,11 @@ def build_workflow_context(db: Session, case: Case) -> WorkflowContext:
     has_snte_pdf = C.DOC_ORDEN_SNTE_PDF in present
 
     sp_statuses = [d.upload_status or "" for d in docs if d.document_type in _CRITICAL_SP_TYPES]
-    sharepoint_ok = bool(sp_statuses) and all(s == "UPLOADED" for s in sp_statuses)
-    sharepoint_pending = any(s == "PENDING_UPLOAD" for s in sp_statuses)
-    sharepoint_failed = any(s == "UPLOAD_FAILED" for s in sp_statuses)
+    sharepoint_ok = bool(sp_statuses) and all(is_sharepoint_synced(s) for s in sp_statuses)
+    sharepoint_pending = any(
+        s in (C.UPLOAD_PENDING, C.UPLOAD_LOCAL, C.UPLOAD_UPLOADING) for s in sp_statuses
+    )
+    sharepoint_failed = any(s == C.UPLOAD_FAILED for s in sp_statuses)
 
     event_types = {e.event_type for e in events}
     has_ocr = OCR_PROCESSED in event_types or any(

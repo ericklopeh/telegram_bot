@@ -1,10 +1,8 @@
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 
 from app.db.session import session_scope
-from app.repositories.document_repository import DocumentRepository
-from app.services.microsoft_graph import upload_document_to_sharepoint
+from app.services.sharepoint_sync_service import SharePointSyncService
 from app.services.sharepoint_retry_queue import enqueue_failed_upload
 
 log = logging.getLogger(__name__)
@@ -23,41 +21,33 @@ class SharePointUploadPayload:
 
 
 class SharePointDocumentService:
+    """Fachada legacy: delega en SharePointSyncService (P25)."""
+
     def upload_document(self, payload: SharePointUploadPayload) -> dict:
         try:
-            file_bytes = Path(payload.file_path).read_bytes()
-            result = upload_document_to_sharepoint(
-                vendedor=payload.vendedor,
-                semana=payload.semana,
-                cliente=payload.cliente,
-                folio=payload.folio,
-                tipo_documento=payload.tipo_documento,
-                filename=payload.filename,
-                file_bytes=file_bytes,
-            )
             with session_scope() as db:
-                DocumentRepository.set_upload_uploaded(
-                    db,
-                    payload.document_id,
-                    result.get("webUrl"),
-                    sharepoint_path=result.get("folder_path"),
-                )
+                sync = SharePointSyncService()
+                result = sync.sync_document(db, payload.document_id, is_retry=False)
+                db.commit()
+            if not result.ok:
+                raise RuntimeError(result.error or "SharePoint sync failed")
+            doc = None
+            with session_scope() as db:
+                from app.models.document import Document
+
+                doc = db.get(Document, payload.document_id)
+            out = {
+                "ok": True,
+                "webUrl": result.web_url or (doc.sharepoint_web_url if doc else None),
+                "folder_path": doc.sharepoint_folder_path if doc else None,
+                "id": doc.sharepoint_item_id if doc else None,
+            }
             log.info(
                 "Documento subido a SharePoint",
-                extra={
-                    "document_id": payload.document_id,
-                    "vendedor": payload.vendedor,
-                    "folio": payload.folio,
-                    "cliente": payload.cliente,
-                    "tipo_documento": payload.tipo_documento,
-                    "ruta_final": result.get("folder_path"),
-                    "webUrl": result.get("webUrl"),
-                },
+                extra={"document_id": payload.document_id, "webUrl": out.get("webUrl")},
             )
-            return result
+            return out
         except Exception as exc:
-            with session_scope() as db:
-                DocumentRepository.set_upload_failed(db, payload.document_id, str(exc))
             enqueue_failed_upload(
                 file_path=payload.file_path,
                 vendedor=payload.vendedor,
@@ -71,13 +61,6 @@ class SharePointDocumentService:
             )
             log.exception(
                 "Error subiendo documento a SharePoint en background",
-                extra={
-                    "document_id": payload.document_id,
-                    "vendedor": payload.vendedor,
-                    "folio": payload.folio,
-                    "cliente": payload.cliente,
-                    "tipo_documento": payload.tipo_documento,
-                    "file_name_info": payload.filename,
-                },
+                extra={"document_id": payload.document_id},
             )
             raise

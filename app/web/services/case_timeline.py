@@ -55,6 +55,10 @@ from app.services.case_event_service import (
     CASE_DOCUMENT_VALIDATED,
     CASE_DOCUMENT_REJECTED,
     DOCUMENT_MISSING_BLOCKED,
+    SHAREPOINT_UPLOAD_STARTED,
+    SHAREPOINT_UPLOAD_OK,
+    SHAREPOINT_UPLOAD_FAILED,
+    SHAREPOINT_RETRY_REQUESTED,
 )
 
 _ICON: dict[str, str] = {
@@ -105,6 +109,10 @@ _ICON: dict[str, str] = {
     CASE_DOCUMENT_VALIDATED: "bi-patch-check",
     CASE_DOCUMENT_REJECTED: "bi-x-circle",
     DOCUMENT_MISSING_BLOCKED: "bi-folder-x",
+    SHAREPOINT_UPLOAD_STARTED: "bi-cloud-upload",
+    SHAREPOINT_UPLOAD_OK: "bi-cloud-check-fill",
+    SHAREPOINT_UPLOAD_FAILED: "bi-cloud-slash",
+    SHAREPOINT_RETRY_REQUESTED: "bi-arrow-clockwise",
 }
 
 _BADGE: dict[str, str] = {
@@ -155,6 +163,10 @@ _BADGE: dict[str, str] = {
     CASE_DOCUMENT_VALIDATED: "bg-success",
     CASE_DOCUMENT_REJECTED: "bg-danger",
     DOCUMENT_MISSING_BLOCKED: "bg-warning text-dark",
+    SHAREPOINT_UPLOAD_STARTED: "bg-info text-dark",
+    SHAREPOINT_UPLOAD_OK: "bg-success",
+    SHAREPOINT_UPLOAD_FAILED: "bg-danger",
+    SHAREPOINT_RETRY_REQUESTED: "bg-primary",
 }
 
 _CERRADOS_PEDIDO = {C.ST_PED_CERRADO, C.ST_PED_RECHAZADO, C.ST_PED_COMPRA}
@@ -208,6 +220,10 @@ _LABEL: dict[str, str] = {
     CASE_DOCUMENT_VALIDATED: "Documento validado",
     CASE_DOCUMENT_REJECTED: "Documento rechazado",
     DOCUMENT_MISSING_BLOCKED: "Bloqueo por documentos faltantes",
+    SHAREPOINT_UPLOAD_STARTED: "Subida SharePoint iniciada",
+    SHAREPOINT_UPLOAD_OK: "SharePoint sincronizado",
+    SHAREPOINT_UPLOAD_FAILED: "SharePoint fallido",
+    SHAREPOINT_RETRY_REQUESTED: "Reintento SharePoint solicitado",
 }
 
 
