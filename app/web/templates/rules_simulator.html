@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Simulador reglas{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Simulador de reglas</h1>
+<form method="get" class="coh-card mb-3 row g-2">
+<div class="col-md-3"><input name="trigger" class="form-control" value="{{ trigger }}"></div>
+<div class="col-md-2"><input name="seccion" class="form-control" value="{{ context.seccion }}"></div>
+<div class="col-md-2"><input name="monto" type="number" class="form-control" value="{{ context.monto }}"></div>
+<div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Simular</button></div>
+</form>
+{% if fired %}
+<div class="alert alert-warning">Reglas disparadas: {% for r in fired %}{{ r.rule_key }} {% endfor %}</div>
+{% else %}
+<div class="alert alert-success">Ninguna regla coincidió.</div>
+{% endif %}
+<table class="table table-sm coh-card mb-3">
+<thead><tr><th>Regla</th><th>Prioridad</th><th>On</th><th></th></tr></thead>
+<tbody>
+{% for r in rules %}
+<tr>
+<td>{{ r.rule_key }}</td><td>{{ r.priority }}</td><td>{{ r.enabled }}</td>
+<td>
+<form method="post" action="/admin/rules/toggle" class="d-inline">
+<input type="hidden" name="rule_key" value="{{ r.rule_key }}">
+<input type="hidden" name="enabled" value="{{ 'false' if r.enabled else 'true' }}">
+<button class="btn btn-sm btn-outline-secondary" type="submit">Toggle</button>
+</form>
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<h2 class="h6">Logs recientes</h2>
+<ul class="list-group coh-card">{% for l in logs %}<li class="list-group-item small">{{ l.rule_key }} · {{ l.trigger }} · match={{ l.matched }}</li>{% endfor %}</ul>
+{% endblock %}

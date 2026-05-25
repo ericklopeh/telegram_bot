@@ -333,6 +333,24 @@ class CaseDocumentService:
                 },
             )
         db.flush()
+        try:
+            from app.services.platform_cohesion_service import safe_cohesion_emit
+
+            safe_cohesion_emit(
+                db,
+                action="document_uploaded",
+                title=f"Documento cargado: {doc_type_label(document_type)}",
+                entity_type="document",
+                entity_id=doc.id,
+                actor_user_id=actor_user_id,
+                actor_label=uploaded_by,
+                source=source,
+                href=f"/casos/{case.id}",
+                rule_trigger="document_validation",
+                rule_context={"document_type": document_type, "case_id": case.id},
+            )
+        except Exception:
+            pass
         return doc
 
     def upload_document_legacy_web(

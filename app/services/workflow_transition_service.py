@@ -218,6 +218,36 @@ def request_transition(
                 "SNTE habilitado tras aprobación y compulsa",
                 user,
             )
+        try:
+            from app.services.platform_cohesion_service import PlatformCohesionService
+
+            actor = user or {}
+            PlatformCohesionService().emit(
+                db,
+                action="workflow_transition",
+                title=f"Workflow → {target_state}",
+                entity_type="case",
+                entity_id=case.id,
+                detail=f"{current} → {target_state}",
+                actor_user_id=actor.get("id"),
+                actor_label=actor.get("nombre") or actor.get("username"),
+                source="workflow",
+                tone="info",
+                href=f"/casos/{case.id}",
+                compliance_before={"workflow_state": current},
+                compliance_after={"workflow_state": target_state},
+                rule_trigger="workflow_transition",
+                rule_context={
+                    "entity_type": "case",
+                    "entity_id": case.id,
+                    "from": current,
+                    "to": target_state,
+                },
+                automation_trigger="workflow_approved" if target_state in ("APROBADO", "SNTE_PENDIENTE") else None,
+                automation_context={"case_id": case.id, "href": f"/casos/{case.id}"},
+            )
+        except Exception:
+            log.debug("Cohesion emit workflow falló", exc_info=True)
 
     return case, None
 

@@ -26,6 +26,7 @@
 
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="/static/css/enterprise.css">
+    <link rel="stylesheet" href="/static/css/cohesion.css">
 
     {% block extra_head %}{% endblock %}
 
@@ -33,7 +34,7 @@
 
 
 
-<body class="bg-light {% block body_class %}{% endblock %}">
+<body class="bg-light cohesion-ui {% block body_class %}{% endblock %}">
 
 
 
@@ -58,120 +59,61 @@
         <div id="navbarMenu" class="collapse navbar-collapse">
 
             <ul class="navbar-nav me-auto">
-
-                <li class="nav-item">
-
-                    <a class="nav-link" href="/dashboard">Dashboard</a>
-
-                </li>
-
-                <li class="nav-item">
-
-                    <a class="nav-link" href="/mi-dashboard">Mi panel</a>
-
-                </li>
-
+                <li class="nav-item"><a class="nav-link" href="/dashboard"><span class="coh-badge-live" id="cohLiveDot" style="display:none"></span>Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="/mi-dashboard">Mi panel</a></li>
                 {% if usuario.rol in ['admin', 'sistemas', 'autorizacion', 'compras'] %}
-                <li class="nav-item">
-                    <a class="nav-link" href="/supervisor/dashboard">Supervisor</a>
-                </li>
+                <li class="nav-item"><a class="nav-link" href="/supervisor/cockpit">Cockpit</a></li>
                 {% endif %}
-
-                {% if usuario.rol in ['admin', 'sistemas'] %}
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Operación</a>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/ops">Panel ops</a></li>
-                        <li><a class="dropdown-item" href="/ops/incidents">Incidencias</a></li>
-                        <li><a class="dropdown-item" href="/operacion/revision">Revisión operativa</a></li>
-                    </ul>
-                </li>
-                {% else %}
-                <li class="nav-item">
-                    <a class="nav-link" href="/operacion/revision">Revisión operativa</a>
-                </li>
-                {% endif %}
-
-                <li class="nav-item dropdown">
-
-                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Operación</a>
-
-                    <ul class="dropdown-menu">
-
                         <li><a class="dropdown-item" href="/casos">Casos</a></li>
-
+                        <li><a class="dropdown-item" href="/workflow/visual">Workflow visual</a></li>
                         <li><a class="dropdown-item" href="/ventas">Ventas</a></li>
-
-                        <li><a class="dropdown-item" href="/ventas/pendientes">Ventas pendientes</a></li>
-
                         <li><a class="dropdown-item" href="/comisiones">Comisiones</a></li>
-
-                        <li><a class="dropdown-item" href="/control/conciliacion">Conciliación comercial</a></li>
-
-                    </ul>
-
-                </li>
-
-                <li class="nav-item dropdown">
-
-                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Finanzas / BI</a>
-
-                    <ul class="dropdown-menu">
-
-                        <li><a class="dropdown-item" href="/erp/dashboard">ERP</a></li>
-
-                        {% if usuario.rol in ['admin', 'sistemas'] %}
-                        <li><a class="dropdown-item" href="/imports">Importación Excel</a></li>
-                        {% endif %}
-
-                        <li><a class="dropdown-item" href="/bi/dashboard">BI Dashboard</a></li>
-
-                        <li><a class="dropdown-item" href="/bi/reportes">Reportes BI</a></li>
-
-                        <li><a class="dropdown-item" href="/bi/alertas">Alertas BI</a></li>
-
-                        <li><a class="dropdown-item" href="/reportes/comercial">Control comercial</a></li>
-
-                    </ul>
-
-                </li>
-
-                {% if usuario.rol in ['admin', 'sistemas'] %}
-
-                <li class="nav-item dropdown">
-
-                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Admin</a>
-
-                    <ul class="dropdown-menu">
-
                         <li><a class="dropdown-item" href="/activity">Actividad</a></li>
-                        <li><a class="dropdown-item" href="/jobs">Jobs</a></li>
-                        <li><a class="dropdown-item" href="/analytics/avanzado">Analytics</a></li>
-                        <li><a class="dropdown-item" href="/admin/performance">Performance</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="/ops">Recovery / Ops</a></li>
-                        <li><a class="dropdown-item" href="/admin/beta-readiness">Beta readiness</a></li>
-                        <li><a class="dropdown-item" href="/admin/workflow">Workflow</a></li>
-
-                        <li><a class="dropdown-item" href="/admin/sharepoint">SharePoint</a></li>
-
-                        <li><a class="dropdown-item" href="/admin/sharepoint/health">Health Graph</a></li>
-
-                        <li><hr class="dropdown-divider"></li>
-
-                        <li><a class="dropdown-item" href="/health/full" target="_blank">Health sistema</a></li>
-
+                        <li><a class="dropdown-item" href="/calendar">Calendario</a></li>
+                        <li><a class="dropdown-item" href="/tasks">Tareas</a></li>
                     </ul>
-
                 </li>
-
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">ERP / BI</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="/erp/dashboard">ERP</a></li>
+                        <li><a class="dropdown-item" href="/bi/dashboard">BI</a></li>
+                        <li><a class="dropdown-item" href="/analytics/avanzado">Analytics</a></li>
+                        {% if usuario.rol in ['admin', 'sistemas'] %}
+                        <li><a class="dropdown-item" href="/imports">Imports</a></li>
+                        {% endif %}
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Recovery</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="/ops">Ops</a></li>
+                        <li><a class="dropdown-item" href="/jobs">Jobs</a></li>
+                        <li><a class="dropdown-item" href="/ai/copilot">AI Copilot</a></li>
+                    </ul>
+                </li>
+                {% if usuario.rol in ['admin', 'sistemas'] %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Admin</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="/admin/compliance-center">Compliance</a></li>
+                        <li><a class="dropdown-item" href="/admin/rules">Reglas</a></li>
+                        <li><a class="dropdown-item" href="/admin/automations">Automations</a></li>
+                        <li><a class="dropdown-item" href="/reports/builder">Reportes</a></li>
+                        <li><a class="dropdown-item" href="/admin/feature-flags">Flags</a></li>
+                        <li><a class="dropdown-item" href="/admin/workflow">Workflow config</a></li>
+                        <li><a class="dropdown-item" href="/admin/sharepoint">SharePoint</a></li>
+                    </ul>
+                </li>
                 {% endif %}
-
             </ul>
-
-            <form class="d-flex ent-global-search me-2" role="search" action="/search" method="get" onsubmit="return true;">
-                <input id="globalSearchInput" class="form-control form-control-sm" type="search" name="q" placeholder="Buscar…" aria-label="Búsqueda global">
-            </form>
+            <button type="button" class="btn btn-outline-light btn-sm me-2" title="Ctrl+K" onclick="document.getElementById('cohCommandPalette').classList.add('is-open'); document.querySelector('.coh-palette__input').focus();">
+                <i class="bi bi-command"></i>
+            </button>
+            <a href="/activity" class="nav-link text-light coh-notif-badge me-2" id="cohNotifBadge" data-count="0" title="Notificaciones"><i class="bi bi-bell"></i></a>
 
             <span class="navbar-text me-3">
 
@@ -208,8 +150,20 @@
 
 
 
+{% if usuario %}
+<div id="cohCommandPalette" class="coh-palette">
+    <div class="coh-palette__box">
+        <input type="text" class="form-control coh-palette__input" placeholder="Buscar o ir a… (Ctrl+K)" autocomplete="off">
+        <div class="coh-palette__results list-group list-group-flush" style="max-height:320px;overflow:auto"></div>
+    </div>
+</div>
+{% endif %}
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-{% if usuario %}<script src="/static/js/global_search.js"></script>{% endif %}
+{% if usuario %}
+<script src="/static/js/global_search.js"></script>
+<script src="/static/js/cohesion.js"></script>
+{% endif %}
 
 {% block extra_scripts %}{% endblock %}
 

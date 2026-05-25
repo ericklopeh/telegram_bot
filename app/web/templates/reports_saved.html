@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Reportes guardados{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Reportes guardados</h1>
+<ul class="list-group">
+{% for r in reports %}
+<li class="list-group-item">{{ r.name }} — {{ r.created_by or 'sistema' }}</li>
+{% else %}
+<li class="list-group-item text-muted">Sin reportes guardados.</li>
+{% endfor %}
+</ul>
+{% endblock %}

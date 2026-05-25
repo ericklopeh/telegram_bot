@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Reglas dinámicas{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Motor de reglas (P50)</h1>
+<table class="table table-sm">
+<thead><tr><th>Clave</th><th>Nombre</th><th>Trigger</th><th>Activa</th></tr></thead>
+<tbody>
+{% for r in rules %}
+<tr><td><code>{{ r.rule_key }}</code></td><td>{{ r.name }}</td><td>{{ r.trigger_event }}</td><td>{{ r.enabled }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

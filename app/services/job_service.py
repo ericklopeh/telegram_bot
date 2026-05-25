@@ -52,6 +52,23 @@ class JobService:
         )
         db.add(job)
         db.flush()
+        try:
+            from app.services.platform_cohesion_service import PlatformCohesionService
+
+            PlatformCohesionService().emit(
+                db,
+                action="job_enqueued",
+                title=f"Job encolado: {job_type}",
+                entity_type="job",
+                entity_id=job.id,
+                source="jobs",
+                tone="info",
+                href="/jobs",
+                automation_trigger=None,
+                skip_automation=True,
+            )
+        except Exception:
+            pass
 
         should_async = run_async if run_async is not None else settings.jobs_async_enabled
         if should_async:

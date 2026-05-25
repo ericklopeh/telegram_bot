@@ -143,6 +143,21 @@ class SharePointSyncService:
                 metadata={"web_url": result.web_url, "folder_path": result.folder_path},
             )
             db.flush()
+            try:
+                from app.services.platform_cohesion_service import safe_cohesion_emit
+
+                safe_cohesion_emit(
+                    db,
+                    action="sharepoint_sync_ok",
+                    title=f"SharePoint OK: {doc.stored_filename}",
+                    entity_type="document",
+                    entity_id=document_id,
+                    actor_user_id=actor_user_id,
+                    source="sharepoint",
+                    href=f"/casos/{case.id}",
+                )
+            except Exception:
+                pass
             return SyncResult(
                 document_id,
                 True,
@@ -173,6 +188,26 @@ class SharePointSyncService:
                 metadata={"error": err},
             )
             db.flush()
+            try:
+                from app.services.platform_cohesion_service import safe_cohesion_emit
+
+                safe_cohesion_emit(
+                    db,
+                    action="sharepoint_sync_failed",
+                    title=f"SharePoint fallido: {doc.stored_filename}",
+                    entity_type="document",
+                    entity_id=document_id,
+                    detail=err,
+                    actor_user_id=actor_user_id,
+                    source="sharepoint",
+                    tone="danger",
+                    severity="critical",
+                    href=f"/casos/{case.id}",
+                    automation_trigger="sharepoint_failed",
+                    automation_context={"document_id": document_id, "case_id": case.id, "error": err},
+                )
+            except Exception:
+                pass
             return SyncResult(document_id, False, C.UPLOAD_FAILED, error=err)
 
     def sync_case_documents(

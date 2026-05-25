@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Tenants SaaS{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Multi-tenant SaaS</h1>
+<table class="table table-sm">
+<thead><tr><th>Slug</th><th>Nombre</th><th>Company</th><th>Activo</th><th>Límites</th></tr></thead>
+<tbody>
+{% for t in tenants %}
+<tr>
+  <td><code>{{ t.slug }}</code></td>
+  <td>{{ t.display_name }}</td>
+  <td>{{ t.company_id }}</td>
+  <td>{{ t.is_active }}</td>
+  <td><small>{{ t.limits }}</small></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

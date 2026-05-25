@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}IA operacional{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">IA operacional (sin OCR)</h1>
+<h2 class="h6">Sugerencias recovery</h2>
+<ul>{% for s in suggestions %}<li>{{ s }}</li>{% endfor %}</ul>
+<h2 class="h6">Anomalías</h2>
+<ul>{% for a in anomalies %}<li>{{ a.type }}: {{ a.detail }}</li>{% else %}<li class="text-muted">Sin anomalías.</li>{% endfor %}</ul>
+<h2 class="h6">Insights BI</h2>
+<ul>{% for i in insights %}<li>{{ i }}</li>{% endfor %}</ul>
+{% endblock %}

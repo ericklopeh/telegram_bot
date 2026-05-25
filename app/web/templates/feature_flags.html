@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Feature flags{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Feature flags</h1>
+<table class="table table-sm">
+{% for f in flags %}
+<tr>
+  <td><code>{{ f.flag_key }}</code></td>
+  <td>{{ f.description }}</td>
+  <td>
+    <form method="post" action="/admin/feature-flags/toggle" class="d-inline">
+      <input type="hidden" name="flag_key" value="{{ f.flag_key }}">
+      <input type="hidden" name="enabled" value="{{ 'false' if f.enabled else 'true' }}">
+      <button class="btn btn-sm {{ 'btn-success' if f.enabled else 'btn-outline-secondary' }}" type="submit">
+        {{ 'ON' if f.enabled else 'OFF' }}
+      </button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

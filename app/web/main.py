@@ -38,6 +38,8 @@ from app.web.routes import (
     ops,
     beta_readiness,
     platform,
+    enterprise_advanced,
+    cohesion,
 )
 from app.api.v1 import api_v1_router
 
@@ -256,6 +258,8 @@ web_app.include_router(imports.router)
 web_app.include_router(ops.router)
 web_app.include_router(beta_readiness.router)
 web_app.include_router(platform.router)
+web_app.include_router(enterprise_advanced.router)
+web_app.include_router(cohesion.router)
 web_app.include_router(api_v1_router)
 
 # Montar estáticos al final (recomendación FastAPI/Starlette) para no interferir con rutas HTTP.

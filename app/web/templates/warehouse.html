@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Data warehouse{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3">
+  <h1 class="h4 mb-0">Snapshots analíticos</h1>
+  <form method="post" action="/admin/warehouse/capture"><button class="btn btn-primary btn-sm" type="submit">Capturar hoy</button></form>
+</div>
+<ul class="list-group">
+{% for s in snapshots %}
+<li class="list-group-item">{{ s.date }} · {{ s.domain }} — {{ s.keys|join(', ') }}</li>
+{% else %}
+<li class="list-group-item text-muted">Sin snapshots. Ejecute captura.</li>
+{% endfor %}
+</ul>
+{% endblock %}

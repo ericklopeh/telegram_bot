@@ -144,6 +144,19 @@ class ErpExportService:
             )
         path = self._export_path("erp_recovery")
         wb.save(path)
+        try:
+            from app.services.platform_cohesion_service import safe_cohesion_emit
+
+            safe_cohesion_emit(
+                db,
+                action="export_generated",
+                title="Export ERP recovery",
+                entity_type="export",
+                source="erp",
+                href=str(path),
+            )
+        except Exception:
+            pass
         return path
 
     def export_refinance(self, db: Session) -> Path:

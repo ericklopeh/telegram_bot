@@ -534,6 +534,23 @@ class ExcelImportService:
         )
         BiDashboardService().clear_cache()
         db.flush()
+        try:
+            from app.services.platform_cohesion_service import safe_cohesion_emit
+
+            safe_cohesion_emit(
+                db,
+                action="import_completed",
+                title=f"Import confirmado: lote {batch_id}",
+                entity_type="import_batch",
+                entity_id=batch_id,
+                actor_label=username,
+                source="imports",
+                href="/imports",
+                automation_trigger="import_completed",
+                automation_context={"batch_id": batch_id, "imported": imported},
+            )
+        except Exception:
+            pass
         return batch
 
     def rollback_batch(

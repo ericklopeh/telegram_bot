@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}AI Copilot{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Asistente operacional</h1>
+<div class="coh-card mb-3">
+    <p>{{ briefing.summary }}</p>
+    <p class="small text-muted">{{ briefing.note }}</p>
+</div>
+<div class="row g-3">
+<div class="col-md-6">
+    <div class="coh-card"><h2 class="h6">Recovery</h2><ul>{% for s in briefing.recovery %}<li>{{ s }}</li>{% endfor %}</ul></div>
+</div>
+<div class="col-md-6">
+    <div class="coh-card"><h2 class="h6">Prioridades</h2>
+    {% for p in briefing.priorities %}
+    <a href="{{ p.href }}" class="d-block mb-2"><span class="badge bg-{{ 'danger' if p.level=='high' else 'secondary' }}">{{ p.level }}</span> {{ p.text }}</a>
+    {% endfor %}
+    </div>
+</div>
+</div>
+{% endblock %}

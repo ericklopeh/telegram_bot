@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Tareas — Sistema Gaman{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{% if mine %}Mis tareas{% else %}Tareas operativas{% endif %}</h1>
+<ul class="list-group mb-4">
+{% for t in tasks %}
+<li class="list-group-item">
+  <strong>{{ t.title }}</strong> — {{ t.status }} · vence {{ t.due_at or '—' }}
+  {% if t.case_id %}<a href="/casos/{{ t.case_id }}">caso</a>{% endif %}
+</li>
+{% else %}
+<li class="list-group-item text-muted">Sin tareas.</li>
+{% endfor %}
+</ul>
+<form method="post" action="/tasks/create" class="card p-3">
+  <h2 class="h6">Nueva tarea</h2>
+  <input class="form-control mb-2" name="title" placeholder="Título" required>
+  <textarea class="form-control mb-2" name="description" placeholder="Descripción"></textarea>
+  <input class="form-control mb-2" name="case_id" type="number" placeholder="ID caso (opcional)">
+  <button class="btn btn-primary btn-sm" type="submit">Crear</button>
+</form>
+{% endblock %}

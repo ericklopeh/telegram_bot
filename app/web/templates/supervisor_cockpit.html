@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Cockpit supervisor{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Centro operacional</h1>
+<div class="row g-3 mb-4">
+{% for k, v in cockpit.kpis.items() %}
+<div class="col-6 col-md-4 col-lg-2"><div class="coh-card text-center"><div class="fs-3 fw-bold">{{ v }}</div><div class="small text-muted">{{ k|replace('_',' ') }}</div></div></div>
+{% endfor %}
+</div>
+<div class="row g-3">
+<div class="col-lg-7">
+    <div class="coh-card mb-3">
+        <h2 class="h6">Casos críticos</h2>
+        <ul class="list-group list-group-flush">
+        {% for c in cockpit.critical_cases %}
+        <li class="list-group-item d-flex justify-content-between"><span>{{ c.public_id }} — {{ c.client }}</span><a href="{{ c.href }}" class="btn btn-sm btn-outline-danger">Ver</a></li>
+        {% else %}<li class="coh-empty list-group-item">Sin casos críticos.</li>{% endfor %}
+        </ul>
+    </div>
+    <div class="coh-card">
+        <h2 class="h6">Actividad reciente</h2>
+        {% for ev in cockpit.activity[:8] %}
+        <div class="small border-bottom py-2">{{ ev.title }} — {{ ev.time_ago }}</div>
+        {% endfor %}
+    </div>
+</div>
+<div class="col-lg-5">
+    <div class="coh-card mb-3">
+        <h2 class="h6">Heatmap vendedores</h2>
+        {% for h in cockpit.seller_heatmap %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <span style="width:{{ h.intensity }}%;max-width:100%;height:8px;background:#3b82f6;border-radius:4px"></span>
+            <span class="small">{{ h.seller }} ({{ h.count }})</span>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="coh-card">
+        <h2 class="h6">Recovery rápido</h2>
+        {% for l in cockpit.recovery_links %}
+        <a href="{{ l.href }}" class="btn btn-outline-primary btn-sm w-100 mb-2">{{ l.label }}</a>
+        {% endfor %}
+    </div>
+</div>
+</div>
+{% endblock %}

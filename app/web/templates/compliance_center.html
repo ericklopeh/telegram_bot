@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Compliance Center{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3">
+    <h1 class="h4 mb-0">Compliance Center</h1>
+    <a href="/admin/compliance-center/export" class="btn btn-outline-secondary btn-sm">Exportar CSV</a>
+</div>
+<div class="row g-3 mb-4">
+<div class="col-md-4"><div class="coh-card"><strong>{{ center.audit_count }}</strong> auditorías</div></div>
+<div class="col-md-4"><div class="coh-card"><strong>{{ center.compliance_events }}</strong> eventos</div></div>
+<div class="col-md-4"><div class="coh-card"><strong>{{ center.signatures_count }}</strong> firmas</div></div>
+</div>
+<div class="coh-card">
+    <h2 class="h6">Timeline</h2>
+    {% for t in center.timeline %}
+    <div class="border-bottom py-2 small"><span class="badge bg-secondary">{{ t.kind }}</span> {{ t.title }} — {{ t.actor }} — {{ t.at }}</div>
+    {% else %}<div class="coh-empty">Sin eventos.</div>{% endfor %}
+</div>
+{% endblock %}

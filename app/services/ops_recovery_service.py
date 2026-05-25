@@ -101,11 +101,28 @@ class OpsRecoveryService:
                 ok_count=ok_n,
                 total=len(results),
             )
-            return RecoveryResult(
+            result = RecoveryResult(
                 ok=ok_n > 0,
                 message=msg,
                 details={"results": [{"id": r.document_id, "ok": r.ok, "error": r.error} for r in results]},
             )
+            try:
+                from app.services.platform_cohesion_service import safe_cohesion_emit
+
+                safe_cohesion_emit(
+                    db,
+                    action="recovery_sharepoint_retry",
+                    title=msg,
+                    entity_type="case" if case_id else "document",
+                    entity_id=case_id or document_id,
+                    actor_label=username,
+                    source="recovery",
+                    tone="warn" if not result.ok else "info",
+                    href="/ops/recovery",
+                )
+            except Exception:
+                pass
+            return result
         except Exception as exc:
             log_ops_action(
                 log,

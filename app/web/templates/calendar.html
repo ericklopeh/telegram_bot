@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Calendario — Sistema Gaman{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Calendario operativo</h1>
+<p class="text-muted">SLA: {{ sla.open }} abiertas · {{ sla.overdue }} vencidas · {{ sla.due_soon }} próximas 24h</p>
+<ul class="list-group">
+{% for e in events %}
+<li class="list-group-item d-flex justify-content-between">
+  <span>{{ e.title }} — {{ e.start }}</span>
+  <a href="{{ e.href }}" class="btn btn-sm btn-outline-primary">Ver</a>
+</li>
+{% else %}
+<li class="list-group-item text-muted">Sin eventos programados.</li>
+{% endfor %}
+</ul>
+{% endblock %}

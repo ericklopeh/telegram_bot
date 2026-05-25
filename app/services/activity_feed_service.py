@@ -80,7 +80,39 @@ class ActivityFeedService:
         from app.services.performance_service import cache_invalidate
 
         cache_invalidate("activity:")
+        try:
+            from app.services.realtime_service import RealtimeService
+
+            RealtimeService().publish_activity(
+                event_type,
+                {"entity_type": entity_type, "entity_id": entity_id, "title": title},
+            )
+        except Exception:
+            pass
         return ev
+
+    def list_feed_grouped(
+        self,
+        db: Session,
+        *,
+        limit: int = 50,
+        company_id: int | None = None,
+        **filters: Any,
+    ) -> list[dict[str, Any]]:
+        rows = self.list_feed(db, limit=limit, company_id=company_id, **filters)
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            key = row.get("entity_type") or "other"
+            groups.setdefault(key, []).append(row)
+        return [
+            {
+                "entity_type": et,
+                "label": et.replace("_", " ").title(),
+                "count": len(items),
+                "items": items,
+            }
+            for et, items in groups.items()
+        ]
 
     def list_feed(
         self,
@@ -91,8 +123,11 @@ class ActivityFeedService:
         entity_id: int | None = None,
         actor_user_id: int | None = None,
         company_id: int | None = None,
+        tone: str | None = None,
+        source: str | None = None,
+        event_type: str | None = None,
     ) -> list[dict[str, Any]]:
-        cache_key = f"activity:{entity_type}:{entity_id}:{actor_user_id}:{limit}"
+        cache_key = f"activity:{entity_type}:{entity_id}:{actor_user_id}:{tone}:{source}:{limit}"
         from app.services.performance_service import cache_get, cache_set
 
         hit = cache_get(cache_key)
@@ -101,12 +136,20 @@ class ActivityFeedService:
 
         rows = self._query_feed(
             db,
-            limit=limit,
+            limit=limit * 2,
             entity_type=entity_type,
             entity_id=entity_id,
             actor_user_id=actor_user_id,
             company_id=company_id,
+            tone=tone,
+            source=source,
+            event_type=event_type,
         )
+        if tone:
+            rows = [r for r in rows if r.get("tone") == tone]
+        if source:
+            rows = [r for r in rows if r.get("source") == source]
+        rows = rows[:limit]
         if len(rows) < limit:
             rows = self._merge_case_events(db, rows, limit=limit)
 
@@ -122,6 +165,9 @@ class ActivityFeedService:
         entity_id: int | None,
         actor_user_id: int | None,
         company_id: int | None,
+        tone: str | None = None,
+        source: str | None = None,
+        event_type: str | None = None,
     ) -> list[dict[str, Any]]:
         stmt = select(ActivityEvent).order_by(ActivityEvent.created_at.desc()).limit(limit)
         if entity_type:
@@ -132,6 +178,12 @@ class ActivityFeedService:
             stmt = stmt.where(ActivityEvent.actor_user_id == actor_user_id)
         if company_id is not None:
             stmt = stmt.where(ActivityEvent.company_id == company_id)
+        if tone:
+            stmt = stmt.where(ActivityEvent.tone == tone)
+        if source:
+            stmt = stmt.where(ActivityEvent.source == source)
+        if event_type:
+            stmt = stmt.where(ActivityEvent.event_type == event_type)
 
         events = list(db.scalars(stmt).all())
         return [self._serialize(ev) for ev in events]
@@ -174,6 +226,8 @@ class ActivityFeedService:
 
     def _serialize(self, ev: ActivityEvent) -> dict[str, Any]:
         label = ev.actor_label or "Sistema"
+        meta = ev.metadata_json or {}
+        severity = meta.get("severity")
         return {
             "id": ev.id,
             "event_type": ev.event_type,
@@ -185,10 +239,13 @@ class ActivityFeedService:
             "initials": _initials(label),
             "source": ev.source,
             "tone": ev.tone,
+            "severity": severity,
+            "badge": severity or ev.tone,
             "href": ev.href,
             "time_ago": _time_ago(ev.created_at),
             "created_at": ev.created_at.isoformat() if ev.created_at else None,
             "source_table": "activity_events",
+            "metadata": meta,
         }
 
     def sync_from_case_event(self, db: Session, case_event: CaseEvent) -> ActivityEvent:

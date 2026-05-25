@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Workflow visual{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Pipeline workflow</h1>
+{% for item in cases_preview %}
+<div class="coh-card mb-4">
+    <div class="d-flex justify-content-between mb-2">
+        <strong>{{ item.case.public_id }}</strong>
+        <a href="/casos/{{ item.case.id }}" class="btn btn-sm btn-outline-primary">Abrir caso</a>
+    </div>
+    <div class="coh-wf-pipeline">
+    {% for step in item.pipeline.steps %}
+    <div class="coh-wf-step coh-wf-step--{{ step.status }}">
+        <div class="fw-semibold">{{ step.label }}</div>
+        {% if step.status == 'blocked' %}<span class="badge bg-warning">Bloqueado</span>{% endif %}
+    </div>
+    {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="coh-empty coh-card">No hay casos para visualizar.</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Automations{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Automatizaciones</h1>
+<table class="table table-sm coh-card">
+<thead><tr><th>Clave</th><th>Nombre</th><th>Trigger</th><th>Activa</th></tr></thead>
+<tbody>
+{% for f in flows %}
+<tr><td><code>{{ f.flow_key }}</code></td><td>{{ f.name }}</td><td>{{ f.trigger_type }}</td><td>{{ f.enabled }}</td></tr>
+{% else %}
+<tr><td colspan="4" class="coh-empty">Sin flujos. Recargue para seed defaults.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}
