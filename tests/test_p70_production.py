@@ -15,11 +15,12 @@ from app.web.main import web_app
 
 
 def test_production_settings_secure_cookies():
-    s = Settings(
-        TELEGRAM_BOT_TOKEN="x",
-        DATABASE_URL="postgresql+psycopg://u:p@localhost/db",
-        ENVIRONMENT="production",
-        WEB_DEBUG=False,
+    s = Settings.model_construct(
+        telegram_bot_token="x",
+        database_url="postgresql+psycopg://u:p@localhost/db",
+        environment="production",
+        web_debug=False,
+        secure_cookies=None,
     )
     assert s.session_https_only is True
     assert s.is_production is True

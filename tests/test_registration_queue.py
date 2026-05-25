@@ -110,7 +110,9 @@ def test_retry_increments_attempts(mock_log, mock_repo):
     proc.assert_called_once()
 
 
-def test_vendor_cannot_retry_permission():
+@patch("app.services.sale_action_guard_service.get_settings")
+def test_vendor_cannot_retry_permission(mock_settings):
+    mock_settings.return_value.web_rbac_relaxed = False
     sale = _sale(
         registration_status=REG_STATUS_REGISTRATION_FAILED,
         status=SALE_STATUS_EXPORT_FAILED,

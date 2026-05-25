@@ -151,14 +151,16 @@ def test_health_check_config_failure(mock_client_cls):
     assert "MS_TENANT_ID" in report.errors[0]
 
 
+@patch("app.services.sharepoint_health_service.get_settings")
 @patch("app.services.sharepoint_health_service.SharePointGraphClient")
-def test_health_check_success(mock_client_cls):
+def test_health_check_success(mock_client_cls, mock_get_settings):
     settings = MagicMock(
         ms_root_folder="Root/PEDIDOS",
         ms_drive_name="drive",
         ms_site_hostname="host",
         ms_site_path="/sites/x",
     )
+    mock_get_settings.return_value = settings
     mock_client = MagicMock()
     mock_client.validate_config.return_value = None
     mock_client.get_access_token.return_value = "token"

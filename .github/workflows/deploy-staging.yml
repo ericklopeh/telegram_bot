@@ -14,6 +14,9 @@ jobs:
       - name: Validate Docker build (web)
         run: docker build -f Dockerfile.web -t gaman-web:ci .
 
+      - name: Prepare CI .env for compose validation
+        run: cp .env.example .env
+
       - name: Validate compose staging
         run: docker compose -f docker-compose.staging.yml config -q
 

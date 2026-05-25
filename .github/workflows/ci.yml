@@ -49,6 +49,9 @@ jobs:
       - name: Lint (ruff check)
         run: ruff check app tests --ignore E501 || true
 
+      - name: Prepare CI .env for compose validation
+        run: cp .env.example .env
+
       - name: Validate compose files
         run: |
           docker compose -f docker-compose.yml config -q

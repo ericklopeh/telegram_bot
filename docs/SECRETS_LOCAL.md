@@ -17,10 +17,11 @@ cp .env.example .env
 # Editar .env con el token de BotFather
 ```
 
-## GitHub
+## GitHub / CI
 
 - **No** pegues el token en código, workflows ni `.env.example`.
-- CI usa variables ficticias en `.github/workflows/*.yml`.
+- CI ejecuta `cp .env.example .env` antes de `docker compose config` (sin secretos reales).
+- Variables de job en `.github/workflows/ci.yml` para pytest.
 - En el VPS usa `.env` en el servidor (fuera del repo público) o secrets del proveedor.
 
 ## Si GitHub bloqueó un push
