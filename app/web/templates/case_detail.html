@@ -1,7 +1,6 @@
-{% extends "base.html" %}
+{% extends "base_dash.html" %}
 
-{% block content %}
-
+{% set active_nav = 'casos' %}
 {% set web_rbac_relaxed = web_rbac_relaxed|default(false) %}
 {% set pedido_checklist_ok = pedido_checklist_ok|default(true) %}
 {% set pedido_checklist_text = pedido_checklist_text|default('') %}
@@ -10,595 +9,562 @@
 {% set error_msg = request.query_params.get('error') %}
 {% set success_msg = request.query_params.get('success') %}
 
+{% block page_title %}{{ caso.client_name }}{% endblock %}
+{% block page_subtitle %}Caso {{ caso.public_id }} · {{ caso.case_type }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/casos" class="g-btn g-btn--ghost g-btn--sm">
+    <i data-lucide="arrow-left" style="width:14px;height:14px"></i>
+    Casos
+</a>
+{% if action_guard and action_guard.can_generate_authorization %}
+<button type="button" class="g-btn g-btn--primary g-btn--sm" data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
+    <i data-lucide="file-check" style="width:14px;height:14px"></i>
+    {% if has_snte_authorization or has_snte_order_pdf %}Regenerar SNTE{% else %}Generar SNTE{% endif %}
+</button>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block dash_content %}
+
+{# ── Inline alerts → auto-converted to toasts via base_dash toast_alerts=true ─ #}
 {% if error_msg %}
-<div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-    <strong>Error:</strong> {{ error_msg|friendly_error }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+<div class="g-alert g-alert--error mb-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <div><div class="g-alert__title">Error</div>{{ error_msg|friendly_error }}</div>
+    <button class="g-alert__close" type="button">✕</button>
 </div>
 {% endif %}
-
 {% if success_msg %}
-<div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-    <strong>Éxito:</strong> {{ success_msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+<div class="g-alert g-alert--success mb-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <div><div class="g-alert__title">Éxito</div>{{ success_msg }}</div>
+    <button class="g-alert__close" type="button">✕</button>
 </div>
 {% endif %}
 
-{% include "partials/breadcrumbs.html" %}
+{# Workflow pipeline #}
 {% include "partials/workflow_pipeline.html" %}
+
+{# Guided panel #}
 {% include "partials/case_guided_panel.html" %}
 
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
+{# ── Case header ──────────────────────────────────────────────────── #}
+<div class="g-case-header">
     <div>
-        <h2 class="fw-bold mb-1">Detalle del caso</h2>
-        <p class="text-muted mb-0">
-            {{ caso.public_id }} · {{ caso.client_name }}
-        </p>
+        <div class="g-case-header__meta">
+            <span class="g-case-folio">{{ caso.public_id }}</span>
+            {% set st = caso.current_status|lower %}
+            {% if st == 'recibido' %}<span class="g-badge g-badge--recibido">Recibido</span>
+            {% elif st in ['correccion', 'corrección'] %}<span class="g-badge g-badge--correccion">Corrección</span>
+            {% elif st == 'en_compulsa' %}<span class="g-badge g-badge--compulsa g-badge--live">En compulsa</span>
+            {% elif st == 'compulsa_ok' %}<span class="g-badge g-badge--aprobado">Compulsa OK</span>
+            {% elif st in ['autorizado', 'aprobado'] %}<span class="g-badge g-badge--aprobado">Aprobado</span>
+            {% elif st == 'rechazado' %}<span class="g-badge g-badge--rechazado">Rechazado</span>
+            {% elif st == 'cerrado' %}<span class="g-badge g-badge--cerrado">Cerrado</span>
+            {% else %}<span class="g-badge g-badge--neutral">{{ caso.current_status }}</span>
+            {% endif %}
+            {% if workflow_state_label %}
+            <span class="g-badge g-badge--prep">{{ workflow_state_label }}</span>
+            {% endif %}
+        </div>
+        <h1 class="g-case-title">{{ caso.client_name }}</h1>
+        <div class="g-case-subtitle">
+            {{ caso.case_type }} · Semana <span class="g-mono">{{ caso.week_code }}</span>
+            {% if caso.seller_name %} · {{ caso.seller_name }}{% endif %}
+        </div>
     </div>
 
-    <a href="/casos" class="btn btn-outline-secondary mt-3 mt-md-0">
-        Volver a casos
+    <div class="g-flex-center g-gap-2">
+        {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] %}
+        <a href="/casos/{{ caso.id }}/revision-talon" class="g-btn g-btn--outline g-btn--sm">
+            <i data-lucide="scan-text" style="width:14px;height:14px"></i>
+            Revisar talón
+        </a>
+        {% endif %}
+        <a href="/casos/{{ caso.id }}/documentos" class="g-btn g-btn--outline g-btn--sm">
+            <i data-lucide="files" style="width:14px;height:14px"></i>
+            Documentos
+        </a>
+    </div>
+</div>
+
+{# ── Case Tabs ────────────────────────────────────────────────────── #}
+<div class="g-case-tabs" id="caseTabs">
+    <a href="#tab-info" class="g-case-tab is-active" data-tab="tab-info">
+        <i data-lucide="info" style="width:15px;height:15px"></i>Información
+    </a>
+    <a href="#tab-docs" class="g-case-tab" data-tab="tab-docs">
+        <i data-lucide="paperclip" style="width:15px;height:15px"></i>Documentos
+        {% if documentos %}<span class="g-badge g-badge--neutral" style="margin-left:4px">{{ documentos|length }}</span>{% endif %}
+    </a>
+    <a href="#tab-acciones" class="g-case-tab" data-tab="tab-acciones">
+        <i data-lucide="zap" style="width:15px;height:15px"></i>Acciones
+    </a>
+    <a href="#tab-timeline" class="g-case-tab" data-tab="tab-timeline">
+        <i data-lucide="activity" style="width:15px;height:15px"></i>Timeline
+        {% if case_timeline|default([]) %}<span class="g-badge g-badge--neutral" style="margin-left:4px">{{ (case_timeline|default([]))|length }}</span>{% endif %}
     </a>
 </div>
 
 <div class="row g-4">
-    <div class="col-12 col-lg-7">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white fw-bold">
-                Información general
-            </div>
+    <div class="col-12 col-lg-8">
 
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Folio público</div>
-                        <div class="fw-bold">{{ caso.public_id }}</div>
-                    </div>
+        {# ── Tab: Información ──────────────────────────────────────── #}
+        <div id="tab-info" class="tab-panel">
 
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Cliente</div>
-                        <div class="fw-bold">{{ caso.client_name }}</div>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Tipo de caso</div>
-                        <div>{{ caso.case_type }}</div>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Tipo de pedido</div>
-                        <div>{{ caso.order_type or "No aplica" }}</div>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Vendedor</div>
-                        <div>{{ caso.seller_name or "Sin vendedor" }}</div>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Semana</div>
-                        <div>{{ caso.week_code }}</div>
-                    </div>
-
-                    {% if workflow_state_label %}
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Workflow (P22)</div>
-                        <div><span class="badge bg-primary">{{ workflow_state_label }}</span></div>
-                    </div>
-                    {% endif %}
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Estatus interno</div>
-                        <span class="badge bg-secondary">{{ caso.current_status }}</span>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Estatus visible</div>
-                        <span class="badge bg-primary">{{ caso.visible_status }}</span>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Folio temporal</div>
-                        <div>{{ caso.temp_folio or "Pendiente" }}</div>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <div class="text-muted small">Folio oficial</div>
-                        <div>{{ caso.official_folio or "Pendiente" }}</div>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="text-muted small">Carpeta expediente</div>
-                        <div class="font-monospace small">{{ caso.folder_path }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% if doc_p24_summary %}
-        <div class="card shadow-sm border-0 mt-4 border-start border-4 border-primary">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                <span class="fw-bold">Documentos (P24)</span>
-                <a href="/casos/{{ caso.id }}/documentos" class="btn btn-sm btn-primary">Gestionar documentos</a>
-            </div>
-            <div class="card-body py-3">
-                <div class="row text-center g-2">
-                    <div class="col-3"><span class="fw-bold text-success">{{ doc_p24_summary.complete }}</span><div class="small text-muted">Completos</div></div>
-                    <div class="col-3"><span class="fw-bold text-warning">{{ doc_p24_summary.pending }}</span><div class="small text-muted">Pendientes</div></div>
-                    <div class="col-3"><span class="fw-bold text-danger">{{ doc_p24_summary.invalid }}</span><div class="small text-muted">Inválidos</div></div>
-                    <div class="col-3"><span class="fw-bold">{{ doc_p24_summary.missing }}</span><div class="small text-muted">Faltantes</div></div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-header bg-white fw-bold">
-                Documentos del caso
-            </div>
-
-            <div class="card-body">
-                {% if documentos %}
-                    <div class="list-group">
-                        {% for doc in documentos %}
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong>{{ doc_type_label(doc.document_type) }}</strong>
-                                {% if doc.upload_status == 'UPLOADED' %}
-                                    <span class="badge bg-success">Subido</span>
-                                {% elif doc.upload_status == 'PENDING_UPLOAD' %}
-                                    <span class="badge bg-warning text-dark" title="Documento recibido, subida a SharePoint pendiente">Pendiente SP</span>
-                                {% elif doc.upload_status == 'UPLOAD_FAILED' %}
-                                    <span class="badge bg-danger" title="{{ doc.upload_error or 'Error al subir' }}">Error</span>
-                                    {% if action_guard and action_guard.can_retry_sharepoint %}
-                                    <form method="post" action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/reintentar-sharepoint" class="d-inline ms-1">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0">Reintentar subida</button>
-                                    </form>
-                                    {% endif %}
-                                {% else %}
-                                    <span class="badge bg-secondary">{{ doc.upload_status }}</span>
-                                {% endif %}
-                            </div>
-
-                            <div class="small text-muted mb-1">
-                                {{ doc.original_filename or doc.stored_filename }}
-                            </div>
-
-                            <div class="small text-muted mb-2">
-                                Subido el {{ doc.uploaded_at.strftime('%d/%m/%Y %H:%M') }}
-                            </div>
-
-                            <div class="small mt-2 d-flex justify-content-between align-items-end">
-                                <div>
-                                {% if doc.sharepoint_web_url %}
-                                    <a href="{{ doc.sharepoint_web_url }}" target="_blank" class="text-decoration-none btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-cloud-check"></i> Abrir en SharePoint
-                                    </a>
-                                {% else %}
-                                    <div class="d-flex align-items-center gap-2">
-                                        <a href="/documentos/{{ doc.id }}/ver" target="_blank" class="btn btn-sm btn-secondary">
-                                            <i class="bi bi-eye"></i> Ver / Descargar
-                                        </a>
-                                        <span class="text-muted font-monospace" style="font-size: 0.75em;" title="Ruta física">
-                                            {{ doc.file_path }}
-                                        </span>
-                                    </div>
-                                {% endif %}
-                                </div>
-
-                                {% if doc.document_type in ['talon', 'pedido', 'orden_descuento', 'caratula_bancaria'] %}
-                                    {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] %}
-                                <div>
-                                    <form action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/procesar-ocr" method="POST" class="m-0">
-                                        <button type="submit" class="btn btn-sm btn-outline-dark">
-                                            {% if doc.ocr_results %}Reprocesar OCR{% else %}Procesar OCR{% endif %}
-                                        </button>
-                                    </form>
-                                </div>
-                                    {% endif %}
-                                {% endif %}
-                            </div>
-
-                            {% if doc.ocr_results %}
-                            <div class="mt-3 p-2 bg-light border rounded small">
-                                <strong class="text-dark">Resultados OCR</strong>
-                                <ul class="list-unstyled mb-0 mt-1">
-                                {% for ocr in doc.ocr_results %}
-                                    <li class="mb-2 pb-2 border-bottom">
-                                        <span class="badge {% if ocr.review_status == 'processed' %}bg-success{% elif ocr.review_status == 'error' %}bg-danger{% elif ocr.review_status == 'pending' %}bg-warning text-dark{% else %}bg-info{% endif %}">
-                                            {{ ocr.review_status }}
-                                        </span>
-                                        <span class="text-muted ms-2">{{ ocr.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
-                                        {% if ocr.confidence_score is not none %}
-                                        <span class="badge bg-secondary ms-1">{{ (ocr.confidence_score * 100)|int }}% conf.</span>
-                                        {% endif %}
-                                        
-                                        {% if ocr.parsed_json and ocr.review_status == 'processed' %}
-                                        {% if ocr.parsed_json.get('review_fields') %}
-                                        <div class="mt-2 p-2 bg-white border rounded shadow-sm">
-                                            <div class="fw-bold text-dark mb-1" style="font-size: 0.75rem;">Campos detectados (revise en el formulario de autorización)</div>
-                                            <table class="table table-sm table-bordered mb-0" style="font-size: 0.7rem;">
-                                                <thead class="table-light">
-                                                    <tr><th>Campo</th><th>Valor OCR</th><th>Confianza</th><th>Fuente</th></tr>
-                                                </thead>
-                                                <tbody>
-                                                {% for key, field in ocr.parsed_json.review_fields.items() %}
-                                                    <tr>
-                                                        <td class="text-muted">{{ key }}</td>
-                                                        <td class="fw-bold">{{ field.value }}</td>
-                                                        <td>{{ (field.confidence * 100)|int }}%</td>
-                                                        <td>{{ field.source }}</td>
-                                                    </tr>
-                                                {% endfor %}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        {% endif %}
-                                        <div class="mt-2 p-2 bg-white border rounded shadow-sm">
-                                            <div class="row g-1">
-                                                <div class="col-5 text-muted">Percepciones:</div>
-                                                <div class="col-7 fw-bold text-success text-end">
-                                                    {% if ocr.parsed_json.get('percepciones_total') %}${{ "{:,.2f}".format(ocr.parsed_json.get('percepciones_total')) }}{% else %}N/A{% endif %}
-                                                </div>
-                                                <div class="col-5 text-muted">Deducciones:</div>
-                                                <div class="col-7 fw-bold text-danger text-end">
-                                                    {% if ocr.parsed_json.get('deducciones_total') %}${{ "{:,.2f}".format(ocr.parsed_json.get('deducciones_total')) }}{% else %}N/A{% endif %}
-                                                </div>
-                                                <div class="col-12"><hr class="my-1"></div>
-                                                <div class="col-5 text-muted">Líquido:</div>
-                                                <div class="col-7 fw-bold text-end">
-                                                    {% if ocr.parsed_json.get('liquido') %}${{ "{:,.2f}".format(ocr.parsed_json.get('liquido')) }}{% else %}N/A{% endif %}
-                                                </div>
-                                            </div>
-
-                                            {% if ocr.parsed_json.get('capacity_codes') %}
-                                            <div class="mt-3 border-top pt-2">
-                                                <div class="fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-calculator"></i> Capacidad de pago detectada por OCR</div>
-                                                <div class="row g-1" style="font-size: 0.7rem;">
-                                                    <div class="col-6">
-                                                        <div class="text-muted border-bottom mb-1">Ingresos Base</div>
-                                                        {% for k, v in ocr.parsed_json.get('capacity_codes', {}).items() %}
-                                                            {% if k != 'D' and k != 'DC' and v > 0 %}
-                                                            <div class="d-flex justify-content-between">
-                                                                <span>{{ k }}</span>
-                                                                <span>${{ "{:,.2f}".format(v) }}</span>
-                                                            </div>
-                                                            {% endif %}
-                                                        {% endfor %}
-                                                        <div class="d-flex justify-content-between fw-bold mt-1 border-top border-secondary pt-1">
-                                                            <span>Ingresos Válidos</span>
-                                                            <span class="text-success">${{ "{:,.2f}".format(ocr.parsed_json.get('capacity_income_total', 0)) }}</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-6 border-start ps-2">
-                                                        <div class="text-muted border-bottom mb-1">Cálculo de Venta</div>
-                                                        <div class="d-flex justify-content-between">
-                                                            <span>Total Deds (D)</span>
-                                                            <span class="text-danger">-${{ "{:,.2f}".format(ocr.parsed_json.get('capacity_codes', {}).get('D', 0)) }}</span>
-                                                        </div>
-                                                        <div class="d-flex justify-content-between">
-                                                            <span>Saldo Real</span>
-                                                            <span class="fw-bold">${{ "{:,.2f}".format(ocr.parsed_json.get('saldo', 0)) }}</span>
-                                                        </div>
-                                                        <div class="d-flex justify-content-between mt-1 pt-1 border-top text-muted">
-                                                            <span>Válidos al 70%</span>
-                                                            <span>${{ "{:,.2f}".format(ocr.parsed_json.get('total_para_venta_70', 0)) }}</span>
-                                                        </div>
-                                                        <div class="d-flex justify-content-between fw-bold mt-1 border-top border-secondary pt-1">
-                                                            <span>Liquidez Final</span>
-                                                            <span class="text-primary">${{ "{:,.2f}".format(ocr.parsed_json.get('saldo_al_70', 0)) }}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                
-                                                <details class="mt-2">
-                                                    <summary class="text-muted" style="cursor:pointer; font-size: 0.7rem;">Ver todos los conceptos</summary>
-                                                    <div class="mt-1">
-                                                        <div class="text-success fw-bold" style="font-size:0.65rem">PERCEPCIONES:</div>
-                                                        {% for item in ocr.parsed_json.get('income_items', []) %}
-                                                        <div class="d-flex justify-content-between text-muted" style="font-size:0.65rem">
-                                                            <span>{{ item.code }} - {{ item.description[:20] }}...</span>
-                                                            <span>${{ "{:,.2f}".format(item.amount) }}</span>
-                                                        </div>
-                                                        {% endfor %}
-                                                        <div class="text-danger fw-bold mt-1" style="font-size:0.65rem">DEDUCCIONES:</div>
-                                                        {% for item in ocr.parsed_json.get('deduction_items', []) %}
-                                                        <div class="d-flex justify-content-between text-muted" style="font-size:0.65rem">
-                                                            <span>{{ item.code }} - {{ item.description[:20] }}...</span>
-                                                            <span>${{ "{:,.2f}".format(item.amount) }}</span>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </details>
-                                            </div>
-                                            {% endif %}
-                                        </div>
-                                        {% elif ocr.parsed_json %}
-                                        <pre class="mt-1 mb-0 bg-white p-1 border text-secondary" style="font-size: 0.7rem; max-height: 100px; overflow-y: auto;">{{ ocr.parsed_json | tojson(indent=2) }}</pre>
-                                        {% endif %}
-
-                                        {% if ocr.raw_text %}
-                                        <details class="mt-2">
-                                            <summary class="text-muted" style="cursor:pointer; font-size: 0.75rem;">Ver texto extraído</summary>
-                                            <div class="mt-1 text-muted font-monospace bg-white border p-1" style="font-size: 0.7rem; max-height: 150px; overflow-y: auto; white-space: pre-wrap;">{{ ocr.raw_text }}</div>
-                                        </details>
-                                        {% endif %}
-                                    </li>
-                                {% endfor %}
-                                </ul>
-                            </div>
-                            {% endif %}
+            {# Docs summary strip #}
+            {% if doc_p24_summary %}
+            <div class="g-card mb-4" style="border-left:3px solid var(--g-primary)">
+                <div class="g-card__body" style="padding:.85rem 1.25rem">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+                        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                            <span class="g-text-sm g-fw-600">Documentos del pedido</span>
+                            <span class="g-badge g-badge--aprobado">{{ doc_p24_summary.complete }} completos</span>
+                            {% if doc_p24_summary.pending %}<span class="g-badge g-badge--pending">{{ doc_p24_summary.pending }} pendientes</span>{% endif %}
+                            {% if doc_p24_summary.invalid %}<span class="g-badge g-badge--error">{{ doc_p24_summary.invalid }} inválidos</span>{% endif %}
+                            {% if doc_p24_summary.missing %}<span class="g-badge g-badge--neutral">{{ doc_p24_summary.missing }} faltantes</span>{% endif %}
                         </div>
-                        {% endfor %}
+                        <a href="/casos/{{ caso.id }}/documentos" class="g-btn g-btn--sm g-btn--primary">
+                            <i data-lucide="folder-open" style="width:13px;height:13px"></i>
+                            Gestionar
+                        </a>
                     </div>
-                {% else %}
-                    <p class="text-muted mb-0">
-                        Este caso todavía no tiene documentos registrados.
-                    </p>
-                {% endif %}
+                </div>
             </div>
-        </div>
-    </div>
+            {% endif %}
 
-    <div class="col-12 col-lg-5">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white fw-bold">
-                Acciones disponibles
+            {# Info card #}
+            <div class="g-card">
+                <div class="g-card__header">
+                    <h3>Información general</h3>
+                </div>
+                <div class="g-card__body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Folio público</div>
+                            <div class="g-mono g-fw-600 mt-1">{{ caso.public_id }}</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Cliente</div>
+                            <div class="g-fw-600 mt-1">{{ caso.client_name }}</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Tipo de caso</div>
+                            <div class="mt-1">{{ caso.case_type }}</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Tipo de pedido</div>
+                            <div class="mt-1">{{ caso.order_type or "No aplica" }}</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Vendedor</div>
+                            <div class="mt-1">{{ caso.seller_name or "Sin vendedor" }}</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Semana</div>
+                            <div class="g-mono mt-1">{{ caso.week_code }}</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Estatus interno</div>
+                            <div class="mt-1">
+                                {% set st = caso.current_status|lower %}
+                                {% if st == 'recibido' %}<span class="g-badge g-badge--recibido">Recibido</span>
+                                {% elif st in ['correccion','corrección'] %}<span class="g-badge g-badge--correccion">Corrección</span>
+                                {% elif st == 'en_compulsa' %}<span class="g-badge g-badge--compulsa">En compulsa</span>
+                                {% elif st == 'rechazado' %}<span class="g-badge g-badge--rechazado">Rechazado</span>
+                                {% elif st == 'cerrado' %}<span class="g-badge g-badge--cerrado">Cerrado</span>
+                                {% else %}<span class="g-badge g-badge--neutral">{{ caso.current_status }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Estatus visible</div>
+                            <div class="mt-1"><span class="g-badge g-badge--prep">{{ caso.visible_status }}</span></div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Folio temporal</div>
+                            <div class="g-mono mt-1">{{ caso.temp_folio or "Pendiente" }}</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Folio oficial</div>
+                            <div class="g-mono mt-1">{{ caso.official_folio or "Pendiente" }}</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="g-text-xs g-text-muted g-fw-600" style="text-transform:uppercase;letter-spacing:.05em">Carpeta expediente</div>
+                            <div class="g-mono g-text-sm mt-1" style="word-break:break-all;color:var(--g-text-2)">{{ caso.folder_path }}</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="card-body d-grid gap-2">
-                {% if action_guard and action_guard.sharepoint_notice %}
-                <div class="alert alert-warning py-2 small mb-0">{{ action_guard.sharepoint_notice }}</div>
-                {% endif %}
-                {% if action_guard and action_guard.ocr_notice %}
-                <div class="alert alert-info py-2 small mb-0">{{ action_guard.ocr_notice }}</div>
-                {% endif %}
-
-                {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] %}
-                <a href="/casos/{{ caso.id }}/revision-talon" class="btn btn-primary">
-                    Revisar talón
-                </a>
-                {% else %}
-                <button type="button" class="btn btn-outline-secondary" disabled title="Solo administración o sistemas">
-                    Revisar talón
-                </button>
-                {% endif %}
-
-                {% if action_guard and action_guard.can_generate_authorization %}
-                    {% if has_snte_authorization or has_snte_order_pdf %}
-                    <button type="button" class="btn btn-warning fw-bold text-start ps-3 shadow-sm border-warning" data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
-                        <i class="bi bi-arrow-clockwise me-2 text-dark"></i> Regenerar autorización SNTE
-                    </button>
+            {# Última revisión de talón #}
+            {% if ultima_revision %}
+            <div class="g-card mt-4">
+                <div class="g-card__header">
+                    <h3><i data-lucide="calculator" style="width:15px;height:15px;margin-right:6px"></i>Última revisión de talón</h3>
+                    {% if ultima_revision.resultado == 'APTO' %}
+                    <span class="g-badge g-badge--aprobado">APTO</span>
                     {% else %}
-                    <button type="button" class="btn btn-outline-primary fw-bold text-start ps-3 shadow-sm border-primary" style="background-color: #f8fbff;" data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
-                        <i class="bi bi-file-earmark-excel me-2 text-success"></i> Generar autorización SNTE
-                    </button>
+                    <span class="g-badge g-badge--rechazado">NO APTO</span>
                     {% endif %}
-                {% else %}
-                <button class="btn btn-outline-secondary text-start ps-3" disabled title="{{ action_guard.generate_auth_block_reason if action_guard else 'Acción no disponible' }}">
-                    <i class="bi bi-file-earmark-excel me-2"></i> Generar autorización SNTE
-                </button>
-                {% if action_guard and action_guard.generate_auth_block_reason %}
-                <p class="small text-muted mb-0">{{ action_guard.generate_auth_block_reason }}</p>
-                {% endif %}
-                {% endif %}
-
-                <button class="btn btn-outline-primary" disabled title="Se genera junto con la autorización SNTE (PDF orden de descuento)">
-                    Generar hoja sindicato (incluida en SNTE)
-                </button>
-
-                <button class="btn btn-outline-secondary" disabled>
-                    Cambiar estatus
-                </button>
-            </div>
-        </div>
-
-        {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] or (usuario.rol == 'vendedor' and caso.seller_name == usuario.nombre) %}
-        <div class="card shadow-sm border-0 mt-4 border-warning">
-            <div class="card-header bg-warning text-dark fw-bold">
-                <i class="bi bi-bug"></i> Subir documento de prueba
-            </div>
-            <div class="card-body">
-                <form action="/casos/{{ caso.id }}/upload-document" method="POST" enctype="multipart/form-data">
-                    <div class="mb-2">
-                        <label class="form-label small text-muted mb-1">Tipo de documento</label>
-                        <select name="document_type" class="form-select form-select-sm" required>
-                            {% for value, label in upload_document_types %}
-                            <option value="{{ value }}">{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small text-muted mb-1">Archivo local</label>
-                        <input type="file" name="file" class="form-control form-control-sm" required>
-                    </div>
-                    <button type="submit" class="btn btn-warning btn-sm w-100 fw-bold">
-                        Subir documento
-                    </button>
-                </form>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if ultima_revision %}
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                <span>Última revisión de talón</span>
-                {% if ultima_revision.resultado == 'APTO' %}
-                    <span class="badge bg-success">APTO</span>
-                {% else %}
-                    <span class="badge bg-danger">NO APTO</span>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <div class="row g-2 small">
-                    <div class="col-6 text-muted">Percepciones</div>
-                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.percepciones) }}</div>
-                    
-                    <div class="col-6 text-muted">Deducciones</div>
-                    <div class="col-6 text-end text-danger">-${{ "{:,.2f}".format(ultima_revision.deducciones) }}</div>
-                    
-                    <div class="col-6 text-muted">Líquido</div>
-                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.liquido or 0) }}</div>
-                    
-                    <div class="col-12"><hr class="my-1"></div>
-                    
-                    <div class="col-6 text-muted">Total al 70%</div>
-                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.total_70) }}</div>
-                    
-                    <div class="col-6 text-muted">Saldo al 70%</div>
-                    <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.saldo_70) }}</div>
-                    
-                    <div class="col-6 text-muted">Extra</div>
-                    <div class="col-6 text-end text-success">+${{ "{:,.2f}".format(ultima_revision.extra) }}</div>
-                    
-                    <div class="col-6 text-muted">Programados</div>
-                    <div class="col-6 text-end text-danger">-${{ "{:,.2f}".format(ultima_revision.monto_programados) }}</div>
-                    
-                    <div class="col-12"><hr class="my-1"></div>
-                    
-                    <div class="col-6 fw-bold">Liquidez Final</div>
-                    <div class="col-6 text-end fw-bold">${{ "{:,.2f}".format(ultima_revision.liquidez_final) }}</div>
                 </div>
-                <div class="text-muted mt-3" style="font-size: 0.75rem;">
-                    Calculado el {{ ultima_revision.created_at.strftime('%d/%m/%Y %H:%M') }}
+                <div class="g-card__body">
+                    <div class="row g-2 g-text-sm">
+                        <div class="col-6 g-text-muted">Percepciones</div>
+                        <div class="col-6 text-end g-fw-600">${{ "{:,.2f}".format(ultima_revision.percepciones) }}</div>
+                        <div class="col-6 g-text-muted">Deducciones</div>
+                        <div class="col-6 text-end" style="color:var(--g-danger)">-${{ "{:,.2f}".format(ultima_revision.deducciones) }}</div>
+                        <div class="col-6 g-text-muted">Líquido</div>
+                        <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.liquido or 0) }}</div>
+                        <div class="col-12"><hr style="border-color:var(--g-card-border);margin:.5rem 0"></div>
+                        <div class="col-6 g-text-muted">Total al 70%</div>
+                        <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.total_70) }}</div>
+                        <div class="col-6 g-text-muted">Saldo al 70%</div>
+                        <div class="col-6 text-end">${{ "{:,.2f}".format(ultima_revision.saldo_70) }}</div>
+                        <div class="col-6 g-text-muted">Extra</div>
+                        <div class="col-6 text-end" style="color:var(--g-success)">+${{ "{:,.2f}".format(ultima_revision.extra) }}</div>
+                        <div class="col-6 g-text-muted">Programados</div>
+                        <div class="col-6 text-end" style="color:var(--g-danger)">-${{ "{:,.2f}".format(ultima_revision.monto_programados) }}</div>
+                        <div class="col-12"><hr style="border-color:var(--g-card-border);margin:.5rem 0"></div>
+                        <div class="col-6 g-fw-600">Liquidez Final</div>
+                        <div class="col-6 text-end g-fw-700" style="color:var(--g-primary)">${{ "{:,.2f}".format(ultima_revision.liquidez_final) }}</div>
+                    </div>
+                    <div class="g-text-xs g-text-muted mt-3">Calculado el {{ ultima_revision.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
                 </div>
             </div>
-        </div>
-        {% endif %}
+            {% endif %}
 
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-header bg-white fw-bold">
-                Historial de Autorizaciones SNTE
-            </div>
-            <div class="card-body">
-                {% if authorization_jobs %}
-                    <div class="list-group">
-                        {% for job in authorization_jobs %}
-                        <div class="list-group-item p-2">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="fw-bold" style="font-size: 0.85rem;">{{ job.template_name }}</span>
-                                {% if job.generation_status == 'success' %}
-                                    <span class="badge bg-success" style="font-size: 0.7rem;">Éxito</span>
-                                {% else %}
-                                    <span class="badge bg-danger" style="font-size: 0.7rem;">Error</span>
-                                {% endif %}
-                            </div>
-                            <div class="text-muted text-break" style="font-size: 0.75rem; line-height: 1.2;">
-                                {% set filename = job.output_path.split('\\')[-1] if '\\' in job.output_path else job.output_path.split('/')[-1] %}
-                                <i class="bi bi-file-earmark-text"></i> {{ filename }}
-                            </div>
-                            <div class="text-muted mt-1 text-end" style="font-size: 0.7rem;">
-                                {{ job.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+            {# Historial de estados (history_entries) #}
+            {% if caso.history_entries %}
+            <div class="g-card mt-4">
+                <div class="g-card__header"><h3>Historial de estados</h3></div>
+                <div class="g-card__body">
+                    <div class="g-timeline">
+                        {% for h in caso.history_entries %}
+                        <div class="g-timeline-item">
+                            <div class="g-timeline-item__dot g-timeline-item__dot--blue"></div>
+                            <div class="g-timeline-item__header">
+                                <span class="g-timeline-item__title">{{ h.status }}</span>
+                                <span class="g-timeline-item__time">{{ h.created_at }}</span>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
-                {% else %}
-                    <p class="text-muted mb-0 small">
-                        Aún no se han generado autorizaciones para este caso.
-                    </p>
-                {% endif %}
+                </div>
             </div>
+            {% endif %}
         </div>
 
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-clock-history me-2"></i>Línea de tiempo / auditoría</span>
-                <span class="text-muted small fw-normal" id="timeline">{{ (case_timeline|default([]))|length }} evento(s)</span>
-            </div>
+        {# ── Tab: Documentos ──────────────────────────────────────── #}
+        <div id="tab-docs" class="tab-panel" style="display:none">
 
-            <div class="card-body">
-                {% if case_timeline|default([]) %}
-                <div class="timeline-operativo">
-                    {% for item in case_timeline|default([]) %}
-                    <div class="timeline-operativo-item d-flex gap-3 pb-4 {% if not loop.last %}border-start border-2 border-light ms-2 ps-4{% else %}ms-2 ps-4{% endif %}">
-                        <div class="timeline-operativo-icon flex-shrink-0 rounded-circle d-flex align-items-center justify-content-center {{ item.badge_class }}"
-                             style="width:2.25rem;height:2.25rem;margin-left:-2.1rem;">
-                            <i class="bi {{ item.icon }} {% if 'text-dark' in item.badge_class or 'bg-light' in item.badge_class %}text-dark{% else %}text-white{% endif %}" style="font-size:1rem;"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
-                                <div>
-                                    <span class="badge {{ item.badge_class }}">{{ item.type_label }}</span>
-                                    {% if item.category %}
-                                    <span class="badge bg-light text-dark border">{{ item.category }}</span>
-                                    {% endif %}
-                                    <span class="badge bg-light text-muted border">{{ item.source_label }}</span>
+            {# Upload de documento — drag & drop mejorado #}
+            {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] or (usuario.rol == 'vendedor' and caso.seller_name == usuario.nombre) %}
+            <div class="g-card mb-4">
+                <div class="g-card__header">
+                    <h3><i data-lucide="upload" style="width:15px;height:15px;margin-right:6px"></i>Subir documento</h3>
+                </div>
+                <div class="g-card__body">
+                    <form action="/casos/{{ caso.id }}/upload-document" method="POST" enctype="multipart/form-data" id="uploadForm">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-5">
+                                <label class="g-label">Tipo de documento</label>
+                                <select name="document_type" class="g-select" required>
+                                    {% for value, label in upload_document_types %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-7">
+                                <label class="g-label">Archivo</label>
+                                <div class="g-dropzone g-dropzone--compact" id="uploadDropzone">
+                                    <svg class="g-dropzone__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    <div class="g-dropzone__title">Arrastra un archivo o haz clic</div>
+                                    <div class="g-dropzone__sub">PDF, imagen o cualquier formato</div>
+                                    <input type="file" name="file" class="g-dropzone__input" required>
                                 </div>
-                                <span class="small text-muted text-nowrap">{{ item.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
                             </div>
-                            <div class="mt-2 fw-semibold" style="font-size:0.9rem;">{{ item.description }}</div>
-                            {% if item.related %}
-                            <div class="small text-muted mt-1">{{ item.related }}</div>
+                            <div class="col-12">
+                                <button type="submit" class="g-btn g-btn--primary">
+                                    <i data-lucide="upload-cloud" style="width:15px;height:15px"></i>
+                                    Subir documento
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            {# Lista de documentos #}
+            {% if documentos %}
+            <div class="g-card">
+                <div class="g-card__header">
+                    <h3>Documentos del caso</h3>
+                    <span class="g-badge g-badge--neutral">{{ documentos|length }}</span>
+                </div>
+                <div class="g-card__body" style="padding:.5rem 1rem">
+                    {% for doc in documentos %}
+                    <div class="g-doc-card">
+                        <div class="g-doc-card__icon">
+                            <i data-lucide="file-text" style="width:18px;height:18px"></i>
+                        </div>
+                        <div class="g-doc-card__body">
+                            <div class="g-doc-card__name">{{ doc_type_label(doc.document_type) }}</div>
+                            <div class="g-doc-card__meta">
+                                {{ doc.original_filename or doc.stored_filename }}
+                                &nbsp;·&nbsp; {{ doc.uploaded_at.strftime('%d/%m/%Y %H:%M') }}
+                            </div>
+                            {% if doc.ocr_results %}
+                            <details class="mt-2">
+                                <summary class="g-text-xs g-text-muted" style="cursor:pointer">Ver resultados OCR</summary>
+                                <div class="mt-2 p-2" style="background:var(--g-bg);border-radius:var(--g-r-sm)">
+                                    {% for ocr in doc.ocr_results %}
+                                    <div class="g-text-xs mb-2">
+                                        <span class="g-badge {% if ocr.review_status == 'processed' %}g-badge--aprobado{% elif ocr.review_status == 'error' %}g-badge--rechazado{% else %}g-badge--pending{% endif %}">{{ ocr.review_status }}</span>
+                                        <span class="g-text-muted ms-2">{{ ocr.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                                        {% if ocr.confidence_score is not none %}
+                                        <span class="g-badge g-badge--neutral ms-1">{{ (ocr.confidence_score * 100)|int }}% conf.</span>
+                                        {% endif %}
+                                        {% if ocr.parsed_json and ocr.review_status == 'processed' %}
+                                        <div class="row g-1 mt-1 g-text-xs">
+                                            <div class="col-6">Percepciones: <strong>${{ "{:,.2f}".format(ocr.parsed_json.get('percepciones_total') or 0) }}</strong></div>
+                                            <div class="col-6">Deducciones: <strong>${{ "{:,.2f}".format(ocr.parsed_json.get('deducciones_total') or 0) }}</strong></div>
+                                            <div class="col-6">Líquido: <strong>${{ "{:,.2f}".format(ocr.parsed_json.get('liquido') or 0) }}</strong></div>
+                                            <div class="col-6">Liquidez 70%: <strong>${{ "{:,.2f}".format(ocr.parsed_json.get('saldo_al_70') or 0) }}</strong></div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </details>
                             {% endif %}
-                            <div class="small text-muted mt-2">
-                                <i class="bi bi-person"></i> {{ item.actor_label }}
-                                {% if item.actor_role and item.actor_role != item.actor_label %}
-                                <span class="text-secondary">({{ item.actor_role }})</span>
-                                {% endif %}
-                            </div>
+                        </div>
+                        <div class="g-doc-card__actions">
+                            {# Upload status badge #}
+                            {% if doc.upload_status == 'UPLOADED' %}
+                            <span class="g-badge g-badge--aprobado">Subido</span>
+                            {% elif doc.upload_status == 'PENDING_UPLOAD' %}
+                            <span class="g-badge g-badge--pending" title="Subida a SharePoint pendiente">Pendiente SP</span>
+                            {% elif doc.upload_status == 'UPLOAD_FAILED' %}
+                            <span class="g-badge g-badge--rechazado" title="{{ doc.upload_error or 'Error al subir' }}">Error</span>
+                            {% if action_guard and action_guard.can_retry_sharepoint %}
+                            <form method="post" action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/reintentar-sharepoint" style="display:inline">
+                                <button type="submit" class="g-btn g-btn--sm g-btn--outline" style="color:var(--g-danger);border-color:var(--g-danger)">Reintentar</button>
+                            </form>
+                            {% endif %}
+                            {% else %}
+                            <span class="g-badge g-badge--neutral">{{ doc.upload_status }}</span>
+                            {% endif %}
+
+                            {# Ver / Descargar #}
+                            {% if doc.sharepoint_web_url %}
+                            <a href="{{ doc.sharepoint_web_url }}" target="_blank" class="g-btn g-btn--sm g-btn--ghost" title="Abrir en SharePoint">
+                                <i data-lucide="cloud" style="width:13px;height:13px"></i>
+                            </a>
+                            {% else %}
+                            <a href="/documentos/{{ doc.id }}/ver" target="_blank" class="g-btn g-btn--sm g-btn--ghost" title="Ver / Descargar">
+                                <i data-lucide="eye" style="width:13px;height:13px"></i>
+                            </a>
+                            {% endif %}
+
+                            {# OCR #}
+                            {% if doc.document_type in ['talon', 'pedido', 'orden_descuento', 'caratula_bancaria'] %}
+                            {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] %}
+                            <form action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/procesar-ocr" method="POST" style="display:inline">
+                                <button type="submit" class="g-btn g-btn--sm g-btn--ghost" title="{% if doc.ocr_results %}Reprocesar OCR{% else %}Procesar OCR{% endif %}">
+                                    <i data-lucide="scan" style="width:13px;height:13px"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}
                 </div>
-                {% else %}
-                    <p class="text-muted mb-0">
-                        Sin eventos de auditoría registrados. Las acciones nuevas (subidas, OCR, SNTE, SharePoint) aparecerán aquí.
-                    </p>
-                {% endif %}
             </div>
+            {% else %}
+            <div class="g-card">
+                <div class="g-empty">
+                    <div class="g-empty__icon"><i data-lucide="file-x"></i></div>
+                    <div class="g-empty__title">Sin documentos</div>
+                    <div class="g-empty__sub">Este caso todavía no tiene documentos registrados.</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-header bg-white fw-bold">
-                Historial
-            </div>
-
-            <div class="card-body">
-                {% if caso.history_entries %}
-                    <div class="list-group">
-                        {% for h in caso.history_entries %}
-                        <div class="list-group-item">
-                            <div class="fw-bold">{{ h.status }}</div>
-                            <div class="small text-muted">{{ h.created_at }}</div>
+        {# ── Tab: Timeline ────────────────────────────────────────── #}
+        <div id="tab-timeline" class="tab-panel" style="display:none">
+            <div class="g-card">
+                <div class="g-card__header">
+                    <h3><i data-lucide="activity" style="width:15px;height:15px;margin-right:6px"></i>Línea de tiempo / auditoría</h3>
+                    <span class="g-text-sm g-text-muted">{{ (case_timeline|default([]))|length }} evento(s)</span>
+                </div>
+                <div class="g-card__body">
+                    {% if case_timeline|default([]) %}
+                    <div class="g-timeline">
+                        {% for item in case_timeline|default([]) %}
+                        <div class="g-timeline-item">
+                            <div class="g-timeline-item__dot
+                                {% if 'success' in item.badge_class or 'green' in item.badge_class %}g-timeline-item__dot--green
+                                {% elif 'danger' in item.badge_class or 'red' in item.badge_class %}g-timeline-item__dot--red
+                                {% elif 'warning' in item.badge_class %}g-timeline-item__dot--amber
+                                {% else %}g-timeline-item__dot--blue{% endif %}">
+                            </div>
+                            <div class="g-timeline-item__header">
+                                <span class="g-timeline-item__title">{{ item.description }}</span>
+                                <span class="g-timeline-item__time">{{ item.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                            </div>
+                            <div class="g-timeline-item__body">
+                                <span class="g-badge g-badge--neutral g-text-xs">{{ item.type_label }}</span>
+                                {% if item.category %}<span class="g-badge g-badge--neutral g-text-xs">{{ item.category }}</span>{% endif %}
+                                &nbsp;· <i data-lucide="user" style="width:11px;height:11px"></i> {{ item.actor_label }}
+                                {% if item.related %}<br><span class="g-text-muted">{{ item.related }}</span>{% endif %}
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
-                {% else %}
-                    <p class="text-muted mb-0">
-                        Sin historial registrado todavía.
-                    </p>
-                {% endif %}
+                    {% else %}
+                    <div class="g-empty" style="padding:2rem">
+                        <div class="g-empty__icon"><i data-lucide="clock"></i></div>
+                        <div class="g-empty__title">Sin eventos de auditoría</div>
+                        <div class="g-empty__sub">Las acciones nuevas (subidas, OCR, SNTE, SharePoint) aparecerán aquí.</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    {# ── Right sidebar: acciones ──────────────────────────────────── #}
+    <div class="col-12 col-lg-4">
+
+        {# Tab: Acciones #}
+        <div id="tab-acciones" class="tab-panel-side">
+
+            {% if action_guard and action_guard.sharepoint_notice %}
+            <div class="g-alert g-alert--warn mb-3">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div>{{ action_guard.sharepoint_notice }}</div>
+            </div>
+            {% endif %}
+            {% if action_guard and action_guard.ocr_notice %}
+            <div class="g-alert g-alert--info mb-3">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <div>{{ action_guard.ocr_notice }}</div>
+            </div>
+            {% endif %}
+
+            <div class="g-card mb-4">
+                <div class="g-card__header"><h3>Acciones disponibles</h3></div>
+                <div class="g-card__body" style="display:flex;flex-direction:column;gap:.6rem">
+                    {# Revisar talón #}
+                    {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] %}
+                    <a href="/casos/{{ caso.id }}/revision-talon" class="g-btn g-btn--primary">
+                        <i data-lucide="scan-text" style="width:15px;height:15px"></i>
+                        Revisar talón
+                    </a>
+                    {% else %}
+                    <button type="button" class="g-btn g-btn--outline" disabled title="Solo administración o sistemas">
+                        Revisar talón
+                    </button>
+                    {% endif %}
+
+                    {# Generar autorización SNTE #}
+                    {% if action_guard and action_guard.can_generate_authorization %}
+                    <button type="button" class="g-btn {% if has_snte_authorization or has_snte_order_pdf %}g-btn--outline{% else %}g-btn--outline{% endif %}"
+                            data-bs-toggle="modal" data-bs-target="#modalAutorizacionSNTE">
+                        <i data-lucide="file-check" style="width:15px;height:15px"></i>
+                        {% if has_snte_authorization or has_snte_order_pdf %}Regenerar autorización SNTE{% else %}Generar autorización SNTE{% endif %}
+                    </button>
+                    {% else %}
+                    <button class="g-btn g-btn--ghost" disabled title="{{ action_guard.generate_auth_block_reason if action_guard else 'Acción no disponible' }}">
+                        <i data-lucide="file-check" style="width:15px;height:15px"></i>
+                        Generar autorización SNTE
+                    </button>
+                    {% if action_guard and action_guard.generate_auth_block_reason %}
+                    <p class="g-text-xs g-text-muted mb-0">{{ action_guard.generate_auth_block_reason }}</p>
+                    {% endif %}
+                    {% endif %}
+
+                    <button class="g-btn g-btn--ghost" disabled title="Se genera junto con la autorización SNTE">
+                        <i data-lucide="scroll" style="width:15px;height:15px"></i>
+                        Hoja sindicato (incluida en SNTE)
+                    </button>
+                    <button class="g-btn g-btn--ghost" disabled>
+                        <i data-lucide="refresh-cw" style="width:15px;height:15px"></i>
+                        Cambiar estatus
+                    </button>
+                </div>
+            </div>
+
+            {# Historial de autorizaciones SNTE #}
+            <div class="g-card">
+                <div class="g-card__header"><h3>Autorizaciones SNTE</h3></div>
+                <div class="g-card__body" style="padding:.5rem 1rem">
+                    {% if authorization_jobs %}
+                    {% for job in authorization_jobs %}
+                    <div class="g-doc-card">
+                        <div class="g-doc-card__icon" style="background:{% if job.generation_status == 'success' %}var(--g-success-soft){% else %}var(--g-danger-soft){% endif %};color:{% if job.generation_status == 'success' %}var(--g-success){% else %}var(--g-danger){% endif %}">
+                            <i data-lucide="file-text" style="width:16px;height:16px"></i>
+                        </div>
+                        <div class="g-doc-card__body">
+                            <div class="g-doc-card__name g-text-sm">{{ job.template_name }}</div>
+                            <div class="g-doc-card__meta">
+                                {% set fname = job.output_path.split('\\')[-1] if '\\' in job.output_path else job.output_path.split('/')[-1] %}
+                                {{ fname }}
+                            </div>
+                            <div class="g-text-xs g-text-muted">{{ job.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+                        </div>
+                        <span class="g-badge {% if job.generation_status == 'success' %}g-badge--aprobado{% else %}g-badge--rechazado{% endif %}">
+                            {{ "OK" if job.generation_status == 'success' else "Error" }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="g-empty" style="padding:1.5rem">
+                        <div class="g-empty__icon"><i data-lucide="file-x"></i></div>
+                        <div class="g-empty__sub">Aún no se han generado autorizaciones.</div>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
-<!-- Modal Generar Autorización SNTE -->
+</div>
+
+{# ── Modal Generar Autorización SNTE (sin cambios funcionales) ─── #}
 <div class="modal fade" id="modalAutorizacionSNTE" tabindex="-1" aria-labelledby="modalAutorizacionSNTELabel" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <form action="/casos/{{ caso.id }}/generar-autorizacion" method="POST" id="formAutorizacionSNTE" onsubmit="document.getElementById('btnSubmitSNTE').disabled = true; document.getElementById('btnSubmitSNTE').innerHTML = '<span class=\'spinner-border spinner-border-sm me-2\' role=\'status\' aria-hidden=\'true\'></span>Generando...';">
-        <div class="modal-header bg-light">
+      <form action="/casos/{{ caso.id }}/generar-autorizacion" method="POST" id="formAutorizacionSNTE"
+            onsubmit="document.getElementById('btnSubmitSNTE').disabled=true;document.getElementById('btnSubmitSNTE').innerHTML='<span class=\'spinner-border spinner-border-sm me-2\' role=\'status\'></span>Generando...';">
+        <div class="modal-header">
           <h5 class="modal-title fw-bold" id="modalAutorizacionSNTELabel">
             <i class="bi bi-file-earmark-pdf text-danger"></i> Generar Autorización SNTE
           </h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
         <div class="modal-body">
             {% if has_snte_authorization or has_snte_order_pdf %}
-            <div class="alert alert-warning small mb-4 fw-bold shadow-sm">
+            <div class="alert alert-warning small mb-3 fw-bold">
                 <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                Ya existe una autorización activa. Al regenerar, las versiones anteriores se archivan automáticamente
-                (permanecen en historial) y los nuevos Excel + PDF pasan a ser los documentos activos del caso.
+                Ya existe una autorización activa. Al regenerar, las versiones anteriores se archivan automáticamente.
             </div>
             {% endif %}
-            <div class="alert alert-info small mb-4">
+            <div class="alert alert-info small mb-3">
                 <strong>Requisitos:</strong> checklist del pedido completo · estatus «En preparación de autorización» o «Autorización generada».
-                Se generan <strong>Excel de autorización</strong> y <strong>PDF orden SNTE</strong> en la carpeta EVIDENCIAS del caso.
                 Los datos del formulario se usan solo para el documento (no se guardan en la base de datos).
             </div>
             {% if not pedido_checklist_ok %}
-            <div class="alert alert-danger small mb-4">
+            <div class="alert alert-danger small mb-3">
                 <strong>Checklist incompleto.</strong> Completa los documentos del pedido antes de generar:
                 <pre class="mb-0 mt-1 small">{{ pedido_checklist_text }}</pre>
             </div>
@@ -607,58 +573,35 @@
             {% set pf = ocr_prefill.form if ocr_prefill else {} %}
             {% set ometa = ocr_prefill.meta if ocr_prefill else {} %}
             {% if ocr_prefill and ocr_prefill.has_data %}
-            <div class="alert alert-success small mb-4">
+            <div class="alert alert-success small mb-3">
                 <strong><i class="bi bi-magic"></i> Precarga OCR activa.</strong>
-                Los campos del formulario se completaron con datos de:
-                {{ ocr_prefill.documents_with_ocr | join(', ') }}.
-                Revise cada valor antes de generar.
-            </div>
-            <div class="table-responsive mb-4">
-                <table class="table table-sm table-bordered small mb-0">
-                    <thead class="table-light">
-                        <tr><th>Campo</th><th>Valor detectado</th><th>Confianza</th><th>Documento</th></tr>
-                    </thead>
-                    <tbody>
-                    {% for key, info in ometa.items() %}
-                        {% if not key.startswith('percepcion_') and not key.startswith('deduccion_') and key != 'claves_capacidad' %}
-                        <tr>
-                            <td>{{ key }}</td>
-                            <td>{{ info.value }}</td>
-                            <td>{{ (info.confidence * 100)|int }}%</td>
-                            <td>{{ info.source }}</td>
-                        </tr>
-                        {% endif %}
-                    {% endfor %}
-                    </tbody>
-                </table>
+                Datos de: {{ ocr_prefill.documents_with_ocr | join(', ') }}. Revise cada valor.
             </div>
             {% endif %}
 
             <div class="row g-3">
-                <!-- Datos del agremiado -->
                 <div class="col-12"><h6 class="fw-bold mb-0 border-bottom pb-1">Datos del Agremiado</h6></div>
-                
                 <div class="col-md-6">
                     <label class="form-label small fw-bold">Nombre Completo
-                        {% if ometa.get('nombre') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.nombre.source }}">{{ (ometa.nombre.confidence * 100)|int }}%</span>{% endif %}
+                        {% if ometa.get('nombre') %}<span class="badge bg-secondary ms-1">{{ (ometa.nombre.confidence * 100)|int }}%</span>{% endif %}
                     </label>
                     <input type="text" class="form-control form-control-sm" name="nombre" value="{{ pf.get('nombre') or caso.client_name or '' }}" required>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-bold">Folio
-                        {% if ometa.get('folio') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.folio.source }}">{{ (ometa.folio.confidence * 100)|int }}%</span>{% endif %}
+                        {% if ometa.get('folio') %}<span class="badge bg-secondary ms-1">{{ (ometa.folio.confidence * 100)|int }}%</span>{% endif %}
                     </label>
                     <input type="text" class="form-control form-control-sm" name="folio" value="{{ pf.get('folio') or caso.official_folio or caso.temp_folio or '' }}" required>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-bold">RFC
-                        {% if ometa.get('rfc') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.rfc.source }}">{{ (ometa.rfc.confidence * 100)|int }}%</span>{% endif %}
+                        {% if ometa.get('rfc') %}<span class="badge bg-secondary ms-1">{{ (ometa.rfc.confidence * 100)|int }}%</span>{% endif %}
                     </label>
                     <input type="text" class="form-control form-control-sm" name="rfc" value="{{ pf.get('rfc', '') }}" required>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-bold">Categoría / Sección
-                        {% if ometa.get('categoria') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.categoria.source }}">{{ (ometa.categoria.confidence * 100)|int }}%</span>{% endif %}
+                        {% if ometa.get('categoria') %}<span class="badge bg-secondary ms-1">{{ (ometa.categoria.confidence * 100)|int }}%</span>{% endif %}
                     </label>
                     <input type="text" class="form-control form-control-sm" name="categoria" value="{{ pf.get('categoria', '') }}">
                 </div>
@@ -667,32 +610,24 @@
                     <input type="text" class="form-control form-control-sm" name="domicilio">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-bold">Teléfono Particular</label>
+                    <label class="form-label small fw-bold">Tel. Particular</label>
                     <input type="text" class="form-control form-control-sm" name="tel_part">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-bold">Teléfono Celular</label>
+                    <label class="form-label small fw-bold">Tel. Celular</label>
                     <input type="text" class="form-control form-control-sm" name="tel_celular">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-bold">Correo Electrónico</label>
+                    <label class="form-label small fw-bold">Correo</label>
                     <input type="email" class="form-control form-control-sm" name="correo">
                 </div>
 
-                <!-- Productos -->
-                <div class="col-12 mt-4"><h6 class="fw-bold mb-0 border-bottom pb-1">Productos a Autorizar</h6></div>
+                <div class="col-12 mt-3"><h6 class="fw-bold mb-0 border-bottom pb-1">Productos a Autorizar</h6></div>
                 <div class="col-12">
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered mb-0" style="font-size: 0.8rem;">
+                        <table class="table table-sm table-bordered mb-0" style="font-size:.8rem">
                             <thead class="table-light">
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Trans/Crédito</th>
-                                    <th>Crédito</th>
-                                    <th>Precio Venta</th>
-                                    <th>Descuento</th>
-                                    <th>Tipo Vta</th>
-                                </tr>
+                                <tr><th>Producto</th><th>Trans/Crédito</th><th>Crédito</th><th>Precio Venta</th><th>Descuento</th><th>Tipo</th></tr>
                             </thead>
                             <tbody>
                                 {% for i in range(1, 6) %}
@@ -719,17 +654,15 @@
                     </div>
                 </div>
 
-                <!-- Datos de Descuento -->
-                <div class="col-12 mt-4"><h6 class="fw-bold mb-0 border-bottom pb-1">Datos de Descuento / Crédito</h6></div>
-
+                <div class="col-12 mt-3"><h6 class="fw-bold mb-0 border-bottom pb-1">Datos de Descuento / Crédito</h6></div>
                 <div class="col-md-4">
                     <label class="form-label small fw-bold">Fecha de Venta</label>
-                    <input type="text" class="form-control form-control-sm" name="fecha_venta" placeholder="DD/MM/YYYY" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" title="Formato requerido: DD/MM/AAAA (Ej: 25/12/2026)" required>
-                    <div class="form-text" style="font-size: 0.65rem;">Formato: DD/MM/AAAA</div>
+                    <input type="text" class="form-control form-control-sm" name="fecha_venta" placeholder="DD/MM/YYYY" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" required>
+                    <div class="form-text" style="font-size:.65rem">Formato: DD/MM/AAAA</div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-bold">Monto Total
-                        {% if ometa.get('monto_total') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.monto_total.source }}">{{ (ometa.monto_total.confidence * 100)|int }}%</span>{% endif %}
+                        {% if ometa.get('monto_total') %}<span class="badge bg-secondary ms-1">{{ (ometa.monto_total.confidence * 100)|int }}%</span>{% endif %}
                     </label>
                     <input type="number" step="0.01" class="form-control form-control-sm" name="monto_total" value="{{ pf.get('monto_total', '') }}" placeholder="Auto-calcula si vacío">
                 </div>
@@ -737,15 +670,14 @@
                     <label class="form-label small fw-bold">Semana</label>
                     <input type="text" class="form-control form-control-sm" name="semana" value="{{ caso.week_code }}">
                 </div>
-                
                 <div class="col-md-4">
                     <label class="form-label small fw-bold">Qna. Inicial</label>
-                    <input type="text" class="form-control form-control-sm" name="qna_inicial" placeholder="Ej. 10-2026" pattern="[0-9]{2}-[0-9]{4}" title="Formato requerido: QQ-AAAA (Ej: 10-2026)" required>
-                    <div class="form-text" style="font-size: 0.65rem;">Formato: QQ-AAAA</div>
+                    <input type="text" class="form-control form-control-sm" name="qna_inicial" placeholder="Ej. 10-2026" pattern="[0-9]{2}-[0-9]{4}" required>
+                    <div class="form-text" style="font-size:.65rem">Formato: QQ-AAAA</div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-bold">Plazo (Qnas)
-                        {% if ometa.get('plazo_qnas') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.plazo_qnas.source }}">{{ (ometa.plazo_qnas.confidence * 100)|int }}%</span>{% endif %}
+                        {% if ometa.get('plazo_qnas') %}<span class="badge bg-secondary ms-1">{{ (ometa.plazo_qnas.confidence * 100)|int }}%</span>{% endif %}
                     </label>
                     <select class="form-select form-select-sm" name="plazo_qnas" required>
                         {% set plazo_sel = pf.get('plazo_qnas', '72')|string %}
@@ -756,7 +688,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-bold">Descuento $ (Opcional)
-                        {% if ometa.get('descuento_qna') %}<span class="badge bg-secondary ms-1" title="OCR {{ ometa.descuento_qna.source }}">{{ (ometa.descuento_qna.confidence * 100)|int }}%</span>{% endif %}
+                        {% if ometa.get('descuento_qna') %}<span class="badge bg-secondary ms-1">{{ (ometa.descuento_qna.confidence * 100)|int }}%</span>{% endif %}
                     </label>
                     <input type="number" step="0.01" class="form-control form-control-sm" name="descuento_qna" value="{{ pf.get('descuento_qna', '') }}" placeholder="Auto si vacío">
                 </div>
@@ -775,4 +707,24 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Tab navigation
+(function() {
+    const tabs   = document.querySelectorAll(".g-case-tab[data-tab]");
+    const panels = document.querySelectorAll(".tab-panel");
+
+    tabs.forEach(tab => {
+        tab.addEventListener("click", e => {
+            e.preventDefault();
+            const target = tab.dataset.tab;
+            tabs.forEach(t => t.classList.remove("is-active"));
+            tab.classList.add("is-active");
+            panels.forEach(p => p.style.display = p.id === target ? "" : "none");
+        });
+    });
+})();
+</script>
 {% endblock %}

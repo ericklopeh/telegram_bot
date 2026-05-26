@@ -1,65 +1,56 @@
 <!doctype html>
-
 <html lang="es">
 
 <head>
-
     <meta charset="utf-8">
-
     <title>{% block title %}Sistema Gaman{% endblock %}</title>
-
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-
-    <link 
-
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" 
-
-        rel="stylesheet"
-
-    >
-
+    <!-- Bootstrap 5 (mantiene compatibilidad con templates existentes) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-
-
-    <link rel="stylesheet" href="/static/style.css">
+    <!-- Gaman Design System -->
+    <link rel="stylesheet" href="/static/css/gaman-ui.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="stylesheet" href="/static/css/enterprise.css">
     <link rel="stylesheet" href="/static/css/cohesion.css">
+    <link rel="stylesheet" href="/static/style.css">
 
     {% block extra_head %}{% endblock %}
 
+    <!-- Dark mode: apply before render to avoid flash -->
+    <script>
+      (function() {
+        var saved = localStorage.getItem("gaman-theme");
+        var pref  = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", saved || pref);
+      })();
+    </script>
 </head>
 
-
-
-<body class="bg-light cohesion-ui {% block body_class %}{% endblock %}">
-
-
+<body class="{% block body_class %}{% endblock %}" data-toast-alerts="{% block toast_alerts %}false{% endblock %}">
 
 {% if usuario %}
-
+{# Navbar clásica solo en páginas que NO usan el shell enterprise (dash-shell-active la oculta via CSS) #}
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-
     <div class="container-fluid">
-
         <a class="navbar-brand fw-bold" href="/dashboard">Sistema Gaman</a>
 
-
-
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu">
-
             <span class="navbar-toggler-icon"></span>
-
         </button>
 
-
-
         <div id="navbarMenu" class="collapse navbar-collapse">
-
             <ul class="navbar-nav me-auto">
-                <li class="nav-item"><a class="nav-link" href="/dashboard"><span class="coh-badge-live" id="cohLiveDot" style="display:none"></span>Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="/dashboard">
+                    <span class="coh-badge-live" id="cohLiveDot" style="display:none"></span>Dashboard
+                </a></li>
                 <li class="nav-item"><a class="nav-link" href="/mi-dashboard">Mi panel</a></li>
                 {% if usuario.rol in ['admin', 'sistemas', 'autorizacion', 'compras'] %}
                 <li class="nav-item"><a class="nav-link" href="/supervisor/cockpit">Cockpit</a></li>
@@ -110,31 +101,25 @@
                 </li>
                 {% endif %}
             </ul>
-            <button type="button" class="btn btn-outline-light btn-sm me-2" title="Ctrl+K" onclick="document.getElementById('cohCommandPalette').classList.add('is-open'); document.querySelector('.coh-palette__input').focus();">
+
+            <!-- Dark mode toggle en navbar clásica -->
+            <button class="g-dm-toggle me-2" data-dm-toggle title="Cambiar tema">
+                <svg data-dm-sun viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                <svg data-dm-moon style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
+
+            <button type="button" class="btn btn-outline-light btn-sm me-2" title="Ctrl+K"
+                onclick="document.getElementById('cohCommandPalette').classList.add('is-open'); document.querySelector('.coh-palette__input').focus();">
                 <i class="bi bi-command"></i>
             </button>
-            <a href="/activity" class="nav-link text-light coh-notif-badge me-2" id="cohNotifBadge" data-count="0" title="Notificaciones"><i class="bi bi-bell"></i></a>
-
-            <span class="navbar-text me-3">
-
-                {{ usuario.nombre }} · {{ usuario.rol }}
-
-            </span>
-
-
-
-            <a class="btn btn-outline-light btn-sm" href="/logout">
-
-                Salir
-
+            <a href="/activity" class="nav-link text-light coh-notif-badge me-2" id="cohNotifBadge" data-count="0" title="Notificaciones">
+                <i class="bi bi-bell"></i>
             </a>
-
+            <span class="navbar-text me-3">{{ usuario.nombre }} · {{ usuario.rol }}</span>
+            <a class="btn btn-outline-light btn-sm" href="/logout">Salir</a>
         </div>
-
     </div>
-
 </nav>
-
 {% endif %}
 
 {% if request.state and request.state.beta_ui %}
@@ -143,12 +128,8 @@
 {% endif %}
 
 <main class="{% block main_class %}container py-4{% endblock %}">
-
     {% block content %}{% endblock %}
-
 </main>
-
-
 
 {% if usuario %}
 <div id="cohCommandPalette" class="coh-palette">
@@ -159,17 +140,21 @@
 </div>
 {% endif %}
 
+<!-- Toast container (global) -->
+<div id="g-toast-container"></div>
+
+<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Lucide icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 {% if usuario %}
 <script src="/static/js/global_search.js"></script>
 <script src="/static/js/cohesion.js"></script>
 {% endif %}
+<!-- Gaman UI (dark mode, toasts, dropzones, etc.) -->
+<script src="/static/js/gaman-ui.js"></script>
 
 {% block extra_scripts %}{% endblock %}
 
-
-
 </body>
-
 </html>
-

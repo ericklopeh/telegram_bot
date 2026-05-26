@@ -1,99 +1,292 @@
-{% extends "base.html" %}
+{% extends "base_dash.html" %}
 
-{% block content %}
+{% block page_title %}Casos{% endblock %}
+{% block page_subtitle %}Pedidos y revisiones registrados · {{ casos|length }} total{% endblock %}
+{% set active_nav = 'casos' %}
 
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-1">Casos</h2>
-        <p class="text-muted mb-0">
-            Pedidos y revisiones registrados en el sistema.
-        </p>
+{% block topbar_actions %}
+<div class="g-search-wrap" style="width:220px">
+    <svg class="g-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" id="casosSearch" class="g-input" placeholder="Buscar caso…" style="border-radius:999px;padding-left:2.35rem;font-size:.82rem">
+</div>
+<a href="/dashboard" class="g-btn g-btn--ghost g-btn--sm">
+    <i data-lucide="layout-dashboard" style="width:15px;height:15px"></i>
+    Dashboard
+</a>
+{% endblock %}
+
+{% block dash_content %}
+
+{# ── Metric row ───────────────────────────────────────────────── #}
+{% if casos %}
+<div class="g-metric-row mb-4" id="casosMetrics">
+    {% set total        = casos|length %}
+    {% set recibidos    = casos|selectattr("current_status", "equalto", "recibido")   |list|length %}
+    {% set en_compulsa  = casos|selectattr("current_status", "equalto", "en_compulsa")|list|length %}
+    {% set rechazados   = casos|selectattr("current_status", "equalto", "rechazado")  |list|length %}
+    {% set cerrados     = casos|selectattr("current_status", "equalto", "cerrado")    |list|length %}
+
+    <div class="g-metric">
+        <span class="g-metric__val">{{ total }}</span>
+        <span class="g-metric__lbl">Total</span>
     </div>
+    <div class="g-metric-divider"></div>
+    <div class="g-metric">
+        <span class="g-metric__val" style="color:var(--g-primary)">{{ recibidos }}</span>
+        <span class="g-metric__lbl">Recibidos</span>
+    </div>
+    <div class="g-metric-divider"></div>
+    <div class="g-metric">
+        <span class="g-metric__val" style="color:var(--g-orange)">{{ en_compulsa }}</span>
+        <span class="g-metric__lbl">Compulsa</span>
+    </div>
+    <div class="g-metric-divider"></div>
+    <div class="g-metric">
+        <span class="g-metric__val" style="color:var(--g-danger)">{{ rechazados }}</span>
+        <span class="g-metric__lbl">Rechazados</span>
+    </div>
+    <div class="g-metric-divider"></div>
+    <div class="g-metric">
+        <span class="g-metric__val" style="color:var(--g-success)">{{ cerrados }}</span>
+        <span class="g-metric__lbl">Cerrados</span>
+    </div>
+</div>
+{% endif %}
 
-    <button class="btn btn-primary mt-3 mt-md-0" disabled>
-        Nuevo caso
+{# ── Filter bar ───────────────────────────────────────────────── #}
+<div class="g-filter-bar mb-3">
+    <button class="g-btn g-btn--sm g-btn--outline is-filter-active" data-filter-status="all">
+        Todos
+    </button>
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="recibido">
+        <span class="g-badge g-badge--recibido">Recibido</span>
+    </button>
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="correccion">
+        <span class="g-badge g-badge--correccion">Corrección</span>
+    </button>
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="en_compulsa">
+        <span class="g-badge g-badge--compulsa">Compulsa</span>
+    </button>
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="rechazado">
+        <span class="g-badge g-badge--rechazado">Rechazado</span>
+    </button>
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="cerrado">
+        <span class="g-badge g-badge--cerrado">Cerrado</span>
     </button>
 </div>
 
-<div class="d-none d-md-block">
-    <div class="card shadow-sm border-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Folio</th>
-                        <th>Cliente</th>
-                        <th>Vendedor</th>
-                        <th>Tipo</th>
-                        <th>Semana</th>
-                        <th>Estatus</th>
-                        <th class="text-end">Acción</th>
-                    </tr>
-                </thead>
+{# ── Desktop Data Grid ────────────────────────────────────────── #}
+{% if casos %}
+<div class="g-table-wrap" id="casosTableWrap">
+    <div class="g-table-header">
+        <h3>Listado de casos</h3>
+        <div class="g-flex-center g-gap-2">
+            <span class="g-text-sm g-text-muted" id="casosCount">{{ casos|length }} casos</span>
+        </div>
+    </div>
 
-                <tbody>
-                    {% for caso in casos %}
-                    <tr>
-                        <td>{{ caso.public_id }}</td>
-                        <td>{{ caso.client_name }}</td>
-                        <td>{{ caso.seller_name }}</td>
-                        <td>{{ caso.case_type }}</td>
-                        <td>{{ caso.week_code }}</td>
-                        <td>
-                            <span class="badge bg-secondary">
-                                {{ caso.current_status }}
-                            </span>
-                        </td>
-                        <td class="text-end">
-                            <a href="/casos/{{ caso.id }}" class="btn btn-sm btn-outline-primary">
+    <div class="table-responsive" style="display:none" id="casosTableDesktop-placeholder">
+        <div style="padding:1.25rem">
+            <div class="g-skeleton g-skeleton-row" style="margin-bottom:4px"></div>
+            <div class="g-skeleton g-skeleton-row" style="margin-bottom:4px"></div>
+            <div class="g-skeleton g-skeleton-row"></div>
+        </div>
+    </div>
+
+    <div class="table-responsive d-none d-md-block" id="casosTableDesktop">
+        <table class="g-table g-table-sortable" id="casosTable">
+            <thead>
+                <tr>
+                    <th data-col="public_id">Folio <span class="g-table-sort-icon">↕</span></th>
+                    <th data-col="client_name">Cliente <span class="g-table-sort-icon">↕</span></th>
+                    <th data-col="seller_name">Vendedor <span class="g-table-sort-icon">↕</span></th>
+                    <th data-col="case_type">Tipo</th>
+                    <th data-col="week_code">Semana</th>
+                    <th data-col="current_status">Estatus</th>
+                    <th style="text-align:right">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for caso in casos %}
+                <tr class="caso-row"
+                    data-status="{{ caso.current_status }}"
+                    data-search="{{ (caso.public_id ~ ' ' ~ caso.client_name ~ ' ' ~ caso.seller_name)|lower }}"
+                    data-href="/casos/{{ caso.id }}">
+                    <td data-label="Folio">
+                        <span class="g-case-folio">{{ caso.public_id }}</span>
+                    </td>
+                    <td data-label="Cliente">
+                        <div class="g-flex-center g-gap-2">
+                            <div style="width:28px;height:28px;border-radius:50%;background:var(--g-primary-soft);color:var(--g-primary);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0">
+                                {{ caso.client_name[0]|upper if caso.client_name else '?' }}
+                            </div>
+                            <span class="g-table__primary">{{ caso.client_name }}</span>
+                        </div>
+                    </td>
+                    <td data-label="Vendedor">
+                        <span class="g-table__muted">{{ caso.seller_name or '—' }}</span>
+                    </td>
+                    <td data-label="Tipo">
+                        <span class="g-badge g-badge--neutral">{{ caso.case_type }}</span>
+                    </td>
+                    <td data-label="Semana">
+                        <span class="g-table__mono">{{ caso.week_code }}</span>
+                    </td>
+                    <td data-label="Estatus">
+                        {% set st = caso.current_status|lower %}
+                        {% if st == 'recibido' %}
+                            <span class="g-badge g-badge--recibido">Recibido</span>
+                        {% elif st in ['correccion', 'corrección'] %}
+                            <span class="g-badge g-badge--correccion">Corrección</span>
+                        {% elif st == 'en_compulsa' %}
+                            <span class="g-badge g-badge--compulsa g-badge--live">En compulsa</span>
+                        {% elif st == 'compulsa_ok' %}
+                            <span class="g-badge g-badge--aprobado">Compulsa OK</span>
+                        {% elif st in ['autorizado', 'aprobado'] %}
+                            <span class="g-badge g-badge--aprobado">Aprobado</span>
+                        {% elif st == 'rechazado' %}
+                            <span class="g-badge g-badge--rechazado">Rechazado</span>
+                        {% elif st == 'cerrado' %}
+                            <span class="g-badge g-badge--cerrado">Cerrado</span>
+                        {% else %}
+                            <span class="g-badge g-badge--neutral">{{ caso.current_status }}</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Acción">
+                        <div class="g-table__actions">
+                            <a href="/casos/{{ caso.id }}" class="g-btn g-btn--sm g-btn--outline">
+                                <i data-lucide="eye" style="width:13px;height:13px"></i>
                                 Ver
                             </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
-            {% if not casos %}
-            <div class="p-4 text-muted">
-                No hay casos registrados todavía.
-            </div>
-            {% endif %}
-        </div>
+    <!-- Empty state (shown via JS when all rows are filtered) -->
+    <div class="g-empty" id="casosEmptyFiltered" style="display:none">
+        <div class="g-empty__icon"><i data-lucide="search-x"></i></div>
+        <div class="g-empty__title">Sin resultados</div>
+        <div class="g-empty__sub">Ningún caso coincide con el filtro activo.</div>
     </div>
 </div>
 
-<div class="d-md-none">
+{# ── Mobile Cards ─────────────────────────────────────────────── #}
+<div class="d-md-none mt-3" id="casosMobileCards">
     {% for caso in casos %}
-    <div class="card shadow-sm border-0 mb-3">
-        <div class="card-body">
-            <div class="d-flex justify-content-between mb-2">
-                <strong>{{ caso.public_id }}</strong>
-                <span class="badge bg-secondary">{{ caso.current_status }}</span>
+    <div class="g-card g-card--hover mb-3 caso-row"
+         data-status="{{ caso.current_status }}"
+         data-search="{{ (caso.public_id ~ ' ' ~ caso.client_name ~ ' ' ~ caso.seller_name)|lower }}"
+         onclick="window.location.href='/casos/{{ caso.id }}'">
+        <div class="g-card__body">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">
+                <span class="g-case-folio">{{ caso.public_id }}</span>
+                {% set st = caso.current_status|lower %}
+                {% if st == 'recibido' %}<span class="g-badge g-badge--recibido">Recibido</span>
+                {% elif st in ['correccion', 'corrección'] %}<span class="g-badge g-badge--correccion">Corrección</span>
+                {% elif st == 'en_compulsa' %}<span class="g-badge g-badge--compulsa g-badge--live">Compulsa</span>
+                {% elif st == 'rechazado' %}<span class="g-badge g-badge--rechazado">Rechazado</span>
+                {% elif st == 'cerrado' %}<span class="g-badge g-badge--cerrado">Cerrado</span>
+                {% else %}<span class="g-badge g-badge--neutral">{{ caso.current_status }}</span>
+                {% endif %}
             </div>
-
-            <div class="fw-bold">{{ caso.client_name }}</div>
-
-            <div class="small text-muted mt-2">
-                Vendedor: {{ caso.seller_name }}<br>
-                Tipo: {{ caso.case_type }}<br>
-                Semana: {{ caso.week_code }}
+            <div class="g-fw-600" style="margin-bottom:.3rem">{{ caso.client_name }}</div>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap">
+                <span class="g-text-sm g-text-muted">Vendedor: {{ caso.seller_name or '—' }}</span>
+                <span class="g-text-sm g-text-muted">{{ caso.case_type }}</span>
+                <span class="g-text-sm g-text-muted g-mono">{{ caso.week_code }}</span>
             </div>
-
-            <a href="/casos/{{ caso.id }}" class="btn btn-outline-primary btn-sm w-100 mt-3">
-                Ver detalle
-            </a>
         </div>
     </div>
     {% endfor %}
-
-    {% if not casos %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body text-muted">
-            No hay casos registrados todavía.
-        </div>
-    </div>
-    {% endif %}
 </div>
 
+{% else %}
+{# ── Empty state (sin casos) ────────────────────────────────── #}
+<div class="g-card">
+    <div class="g-empty" style="padding:4rem 1.5rem">
+        <div class="g-empty__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        </div>
+        <div class="g-empty__title">No hay casos registrados todavía</div>
+        <div class="g-empty__sub">Los casos se crean desde el bot de Telegram o al importar datos.</div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+    const searchInput = document.getElementById("casosSearch");
+    const rows        = document.querySelectorAll(".caso-row");
+    const countEl     = document.getElementById("casosCount");
+    const emptyMsg    = document.getElementById("casosEmptyFiltered");
+
+    let activeStatus = "all";
+    let searchTerm   = "";
+
+    function updateFilter() {
+        let visible = 0;
+        rows.forEach(row => {
+            const status = (row.dataset.status || "").toLowerCase();
+            const search = (row.dataset.search || "").toLowerCase();
+            const matchStatus = activeStatus === "all" || status === activeStatus;
+            const matchSearch = !searchTerm || search.includes(searchTerm);
+            const show = matchStatus && matchSearch;
+            row.style.display = show ? "" : "none";
+            if (show) visible++;
+        });
+        if (countEl) countEl.textContent = visible + " casos";
+        if (emptyMsg) emptyMsg.style.display = visible === 0 ? "" : "none";
+    }
+
+    // Filter buttons
+    document.querySelectorAll("[data-filter-status]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("[data-filter-status]").forEach(b =>
+                b.classList.remove("is-filter-active", "g-btn--outline"));
+            btn.classList.add("is-filter-active", "g-btn--outline");
+            activeStatus = btn.dataset.filterStatus;
+            updateFilter();
+        });
+    });
+
+    // Search
+    if (searchInput) {
+        searchInput.addEventListener("input", () => {
+            searchTerm = searchInput.value.trim().toLowerCase();
+            updateFilter();
+        });
+    }
+
+    // Sortable table
+    const table = document.getElementById("casosTable");
+    if (table) {
+        let sortDir = {};
+        table.querySelectorAll("thead th[data-col]").forEach(th => {
+            th.addEventListener("click", () => {
+                const col = th.dataset.col;
+                const dir = sortDir[col] === "asc" ? "desc" : "asc";
+                sortDir = { [col]: dir };
+                const tbody = table.querySelector("tbody");
+                const trs = Array.from(tbody.querySelectorAll("tr.caso-row"));
+                trs.sort((a, b) => {
+                    const av = a.querySelector(`td[data-label='${th.textContent.trim().replace("↕","").trim()}']`)?.textContent.trim() || "";
+                    const bv = b.querySelector(`td[data-label='${th.textContent.trim().replace("↕","").trim()}']`)?.textContent.trim() || "";
+                    return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+                });
+                trs.forEach(tr => tbody.appendChild(tr));
+                // Update sort icons
+                table.querySelectorAll(".g-table-sort-icon").forEach(ic => ic.textContent = "↕");
+                th.querySelector(".g-table-sort-icon").textContent = dir === "asc" ? "↑" : "↓";
+            });
+        });
+    }
+})();
+</script>
 {% endblock %}
