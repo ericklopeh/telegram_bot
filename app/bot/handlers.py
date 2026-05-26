@@ -63,6 +63,26 @@ from app.utils.naming import sanitize_name
 
 log = logging.getLogger(__name__)
 
+
+def _user_facing_pedido_error(exc: Exception) -> str:
+    """Mensaje seguro para Telegram (sin traceback ni secretos)."""
+    try:
+        from sqlalchemy.exc import SQLAlchemyError
+
+        if isinstance(exc, SQLAlchemyError):
+            return (
+                "Error de base de datos. Verifique que PostgreSQL esté activo "
+                "y ejecute migraciones (alembic upgrade head)."
+            )
+    except ImportError:
+        pass
+    if isinstance(exc, OSError):
+        return "Error al guardar el archivo en el servidor (almacenamiento)."
+    if type(exc).__name__ in ("TypeError", "AttributeError", "ValueError"):
+        return "Error al procesar el pedido. Contacte a sistemas si persiste."
+    return "No se pudo completar la acción. Intente de nuevo o contacte a sistemas."
+
+
 def _get_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> dict:
     if getattr(context, "chat_data", None) is not None:
         return context.chat_data
@@ -958,10 +978,10 @@ async def handle_files(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 semana = case.week_code
                 cliente_case = case.client_name
                 folio = case.official_folio or case.public_id
-        except Exception:
+        except Exception as exc:
             log.exception("Error guardando documento de pedido")
             await update.message.reply_text(
-                "Error al guardar el archivo.",
+                _user_facing_pedido_error(exc),
                 reply_markup=_main_keyboard_for(update),
             )
             session.clear()
@@ -1166,9 +1186,12 @@ async def handle_pedido_doc_callback(update: Update, context: ContextTypes.DEFAU
                     return
                 session["pending_doc_type"] = doc_type
                 session["state"] = "waiting_pedido_file"
-        except Exception:
+        except Exception as exc:
             log.exception("Error creando caso de pedido")
-            await query.answer("Error de base de datos.", show_alert=True)
+            await query.answer(
+                _user_facing_pedido_error(exc)[:190],
+                show_alert=True,
+            )
             return
         await query.edit_message_text(f"Adjunta ahora el archivo: {doc_type_label(doc_type)}")
         await query.answer()

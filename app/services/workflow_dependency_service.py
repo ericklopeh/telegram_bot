@@ -25,6 +25,7 @@ from app.services.case_event_service import (
     SALE_CAPTURE_EXPORT_FAILED,
     SALE_CAPTURE_REGISTRATION_FAILED,
 )
+from app.config import get_settings
 from app.services.case_service import CaseService
 from app.services.workflow_state_service import (
     WORKFLOW_STATE_LABELS,
@@ -129,7 +130,7 @@ def build_workflow_context(db: Session, case: Case) -> WorkflowContext:
     }
     has_critical_timeline_error = bool(event_types & critical_errors)
 
-    case_svc = CaseService()
+    case_svc = CaseService(get_settings())
     checklist_ok = (
         case.case_type == C.CASE_TYPE_PEDIDO and case_svc.pedido_has_all_documents(db, case)
     )
