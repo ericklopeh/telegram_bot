@@ -1,6 +1,7 @@
 /**
  * Dashboard operativo — UI (sparklines KPI, tendencias, sidebar, Lucide).
  * Solo presentación; no altera datos del servidor.
+ * Fase 1: tokens & shell unificados vía gaman-ui.css + base_dash.html.
  */
 (function () {
     "use strict";
@@ -180,9 +181,8 @@
     }
 
     function initLucide() {
-        if (typeof lucide !== "undefined" && lucide.createIcons) {
-            lucide.createIcons();
-        }
+        // Lucide init centralized in gaman-ui.js (Fase 1)
+        // if (typeof lucide !== "undefined" && lucide.createIcons) { lucide.createIcons(); }
     }
 
     document.addEventListener("DOMContentLoaded", function () {

@@ -33,8 +33,10 @@
                     <div class="dash-timeline__title">{{ ev.title }}</div>
                     <div class="dash-timeline__detail">{{ ev.detail }}</div>
                 </div>
-                <span class="dash-timeline__time">{{ ev.time }}</span>
-                {% if ev.href %}<a href="{{ ev.href }}" class="dash-btn-mini">Ver</a>{% endif %}
+                <div class="dash-timeline__meta">
+                    <span class="dash-timeline__time">{{ ev.time }}</span>
+                    {% if ev.href %}<a href="{{ ev.href }}" class="dash-btn-mini">Ver</a>{% endif %}
+                </div>
             </li>
             {% else %}
             <li class="dash-timeline__empty">Sin eventos recientes.</li>

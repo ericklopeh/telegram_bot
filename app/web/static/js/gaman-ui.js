@@ -2,6 +2,7 @@
  * Gaman UI — Interactive Components
  * Dark mode, toasts, skeleton loading, drag-and-drop upload, table tools.
  * Vanilla JS, no dependencies required.
+ * Fase 1: central design tokens in gaman-ui.css.
  */
 
 /* ─── 1. DARK MODE ─────────────────────────────────────────────── */
@@ -306,3 +307,37 @@ document.addEventListener("DOMContentLoaded", () => {
     upgradeBootstrapAlerts();
   }
 });
+
+/* ─── Copy to clipboard helper (for mensaje de talón etc.) ───────────── */
+function copyToClipboard(text, buttonEl) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (buttonEl) {
+        const orig = buttonEl.innerHTML;
+        buttonEl.innerHTML = '✓ Copiado';
+        setTimeout(() => { buttonEl.innerHTML = orig; }, 1500);
+      }
+    }).catch(() => fallbackCopy(text, buttonEl));
+  } else {
+    fallbackCopy(text, buttonEl);
+  }
+}
+
+function fallbackCopy(text, buttonEl) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    document.execCommand('copy');
+    if (buttonEl) {
+      const orig = buttonEl.innerHTML;
+      buttonEl.innerHTML = '✓ Copiado';
+      setTimeout(() => { buttonEl.innerHTML = orig; }, 1500);
+    }
+  } catch (e) {
+    alert('No se pudo copiar automáticamente. Selecciona y copia manualmente:\n\n' + text);
+  }
+  document.body.removeChild(textarea);
+}

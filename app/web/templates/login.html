@@ -26,12 +26,6 @@
 
 <body>
 <div class="g-login-wrap">
-    <!-- Background decorative blobs -->
-    <div aria-hidden="true" style="position:absolute;inset:0;overflow:hidden;pointer-events:none">
-        <div style="position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(37,99,235,.18) 0%,transparent 70%);top:-200px;left:-200px"></div>
-        <div style="position:absolute;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.12) 0%,transparent 70%);bottom:-150px;right:-100px"></div>
-    </div>
-
     <div class="g-login-card">
         <!-- Brand -->
         <div class="g-login-brand">
@@ -41,13 +35,13 @@
                 </svg>
             </div>
             <div>
-                <div class="g-login-brand__name">Sistema Gaman</div>
-                <div class="g-login-brand__sub">Plataforma operacional</div>
+                <div class="g-login-brand__name">Gaman</div>
+                <div class="g-login-brand__sub">Centro operacional</div>
             </div>
         </div>
 
         <h2 class="g-login-title">Bienvenido</h2>
-        <p class="g-login-sub">Ingresa tus credenciales para continuar</p>
+        <p class="g-login-sub">Ingresa tus credenciales para acceder</p>
 
         {% if error %}
         <div class="g-login-error">
@@ -88,11 +82,10 @@
             </button>
         </form>
 
-        <hr class="g-login-divider">
+        <div class="g-login-divider"></div>
 
         <div class="g-login-demo">
-            <strong>Usuarios demo</strong> — crear con
-            <code>python scripts/seed_web_demo_users.py</code> dentro del contenedor <code>web</code><br><br>
+            <strong>Usuarios demo</strong><br>
             admin / Admin2026! &nbsp;·&nbsp; jefe / Jefe2026! &nbsp;·&nbsp; vendedor / Vend2026!
         </div>
     </div>
@@ -103,7 +96,7 @@
 document.getElementById("loginForm").addEventListener("submit", function() {
     var btn = document.getElementById("loginBtn");
     btn.disabled = true;
-    btn.innerHTML = '<span class="g-spinner g-spinner--sm g-spinner--white"></span> Ingresando…';
+    btn.innerHTML = '<span class="g-spinner g-spinner--sm"></span> Ingresando…';
 });
 </script>
 </body>

@@ -223,6 +223,39 @@
                             >
                         </div>
 
+                        <!-- Enriquecido: Cuentas terminadas (lógica migrada de Streamlit) -->
+                        <div class="col-12 mt-2">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold mb-0">Cuentas terminadas (saldos liberados)</h6>
+                                <span class="badge bg-secondary text-dark">Opcional - suma a liquidez</span>
+                            </div>
+                            <div class="small text-muted mb-2">Registra cuentas que terminan para liberar saldo (ej. +1500 / +2000). Marcar "Sumar" para incluir en liquidez final.</div>
+                            
+                            {% for i in range(2) %}
+                            <div class="row g-2 mb-2 align-items-end">
+                                <div class="col-3">
+                                    <label class="form-label small">QNA termina</label>
+                                    <input type="text" class="form-control form-control-sm" name="ct_qna_{{ i }}" placeholder="16-2026" value="{{ form_data.get('ct_qna_' ~ i, '') }}">
+                                </div>
+                                <div class="col-3">
+                                    <label class="form-label small">Saldo liberado</label>
+                                    <input type="number" step="0.01" class="form-control form-control-sm" name="ct_saldo_{{ i }}" value="{{ form_data.get('ct_saldo_' ~ i, '0') }}">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label small">Observación</label>
+                                    <input type="text" class="form-control form-control-sm" name="ct_obs_{{ i }}" placeholder="Opcional" value="{{ form_data.get('ct_obs_' ~ i, '') }}">
+                                </div>
+                                <div class="col-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="ct_sumar_{{ i }}" id="ct_sumar_{{ i }}" {% if form_data.get('ct_sumar_' ~ i, 'on') %}checked{% endif %}>
+                                        <label class="form-check-label small" for="ct_sumar_{{ i }}">Sumar</label>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            <input type="hidden" name="ct_count" value="2">
+                        </div>
+
                         <div class="col-12">
                             <button class="btn btn-primary w-100" type="submit">
                                 Calcular liquidez
@@ -270,33 +303,102 @@
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white fw-bold">
-                Resultado
+        <div class="g-card">
+            <div class="g-card__header">
+                <h3 class="dash-panel__title" style="font-size: 0.95rem;">Resultado del cálculo</h3>
             </div>
 
-            <div class="card-body">
-                {% if resultado %}
-                    <p><strong>Total al 70%:</strong> ${{ "%.2f"|format(resultado.total_70) }}</p>
-                    <p><strong>Saldo al 70%:</strong> ${{ "%.2f"|format(resultado.saldo_70) }}</p>
-                    <p><strong>Extra agregado:</strong> ${{ "%.2f"|format(resultado.extra) }}</p>
-                    <p><strong>Programados:</strong> ${{ "%.2f"|format(resultado.programados) }}</p>
+            <div class="g-card__body">
+                {% set res = resultado or {} %}
+                {% if res %}
+                    <div class="row g-2 small mb-2">
+                        <div class="col-6"><strong>Ingresos:</strong> ${{ "%.2f"|format(res.ingresos or 0) }}</div>
+                        <div class="col-6"><strong>Descuentos:</strong> ${{ "%.2f"|format(res.descuentos or 0) }}</div>
+                        <div class="col-6"><strong>Saldo 100%:</strong> ${{ "%.2f"|format(res.saldo_100 or 0) }}</div>
+                        <div class="col-6"><strong>Saldo 70%:</strong> ${{ "%.2f"|format(res.saldo_70 or 0) }}</div>
+                        <div class="col-6"><strong>Programado:</strong> ${{ "%.2f"|format(res.programado or 0) }}</div>
+                        <div class="col-6"><strong>Extra / Apoyo:</strong> ${{ "%.2f"|format(res.abono_extra or res.extra or 0) }}</div>
+                    </div>
 
-                    <hr>
+                    <div class="mb-2">
+                        <strong>Liquidez final:</strong>
+                        <span class="fs-5 fw-bold">${{ "%.2f"|format(res.liquidez_final or 0) }}</span>
+                        {% if (res.liquidez_final or 0) >= 0 %}
+                            <span class="g-badge g-badge--success ms-1">Apto</span>
+                        {% else %}
+                            <span class="g-badge g-badge--error ms-1">No apto (sobregiro)</span>
+                        {% endif %}
+                    </div>
 
-                    <h4 class="fw-bold">
-                        Liquidez final: ${{ "%.2f"|format(resultado.liquidez_final) }}
-                    </h4>
-
-                    {% if resultado.resultado == "Apto" %}
-                        <span class="badge bg-success fs-6">Apto</span>
-                    {% else %}
-                        <span class="badge bg-danger fs-6">No apto</span>
+                    {% if res.total_saldo_liberado %}
+                    <div class="small text-muted mb-1">
+                        Saldos liberados: ${{ "%.2f"|format(res.total_saldo_liberado) }} 
+                        (solo observado: ${{ "%.2f"|format(res.total_solo_observado or 0) }})
+                    </div>
                     {% endif %}
+
+                    <!-- Mensaje formal -->
+                    {% set msg = mensaje or last_mensaje %}
+                    {% if msg %}
+                    <div class="g-card mt-3" style="background:#fafafa;">
+                        <div class="g-card__header" style="padding: 0.5rem 0.75rem;">
+                            <span class="fw-semibold small">Mensaje formal para vendedor</span>
+                            <button type="button" class="g-btn g-btn--ghost g-btn--sm ms-2" onclick="copyToClipboard(document.getElementById('mensajeTalón').innerText, this)">
+                                📋 Copiar mensaje
+                            </button>
+                        </div>
+                        <div class="g-card__body" style="padding-top:0.25rem;">
+                            <pre id="mensajeTalón" class="mensaje-talon small mb-0">{{ msg }}</pre>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Desglose -->
+                    <div class="mt-2">
+                        <button type="button" class="g-btn g-btn--ghost g-btn--sm" onclick="var el=document.getElementById('desgloseTalón'); el.style.display = (el.style.display==='none'?'block':'none'); this.textContent = (el.style.display==='none'?'Ver desglose':'Ocultar desglose');">
+                            Ver desglose
+                        </button>
+                        <div id="desgloseTalón" style="display:none; margin-top:0.5rem;">
+                            {% if res.codigos_revision %}
+                            <div class="small mb-1"><strong>Códigos de revisión:</strong></div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                {% for k,v in (res.codigos_revision or {}).items() %}
+                                <span class="g-badge g-badge--neutral" style="font-size:0.7rem;">{{ k }}: ${{ "%.2f"|format(v) }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            {% if cuentas_liberadas %}
+                            <div class="small"><strong>Cuentas que suman a liquidez:</strong></div>
+                            <ul class="small mb-1 ps-3">
+                                {% for c in cuentas_liberadas %}
+                                <li>QNA {{ c.qna_termina or '—' }}: ${{ "%.2f"|format(c.saldo_liberado or 0) }} {% if c.observacion %}( {{ c.observacion }} ){% endif %}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+
+                            {% if cuentas_observadas %}
+                            <div class="small"><strong>Cuentas solo observación:</strong></div>
+                            <ul class="small mb-0 ps-3">
+                                {% for c in cuentas_observadas %}
+                                <li>QNA {{ c.qna_termina or '—' }}: ${{ "%.2f"|format(c.saldo_liberado or 0) }} {% if c.observacion %}( {{ c.observacion }} ){% endif %}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+
                 {% else %}
                     <p class="text-muted mb-0">
                         Captura los datos del talón y presiona calcular.
                     </p>
+                {% endif %}
+
+                {% if last_mensaje and not mensaje %}
+                <div class="mt-2 small text-muted">
+                    Último mensaje guardado en historial (temporal): <br>
+                    <span style="font-family:monospace; white-space:pre-wrap;">{{ last_mensaje }}</span>
+                </div>
                 {% endif %}
             </div>
         </div>

@@ -15,7 +15,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    <!-- Gaman Design System -->
+    <!-- Gaman Design System (Fase 1: gaman-ui.css is primary tokens source) -->
     <link rel="stylesheet" href="/static/css/gaman-ui.css">
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="stylesheet" href="/static/css/enterprise.css">
@@ -37,7 +37,8 @@
 <body class="{% block body_class %}{% endblock %}" data-toast-alerts="{% block toast_alerts %}false{% endblock %}">
 
 {% if usuario %}
-{# Navbar clásica solo en páginas que NO usan el shell enterprise (dash-shell-active la oculta via CSS) #}
+{# Navbar clásica solo en páginas que NO usan el shell enterprise (dash-shell-active la oculta via CSS).
+   Fase 1: base_dash.html + dash_sidebar_p35.html es el shell consolidado recomendado. #}
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
         <a class="navbar-brand fw-bold" href="/dashboard">Sistema Gaman</a>

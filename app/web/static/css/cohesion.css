@@ -1,10 +1,11 @@
 /* P61-P68 — cohesión UX enterprise */
+/* Fase 1: Tokens aliased to gaman-ui primary source for consistency */
 :root {
     --coh-primary: #1e3a5f;
-    --coh-surface: #f4f6f9;
-    --coh-card: #fff;
-    --coh-radius: 12px;
-    --coh-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+    --coh-surface: var(--g-bg);
+    --coh-card: var(--g-card);
+    --coh-radius: var(--g-r-lg);
+    --coh-shadow: var(--g-shadow-sm);
 }
 
 body.cohesion-ui { background: var(--coh-surface); }

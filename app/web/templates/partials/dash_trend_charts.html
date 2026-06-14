@@ -12,7 +12,7 @@
             </div>
             <p class="dash-chart-card__sub">{{ ch.subtitle }}</p>
             <div class="dash-chart-card__canvas {% if ch.get('chart_type') == 'doughnut' %}dash-chart-card__canvas--donut{% endif %}">
-                <canvas id="chartTrend-{{ ch.key }}" data-chart-key="{{ ch.key }}" data-chart-type="{{ ch.get('chart_type', 'line') }}" height="56"></canvas>
+                <canvas id="chartTrend-{{ ch.key }}" data-chart-key="{{ ch.key }}" data-chart-type="{{ ch.get('chart_type', 'line') }}" height="52"></canvas>
             </div>
         </div>
         {% else %}

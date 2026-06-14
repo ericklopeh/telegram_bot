@@ -27,17 +27,17 @@
             <span class="dash-alert-row__time">{{ row.time_label }}</span>
             <span class="dash-alert-row__actions">
                 {% if row.case_href %}
-                <a href="{{ row.case_href }}" class="dash-btn-mini">Ver caso</a>
+                <a href="{{ row.case_href }}" class="dash-btn-mini">Ver</a>
                 {% else %}
-                <span class="dash-btn-mini dash-btn-mini--disabled">Ver caso</span>
+                <span class="dash-btn-mini dash-btn-mini--disabled">Ver</span>
                 {% endif %}
-                <a href="{{ row.recovery_href|default('/ops') }}" class="dash-btn-mini dash-btn-mini--ghost">Recovery</a>
+                <a href="{{ row.recovery_href|default('/ops') }}" class="dash-btn-mini dash-btn-mini--ghost">Resolver</a>
             </span>
         </li>
         {% else %}
         <li class="dash-alert-row dash-alert-row--empty">
             <i data-lucide="check-circle-2"></i>
-            <span>Operación estable — sin alertas críticas activas.</span>
+            <span>Operación estable — sin alertas críticas.</span>
         </li>
         {% endfor %}
     </ul>

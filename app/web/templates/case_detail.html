@@ -81,12 +81,12 @@
 
     <div class="g-flex-center g-gap-2">
         {% if web_rbac_relaxed or usuario.rol in ['admin', 'sistemas'] %}
-        <a href="/casos/{{ caso.id }}/revision-talon" class="g-btn g-btn--outline g-btn--sm">
+        <a href="/casos/{{ caso.id }}/revision-talon" class="g-btn g-btn--ghost g-btn--sm">
             <i data-lucide="scan-text" style="width:14px;height:14px"></i>
             Revisar talón
         </a>
         {% endif %}
-        <a href="/casos/{{ caso.id }}/documentos" class="g-btn g-btn--outline g-btn--sm">
+        <a href="/casos/{{ caso.id }}/documentos" class="g-btn g-btn--ghost g-btn--sm">
             <i data-lucide="files" style="width:14px;height:14px"></i>
             Documentos
         </a>
@@ -120,9 +120,9 @@
             {# Docs summary strip #}
             {% if doc_p24_summary %}
             <div class="g-card mb-4" style="border-left:3px solid var(--g-primary)">
-                <div class="g-card__body" style="padding:.85rem 1.25rem">
-                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
-                        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                <div class="g-card__body">
+                    <div class="g-flex-center" style="justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+                        <div class="g-flex-center" style="gap:.75rem;flex-wrap:wrap">
                             <span class="g-text-sm g-fw-600">Documentos del pedido</span>
                             <span class="g-badge g-badge--aprobado">{{ doc_p24_summary.complete }} completos</span>
                             {% if doc_p24_summary.pending %}<span class="g-badge g-badge--pending">{{ doc_p24_summary.pending }} pendientes</span>{% endif %}

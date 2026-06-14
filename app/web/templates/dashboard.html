@@ -1,38 +1,14 @@
-{% extends "base.html" %}
+{% extends "base_dash.html" %}
 
 {% block body_class %}dash-shell-active{% endblock %}
 {% block main_class %}{% endblock %}
 
-{% block extra_head %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/dashboard.css">
-{% endblock %}
+{% set refresh_url = '/dashboard' ~ ('?filter=' ~ pendiente_filter if pendiente_filter is defined and pendiente_filter != 'all' else '') %}
 
-{% block content %}
-{% set refresh_url = '/dashboard' ~ ('?filter=' ~ pendiente_filter if pendiente_filter != 'all' else '') %}
-{% set user_initial = (usuario.nombre[0] if usuario and usuario.nombre else 'G')|upper %}
-{% set ds = daily_alert_summary %}
+{% block page_title %}Centro operacional{% endblock %}
+{% block page_subtitle %}Panel ejecutivo · pipeline, alertas y tendencias{% if usuario.rol == 'vendedor' %} · tus casos{% endif %}{% endblock %}
 
-<div class="dash-app">
-    <div class="dash-sidebar-backdrop" id="dashSidebarBackdrop" aria-hidden="true"></div>
-
-    {% set active_nav = 'dashboard' %}
-    {% include "partials/dash_sidebar_p35.html" %}
-
-    <div class="dash-main">
-        <header class="dash-topbar">
-            <div class="d-flex align-items-center gap-2">
-                <button type="button" class="dash-mobile-toggle" id="dashSidebarToggle" aria-label="Abrir menú">
-                    <i data-lucide="menu"></i>
-                </button>
-                <div class="dash-topbar__title">
-                    <h2>Centro operacional</h2>
-                    <p>Panel ejecutivo · pipeline, alertas y tendencias{% if usuario.rol == 'vendedor' %} · tus casos{% endif %}</p>
-                </div>
-            </div>
-            <div class="dash-topbar__actions">
+{% block topbar_actions %}
                 <a href="/autorizaciones/aprobadas" class="dash-btn-ghost">
                     <i data-lucide="badge-check" style="width:16px;height:16px;"></i>
                     Autorizaciones aprobadas
@@ -49,8 +25,10 @@
                     <i data-lucide="refresh-cw" style="width:16px;height:16px;"></i>
                     Actualizar
                 </a>
-            </div>
-        </header>
+{% endblock %}
+
+{% block dash_content %}
+{% set ds = daily_alert_summary %}
 
         <div class="dash-content dash-content--dense">
 
@@ -66,8 +44,8 @@
 
             {% include "partials/dash_recent_activity.html" %}
 
-            <div class="row g-3 mb-3">
-                <div class="col-12 col-xl-8">
+            <div class="dash-split-cards mb-3">
+                <div>
                     <section class="dash-card h-100">
                         <div class="dash-card__header">
                             <h3>Distribución por estado</h3>
@@ -106,7 +84,7 @@
                         </div>
                     </section>
                 </div>
-                <div class="col-12 col-xl-4">
+                <div>
                     <section class="dash-card h-100">
                         <div class="dash-card__header">
                             <h3>Documentos recientes con error</h3>
@@ -155,7 +133,7 @@
                         </div>
                     </section>
                 </div>
-            </div>
+            </div> <!-- /dash-split-cards -->
 
             {# —— Seguimiento operativo P14 —— #}
             <section class="dash-card mb-4">
@@ -348,12 +326,9 @@
             </section>
 
         </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/js/dashboard.js"></script>
 {% endblock %}

@@ -7,7 +7,7 @@
 {% block topbar_actions %}
 <div class="g-search-wrap" style="width:220px">
     <svg class="g-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <input type="text" id="casosSearch" class="g-input" placeholder="Buscar caso…" style="border-radius:999px;padding-left:2.35rem;font-size:.82rem">
+    <input type="text" id="casosSearch" class="g-input" placeholder="Buscar caso…" style="border-radius:999px;padding-left:2.35rem;font-size:.8rem">
 </div>
 <a href="/dashboard" class="g-btn g-btn--ghost g-btn--sm">
     <i data-lucide="layout-dashboard" style="width:15px;height:15px"></i>
@@ -54,23 +54,23 @@
 {% endif %}
 
 {# ── Filter bar ───────────────────────────────────────────────── #}
-<div class="g-filter-bar mb-3">
-    <button class="g-btn g-btn--sm g-btn--outline is-filter-active" data-filter-status="all">
+<div class="g-filter-bar mb-3" style="gap:6px">
+    <button class="g-btn g-btn--sm g-btn--outline is-filter-active" data-filter-status="all" style="padding:.35rem .85rem">
         Todos
     </button>
-    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="recibido">
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="recibido" style="padding:.35rem .65rem">
         <span class="g-badge g-badge--recibido">Recibido</span>
     </button>
-    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="correccion">
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="correccion" style="padding:.35rem .65rem">
         <span class="g-badge g-badge--correccion">Corrección</span>
     </button>
-    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="en_compulsa">
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="en_compulsa" style="padding:.35rem .65rem">
         <span class="g-badge g-badge--compulsa">Compulsa</span>
     </button>
-    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="rechazado">
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="rechazado" style="padding:.35rem .65rem">
         <span class="g-badge g-badge--rechazado">Rechazado</span>
     </button>
-    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="cerrado">
+    <button class="g-btn g-btn--sm g-btn--ghost" data-filter-status="cerrado" style="padding:.35rem .65rem">
         <span class="g-badge g-badge--cerrado">Cerrado</span>
     </button>
 </div>
@@ -182,7 +182,7 @@
          data-search="{{ (caso.public_id ~ ' ' ~ caso.client_name ~ ' ' ~ caso.seller_name)|lower }}"
          onclick="window.location.href='/casos/{{ caso.id }}'">
         <div class="g-card__body">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">
+            <div class="g-flex-center" style="justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">
                 <span class="g-case-folio">{{ caso.public_id }}</span>
                 {% set st = caso.current_status|lower %}
                 {% if st == 'recibido' %}<span class="g-badge g-badge--recibido">Recibido</span>

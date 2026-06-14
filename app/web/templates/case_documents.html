@@ -1,22 +1,28 @@
-{% extends "base_dashboard.html" %}
-{% block title %}Documentos — {{ caso.public_id }}{% endblock %}
-{% block content %}
-<div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+{% extends "base_dash.html" %}
+{% block page_title %}Documentos{% endblock %}
+{% block page_subtitle %}{{ caso.public_id }} · {{ caso.client_name }}{% endblock %}
+{% block topbar_actions %}
+<a href="/casos/{{ caso.id }}" class="g-btn g-btn--ghost g-btn--sm">
+    <i data-lucide="arrow-left" style="width:14px;height:14px"></i>
+    Volver al caso
+</a>
+{% endblock %}
+{% block dash_content %}
+<div class="g-card mb-4">
+    <div class="g-card__header">
         <div>
-            <h1 class="h4 mb-1">Gestión documental</h1>
-            <p class="text-muted mb-0">{{ caso.public_id }} · {{ caso.client_name }}</p>
+            <h3 class="dash-panel__title" style="font-size:1rem">Gestión documental</h3>
         </div>
-        <div class="d-flex gap-2">
+        <div class="g-flex-center g-gap-2">
             <form method="post" action="/casos/{{ caso.id }}/sharepoint/sync" class="m-0">
-                <button type="submit" class="btn btn-sm btn-outline-primary">Subir a SharePoint</button>
+                <button type="submit" class="g-btn g-btn--ghost g-btn--sm">Subir a SharePoint</button>
             </form>
             <form method="post" action="/casos/{{ caso.id }}/sharepoint/retry" class="m-0">
-                <button type="submit" class="btn btn-sm btn-outline-warning">Reintentar fallidos</button>
+                <button type="submit" class="g-btn g-btn--ghost g-btn--sm">Reintentar fallidos</button>
             </form>
-            <a href="/casos/{{ caso.id }}" class="btn btn-outline-secondary btn-sm">Volver al caso</a>
         </div>
     </div>
+    <div class="g-card__body">
 
     {% if error %}
     <div class="alert alert-danger">{{ error }}</div>
@@ -25,65 +31,54 @@
     <div class="alert alert-success">{{ success }}</div>
     {% endif %}
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card border-success">
-                <div class="card-body text-center">
-                    <div class="fs-4 fw-bold text-success">{{ summary.complete }}</div>
-                    <div class="small text-muted">Completos (validados)</div>
-                </div>
-            </div>
+    <div class="g-metric-row mb-4">
+        <div class="g-metric">
+            <span class="g-metric__val" style="color:var(--g-success)">{{ summary.complete }}</span>
+            <span class="g-metric__lbl">Completos</span>
         </div>
-        <div class="col-md-3">
-            <div class="card border-warning">
-                <div class="card-body text-center">
-                    <div class="fs-4 fw-bold text-warning">{{ summary.pending }}</div>
-                    <div class="small text-muted">Pendientes de revisión</div>
-                </div>
-            </div>
+        <div class="g-metric-divider"></div>
+        <div class="g-metric">
+            <span class="g-metric__val" style="color:var(--g-warn)">{{ summary.pending }}</span>
+            <span class="g-metric__lbl">Pendientes</span>
         </div>
-        <div class="col-md-3">
-            <div class="card border-danger">
-                <div class="card-body text-center">
-                    <div class="fs-4 fw-bold text-danger">{{ summary.invalid }}</div>
-                    <div class="small text-muted">Inválidos</div>
-                </div>
-            </div>
+        <div class="g-metric-divider"></div>
+        <div class="g-metric">
+            <span class="g-metric__val" style="color:var(--g-danger)">{{ summary.invalid }}</span>
+            <span class="g-metric__lbl">Inválidos</span>
         </div>
-        <div class="col-md-3">
-            <div class="card border-secondary">
-                <div class="card-body text-center">
-                    <div class="fs-4 fw-bold">{{ summary.missing }}</div>
-                    <div class="small text-muted">Faltantes</div>
-                </div>
-            </div>
+        <div class="g-metric-divider"></div>
+        <div class="g-metric">
+            <span class="g-metric__val">{{ summary.missing }}</span>
+            <span class="g-metric__lbl">Faltantes</span>
         </div>
     </div>
 
-    <div class="card mb-4">
-        <div class="card-header">Checklist requerido</div>
-        <div class="card-body">
+    <div class="g-card mb-4">
+        <div class="g-card__header">
+            <h3 class="dash-panel__title" style="font-size:.95rem">Checklist requerido</h3>
+        </div>
+        <div class="g-card__body">
             {% if missing_labels %}
-            <p class="text-danger small mb-2"><strong>Faltan:</strong> {{ missing_labels | join(', ') }}</p>
+            <p class="g-text-sm" style="color:#b91c1c;margin-bottom:.5rem"><strong>Faltan:</strong> {{ missing_labels | join(', ') }}</p>
             {% endif %}
-            <ul class="list-group list-group-flush">
+            <div class="g-table">
                 {% for item in checklist %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>{{ item.label }}{% if item.required %} <span class="text-muted small">(obligatorio)</span>{% endif %}</span>
+                <div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--g-card-border);font-size:.8rem">
+                    <span>{{ item.label }}{% if item.required %} <span class="g-text-muted">(obligatorio)</span>{% endif %}</span>
                     {% if item.valid %}
-                    <span class="badge bg-success">VALID</span>
+                    <span class="g-badge g-badge--success">VALID</span>
                     {% elif item.review_status == 'INVALID' %}
-                    <span class="badge bg-danger">INVALID</span>
+                    <span class="g-badge g-badge--error">INVALID</span>
                     {% elif item.present %}
-                    <span class="badge bg-warning text-dark">PENDING_REVIEW</span>
+                    <span class="g-badge g-badge--pending">PENDING_REVIEW</span>
                     {% else %}
-                    <span class="badge bg-secondary">Faltante</span>
+                    <span class="g-badge g-badge--neutral">Faltante</span>
                     {% endif %}
-                </li>
+                </div>
                 {% else %}
-                <li class="list-group-item text-muted">Sin requisitos P24 para este tipo de caso.</li>
+                <div class="g-text-muted">Sin requisitos P24 para este tipo de caso.</div>
                 {% endfor %}
-            </ul>
+            </div>
         </div>
     </div>
 
@@ -91,56 +86,53 @@
     <div class="card mb-4">
         <div class="card-header">Subir documento</div>
         <div class="card-body">
-            <form method="post" action="/casos/{{ caso.id }}/documentos/upload" enctype="multipart/form-data" class="row g-2">
-                <div class="col-md-4">
-                    <select name="document_type" class="form-select" required>
-                        {% for value, label in upload_types %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-5">
-                    <input type="file" name="file" class="form-control" required>
-                </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-primary w-100">Subir</button>
-                </div>
+            <form method="post" action="/casos/{{ caso.id }}/documentos/upload" enctype="multipart/form-data" class="g-flex-center" style="gap:.5rem;flex-wrap:wrap">
+                <select name="document_type" class="g-input" style="max-width:180px" required>
+                    {% for value, label in upload_types %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <input type="file" name="file" class="g-input" style="max-width:220px" required>
+                <button type="submit" class="g-btn g-btn--primary g-btn--sm">Subir</button>
             </form>
         </div>
     </div>
     {% endif %}
 
-    <div class="card mb-4">
-        <div class="card-header">Documentos activos</div>
-        <div class="table-responsive">
-            <table class="table table-sm mb-0">
-                <thead>
-                    <tr>
-                        <th>Tipo</th>
-                        <th>Archivo</th>
-                        <th>Revisión</th>
-                        <th>SharePoint</th>
-                        <th>v</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for doc in documentos %}
-                    <tr>
-                        <td>{{ doc.document_type }}</td>
-                        <td>
-                            <a href="/documentos/{{ doc.id }}/ver" target="_blank" rel="noopener">{{ doc.original_filename or doc.stored_filename }}</a>
-                            {% if doc.rejection_reason %}
-                            <div class="small text-danger">Motivo: {{ doc.rejection_reason }}</div>
-                            {% endif %}
-                        </td>
-                        <td><span class="badge {% if doc.review_status == 'VALID' %}bg-success{% elif doc.review_status == 'INVALID' %}bg-danger{% else %}bg-warning text-dark{% endif %}">{{ doc.review_status }}</span></td>
-                        <td>
-                            {% if doc.upload_status in ('SHAREPOINT_OK', 'UPLOADED') %}
-                            <span class="badge bg-success">OK</span>
-                            {% elif doc.upload_status == 'UPLOADING' %}
-                            <span class="badge bg-info text-dark">Subiendo</span>
-                            {% elif doc.upload_status == 'UPLOAD_FAILED' %}
+    <div class="g-card mb-4">
+        <div class="g-card__header">
+            <h3 class="dash-panel__title" style="font-size:.95rem">Documentos activos</h3>
+        </div>
+        <div class="g-card__body p-0">
+            <div class="table-responsive">
+                <table class="g-table">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Archivo</th>
+                            <th>Revisión</th>
+                            <th>SharePoint</th>
+                            <th>v</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in documentos %}
+                        <tr>
+                            <td>{{ doc.document_type }}</td>
+                            <td>
+                                <a href="/documentos/{{ doc.id }}/ver" target="_blank" rel="noopener" class="g-text-link">{{ doc.original_filename or doc.stored_filename }}</a>
+                                {% if doc.rejection_reason %}
+                                <div class="g-text-xs g-text-muted">Motivo: {{ doc.rejection_reason }}</div>
+                                {% endif %}
+                            </td>
+                            <td><span class="g-badge {% if doc.review_status == 'VALID' %}g-badge--success{% elif doc.review_status == 'INVALID' %}g-badge--error{% else %}g-badge--pending{% endif %}">{{ doc.review_status }}</span></td>
+                            <td>
+                                {% if doc.upload_status in ('SHAREPOINT_OK', 'UPLOADED') %}
+                                <span class="g-badge g-badge--success">OK</span>
+                                {% elif doc.upload_status == 'UPLOADING' %}
+                                <span class="g-badge g-badge--info">Subiendo</span>
+                                {% elif doc.upload_status == 'UPLOAD_FAILED' %}
                             <span class="badge bg-danger" title="{{ doc.upload_error or '' }}">Error</span>
                             {% elif doc.upload_status == 'PENDING_UPLOAD' %}
                             <span class="badge bg-warning text-dark">Pendiente</span>
@@ -165,9 +157,9 @@
                             </form>
                             {% endif %}
                             {% if can_upload %}
-                            <form method="post" action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/replace" enctype="multipart/form-data" class="d-inline-flex gap-1 mt-1">
-                                <input type="file" name="file" class="form-control form-control-sm" required>
-                                <button type="submit" class="btn btn-sm btn-secondary">Reemplazar</button>
+                            <form method="post" action="/casos/{{ caso.id }}/documentos/{{ doc.id }}/replace" enctype="multipart/form-data" class="g-flex-center gap-1 mt-1">
+                                <input type="file" name="file" class="g-input" style="max-width:160px;font-size:.75rem" required>
+                                <button type="submit" class="g-btn g-btn--ghost g-btn--sm">Reemplazar</button>
                             </form>
                             {% endif %}
                         </td>
@@ -181,18 +173,23 @@
     </div>
 
     {% if historial|length > documentos|length %}
-    <div class="card">
-        <div class="card-header">Historial de versiones</div>
-        <ul class="list-group list-group-flush small">
-            {% for doc in historial %}
-            {% if not doc.is_active %}
-            <li class="list-group-item text-muted">
-                {{ doc.document_type }} v{{ doc.version }} — {{ doc.review_status }} — {{ doc.stored_filename }}
-            </li>
-            {% endif %}
-            {% endfor %}
-        </ul>
+    <div class="g-card">
+        <div class="g-card__header">
+            <h3 class="dash-panel__title" style="font-size:.95rem">Historial de versiones</h3>
+        </div>
+        <div class="g-card__body p-0">
+            <ul class="g-table" style="list-style:none;margin:0;padding:0">
+                {% for doc in historial %}
+                {% if not doc.is_active %}
+                <li style="padding:.6rem .9rem;border-bottom:1px solid var(--g-card-border);font-size:.8rem;color:#64748b">
+                    {{ doc.document_type }} v{{ doc.version }} — {{ doc.review_status }} — {{ doc.stored_filename }}
+                </li>
+                {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
     </div>
     {% endif %}
+    </div>
 </div>
 {% endblock %}
